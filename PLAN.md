@@ -97,7 +97,8 @@ Trackers belong to a **household**, and a single tracker can also be shared by *
 | Email (magic links) | `net/smtp` to a transactional email relay | In development, links are logged to the console instead of sent |
 | Frontend | HTMX (vendored `htmx.min.js`) | Served from `/static`, no CDN |
 | Charts | Chart.js (vendored `chart.umd.min.js`) | Only on pages that show charts; never on the fast-entry path |
-| CSS | Pico.css (vendored `pico.min.css`) | Classless-first, minimal custom CSS. Icons only where they help comprehension; the icon set is a low-stakes choice |
+| CSS | Pico.css (vendored `pico.min.css`) | Classless-first, minimal custom CSS |
+| Icons | [Tabler Icons](https://tabler.io/icons), individual SVGs vendored and embedded | MIT licensed. Only the icons we use; no icon font, no JS. Inlined so they take Pico's colors |
 | Install | Web app manifest + icons | No build step |
 | Payments | Paddle Billing: Paddle.js checkout + webhooks, API called with `net/http` | Paddle is the merchant of record, so it handles sales tax and VAT. No Paddle SDK |
 | Ads | Google AdSense with a Google-certified consent platform | Later, after the app is live |
@@ -306,6 +307,7 @@ track-anything/
 │   ├── household.html
 │   ├── charts.html
 │   └── partials/       # fragments returned to HTMX requests
+├── icons/              # Tabler SVGs we use (plus.svg, trash.svg, ...), inlined by the icon template func
 ├── static/
 │   ├── htmx.min.js
 │   ├── chart.umd.min.js
@@ -376,6 +378,31 @@ Forms use `POST` so everything works without JavaScript. HTMX attributes enhance
 - **Undo**: removes the entry and updates the count. It disappears once the 15-minute window passes.
 - **Log with details**: the entry form prepends the new row and re-renders prefilled with what was just logged.
 - **Owner inline edits**: edit an entry's time or note in place; delete with `hx-confirm`.
+
+## Icons
+
+[Tabler Icons](https://tabler.io/icons) (MIT). Copy in only the SVGs a screen actually uses, into `icons/`, and embed them. No icon font, no JavaScript, no external request.
+
+Icons are **inlined** into the HTML rather than referenced with `<img>`, so their `stroke="currentColor"` follows Pico's text color, including dark mode and button hover states. A template function does it:
+
+```go
+//go:embed icons/*.svg
+var iconFS embed.FS
+
+func icon(name string) (template.HTML, error) {
+    b, err := iconFS.ReadFile("icons/" + name + ".svg")
+    return template.HTML(b), err
+}
+```
+
+```html
+<button aria-label="Log a meal">{{icon "plus"}}</button>
+```
+
+- Icons only where they help comprehension; a text label is fine too.
+- When copying an SVG in, add `aria-hidden="true"` to it. Icon-only buttons carry an `aria-label`.
+- A missing icon name is a template error, so a test that renders each page catches typos.
+- Starting set (about a dozen): `plus`, `arrow-back-up` (undo), `trash`, `pencil`, `chart-line`, `settings`, `share`, `users`, `archive`, `calendar`, `link`, `logout`.
 
 ## Summaries
 
@@ -603,6 +630,7 @@ TOI                               #10 TOI            08:00
 
 - **Start without an account**: the logged-out homepage asks "What would you like to track?", and submitting it creates a temporary user and the tracker; saving the account later adds an email. Needs long-lived sessions, cleanup of abandoned temporary users, a rate limit, and a visible **Log in** link so returning users don't make duplicates. Share links already cover much of the "use it without signing up" need.
 - Tracker templates ("Start from: McGill Big 3", "Start from: TOI").
+- A chosen icon per tracker (a paw for the dog, a pill for medication), picked from a curated handful of Tabler icons.
 - Reminders (email) for daily trackers.
 - CSV import.
 - Extra things the ad-free plan could include, if anything.
@@ -627,6 +655,7 @@ TOI                               #10 TOI            08:00
 | Ads | AdSense with a certified consent platform, after launch | No home-made consent banner |
 | Start without account | Later idea | Share links cover most of the need for now |
 | Install | Manifest + icons in phase 0, no service worker | Verified on a phone at first deploy |
+| UI icons | Tabler Icons, vendored SVGs inlined via a template func | Font Awesome passed over: icon font or JS loader, CC BY license. Tabler's large set also suits per-tracker icons later |
 | First public deploy | End of phase 2 | Backups live from the start |
 
 ## Open questions
@@ -641,4 +670,3 @@ TOI                               #10 TOI            08:00
 - **Consent platform**: Google's "Privacy & messaging", or a third-party certified one?
 - **Lag analysis**: how far beyond visual overlays should it go?
 - **Backup and export**: format and retention policy.
-- **Icon set**: low-stakes; pick when a screen needs icons.
