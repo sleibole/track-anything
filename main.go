@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"log/slog"
+	"mime"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,6 +19,11 @@ import (
 
 //go:embed templates static
 var embedded embed.FS
+
+func init() {
+	// Go's built-in MIME table doesn't know this extension; browsers expect this type.
+	mime.AddExtensionType(".webmanifest", "application/manifest+json")
+}
 
 type config struct {
 	Addr   string

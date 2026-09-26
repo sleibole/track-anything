@@ -33,7 +33,7 @@ func loadViews(fsys fs.FS) (*views, error) {
 		}
 		files := append([]string{"templates/layout.html"}, partialFiles...)
 		files = append(files, page)
-		t, err := template.ParseFS(fsys, files...)
+		t, err := template.New(name).Funcs(templateFuncs).ParseFS(fsys, files...)
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", name, err)
 		}

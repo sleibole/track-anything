@@ -314,8 +314,10 @@ track-anything/
 │   ├── pico.min.css
 │   ├── app.css
 │   ├── manifest.webmanifest
+│   ├── icon.svg        # app icon source and favicon: Tabler tally marks on Pico blue
 │   ├── icon-192.png
-│   └── icon-512.png
+│   ├── icon-512.png    # also the maskable icon; the artwork has safe-zone padding
+│   └── apple-touch-icon.png
 ├── Dockerfile          # multi-stage build, used by Dokku now and Fly.io later
 └── Makefile            # run, build, test
 ```
@@ -402,7 +404,7 @@ func icon(name string) (template.HTML, error) {
 - Icons only where they help comprehension; a text label is fine too.
 - When copying an SVG in, add `aria-hidden="true"` to it. Icon-only buttons carry an `aria-label`.
 - A missing icon name is a template error, so a test that renders each page catches typos.
-- Starting set (about a dozen): `plus`, `arrow-back-up` (undo), `trash`, `pencil`, `chart-line`, `settings`, `share`, `users`, `archive`, `calendar`, `link`, `logout`.
+- Starting set (about a dozen): `tallymarks` (the brand mark, also the app icon), `plus`, `arrow-back-up` (undo), `trash`, `pencil`, `chart-line`, `settings`, `share`, `users`, `archive`, `calendar`, `link`, `logout`.
 
 ## Summaries
 

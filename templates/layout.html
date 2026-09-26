@@ -4,6 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{block "title" .}}Track Anything{{end}}</title>
+  <meta name="theme-color" content="#0172ad">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Track Anything">
   <link rel="stylesheet" href="/static/pico.min.css">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
@@ -11,7 +17,7 @@
 <body>
   <header class="container">
     <nav>
-      <ul><li><a href="/"><strong>Track Anything</strong></a></li></ul>
+      <ul><li><a href="/" class="brand">{{icon "tallymarks"}} <strong>Track Anything</strong></a></li></ul>
     </nav>
   </header>
   <main class="container" id="content">
