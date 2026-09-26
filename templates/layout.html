@@ -13,11 +13,25 @@
   <link rel="stylesheet" href="/static/pico.min.css">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
 </head>
 <body>
   <header class="container">
     <nav>
       <ul><li><a href="/" class="brand">{{icon "tallymarks"}} <strong>Track Anything</strong></a></li></ul>
+      <ul>
+        {{with .User}}
+        <li><a href="/settings" aria-label="Settings" title="Settings">{{icon "settings"}}</a></li>
+        <li>
+          <form method="post" action="/logout" class="inline">
+            <button type="submit" class="outline secondary" aria-label="Log out" title="Log out">{{icon "logout"}}</button>
+          </form>
+        </li>
+        {{else}}
+        <li><a href="/login">Log in</a></li>
+        <li><a href="/signup" role="button">Sign up</a></li>
+        {{end}}
+      </ul>
     </nav>
   </header>
   <main class="container" id="content">

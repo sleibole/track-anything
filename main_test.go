@@ -7,8 +7,32 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
+
+// memMailer records emails instead of sending them.
+type memMailer struct {
+	mu   sync.Mutex
+	sent []sentEmail
+}
+
+type sentEmail struct {
+	To, Subject, Body string
+}
+
+func (m *memMailer) Send(to, subject, body string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sent = append(m.sent, sentEmail{to, subject, body})
+	return nil
+}
+
+func (m *memMailer) messages() []sentEmail {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]sentEmail(nil), m.sent...)
+}
 
 func newTestApp(t *testing.T) *app {
 	t.Helper()
@@ -20,12 +44,8 @@ func newTestApp(t *testing.T) *app {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &app{
-		cfg:    config{Env: "dev"},
-		db:     db,
-		views:  v,
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	cfg := config{Env: "dev", BaseURL: "http://example.test"}
+	return newApp(cfg, db, v, slog.New(slog.NewTextHandler(io.Discard, nil)), &memMailer{})
 }
 
 func get(t *testing.T, h http.Handler, path string, headers map[string]string) (int, string) {
@@ -53,7 +73,7 @@ func TestHomeFullPage(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("status %d", code)
 	}
-	for _, want := range []string{"<!doctype html>", "/static/pico.min.css", "The skeleton is running"} {
+	for _, want := range []string{"<!doctype html>", "/static/pico.min.css", "Track how often anything happens", `href="/signup"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q", want)
 		}
@@ -69,14 +89,14 @@ func TestHomeHTMXPartial(t *testing.T) {
 	if strings.Contains(body, "<!doctype html>") {
 		t.Error("HTMX request got the full layout")
 	}
-	if !strings.Contains(body, "The skeleton is running") {
+	if !strings.Contains(body, "Track how often anything happens") {
 		t.Error("HTMX request missing page content")
 	}
 }
 
 func TestStaticFiles(t *testing.T) {
 	h := newTestApp(t).routes()
-	for _, path := range []string{"/static/pico.min.css", "/static/htmx.min.js", "/static/app.css"} {
+	for _, path := range []string{"/static/pico.min.css", "/static/htmx.min.js", "/static/app.css", "/static/app.js"} {
 		if code, _ := get(t, h, path, nil); code != http.StatusOK {
 			t.Errorf("%s: status %d", path, code)
 		}

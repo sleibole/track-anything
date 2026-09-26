@@ -259,13 +259,14 @@ err := db.Where("tracker_id = ?", tracker.ID).Order("occurred_at DESC").First(&l
 Two ways in, same account:
 
 - **Email and password.** Password is optional; set it at signup or later in settings.
-- **Magic link.** Enter your email, get a one-time link valid for 15 minutes. Clicking it logs you in. The same mechanism handles "forgot password".
+- **Magic link.** Enter your email, get a one-time link valid for 15 minutes. Opening it shows a **Log in as you@example.com** button, and pressing that logs you in. The extra press is deliberate: email security scanners open links before the person does, and a link that logged in on open would be used up by the scanner. The same mechanism handles "forgot password": log in with a link, then set a new password in settings. Changing the password logs out every other session.
+- Requesting a link shows the same "check your email" page whether or not the account exists, so the form can't be used to find out who has an account.
 
 Signing up needs only an email. Magic links double as email verification.
 
-Magic-link emails go through `net/smtp` to a transactional email relay (which one is an open question). In development, the mailer logs the link to the console, so no email setup is needed locally.
+Magic-link emails go through `net/smtp` to a transactional email relay (which one is an open question). On startup the app loads a gitignored `.env` if the file is present (copy `.env.example`). Variables already set in the environment are left alone, so a shell export or Dokku config wins over the file. With `SMTP_HOST` unset, the mailer logs the link to the console. For a local inbox, `.env.example` points at MailHog (`SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`, web UI on port 8025).
 
-Sessions last 30 days and renew on use.
+Sessions last 30 days. Once a session is past half its lifetime, the next request renews it for another 30 days, so active users stay logged in without a database write on every request.
 
 ## Charts, overlays, and delayed comparisons
 
@@ -291,6 +292,10 @@ track-anything/
 ├── access.go           # trackerForUser, trackerForShareToken, role checks
 ├── auth.go             # signup, login, logout, magic links, session middleware
 ├── mail.go             # net/smtp sender, console sender for development
+├── env.go              # load .env at startup; existing environment variables win
+├── .env.example        # local MailHog settings; copy to .env (gitignored)
+├── settings.go         # time zone and password settings
+├── ratelimit.go        # per-IP fixed-window limiter, client IP behind the proxies
 ├── handlers_trackers.go
 ├── handlers_entries.go
 ├── handlers_households.go # members, invite link, join
@@ -332,9 +337,12 @@ GET    /                          logged out: what the app is + log in / sign up
 GET    /signup, POST /signup
 GET    /login,  POST /login       password login
 POST   /login/link                email a magic link
-GET    /login/link/{token}        use a magic link
+GET    /login/link/{token}        confirm page with a "Log in as ..." button (doesn't use the token)
+POST   /login/link/{token}        use the magic link
 POST   /logout
-GET    /settings, POST /settings  time zone, password, (phase 5) plan, delete account
+GET    /settings                  time zone, password, (phase 5) plan, delete account
+POST   /settings/timezone
+POST   /settings/password         set or change; logs out other sessions
 
 GET    /households/{hid}                      members, invite link, trackers
 POST   /households/{hid}/invite               turn on or regenerate the invite link (owner)
@@ -502,7 +510,7 @@ What this means for the app:
 - **Real client IP** (rate limiters, logs): `CF-Connecting-IP`, falling back to `X-Forwarded-For`. Only trusted because the app is unreachable except through the proxy chain.
 - **`Secure` cookies still work**, because the browser sees HTTPS.
 - **Backups**: [Litestream](https://litestream.io) to S3-compatible storage, or a nightly `sqlite3 .backup` cron job on box to start. Live from the first deploy.
-- **Config** via `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`, `BASE_URL`, `ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`. Phase 5 adds `PADDLE_ENV` (`sandbox` or `production`), `PADDLE_API_KEY`, `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_ID`.
+- **Config** is the process environment. Locally, `main` loads `.env` first (gitignored; `.env.example` is the MailHog sample). Production sets the same names with `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`, `BASE_URL`, `ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`. Phase 5 adds `PADDLE_ENV` (`sandbox` or `production`), `PADDLE_API_KEY`, `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_ID`. The Docker build ignores `.env`, so a local file is not copied into the image.
 
 ### Later: hosting directly on Fly.io
 
@@ -512,7 +520,7 @@ If real usage justifies it, move the app itself to Fly.io. The same Docker image
 
 Tests are part of the product. If this plan describes a behavior, `make test` covers it.
 
-Standard library only: `testing` and `net/http/httptest`. Each test gets its own SQLite database (`:memory:` or a temp file) with `AutoMigrate`. Tests use a cookie jar so a flow can log in and keep going. The mailer is swapped for an in-memory one that records sent links.
+Standard library only: `testing` and `net/http/httptest`. Each test gets its own SQLite database (`:memory:` or a temp file) with `AutoMigrate`. Tests use a cookie jar so a flow can log in and keep going. The mailer is swapped for an in-memory one that records sent links. Tests do not load `.env`; they build a `config` directly.
 
 Three layers:
 
@@ -537,9 +545,9 @@ What the suite has to pin down:
 
 Each phase ends with the app running and usable locally. Phase 2 ends with the first public deploy.
 
-### Phase 0: Project skeleton
+### Phase 0: Project skeleton (done)
 
-- `go mod init`, `main.go` with `ServeMux`, config from environment variables.
+- `go mod init`, `main.go` with `ServeMux`, config from environment variables. A gitignored `.env` is loaded at startup for local development.
 - GORM + SQLite with the pragmas above; `AutoMigrate` wired up.
 - `html/template` layout with Pico.css and HTMX vendored and embedded; render helper for full page vs HTMX partial.
 - Web app manifest, icons, and Apple meta tags linked from the layout.
@@ -549,7 +557,7 @@ Each phase ends with the app running and usable locally. Phase 2 ends with the f
 
 **Done when:** `make run` serves the placeholder page at http://localhost:8080 and `make test` passes.
 
-### Phase 1: User accounts
+### Phase 1: User accounts (done)
 
 - `User`, `Session`, and `LoginToken` models.
 - Signup with email (password optional), password login, magic-link login, logout. Mailer with a console sender for development and `net/smtp` for production.

@@ -1,0 +1,36 @@
+{{define "title"}}Log in · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<article class="narrow">
+  <h1>Log in</h1>
+  {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
+
+  <form method="post" action="/login/link">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label>
+      Email
+      <input type="email" name="email" value="{{.Email}}" required autocomplete="email" autofocus>
+    </label>
+    <button type="submit">Email me a login link</button>
+  </form>
+
+  <details>
+    <summary>Use a password instead</summary>
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{.Next}}">
+      <label>
+        Email
+        <input type="email" name="email" value="{{.Email}}" required autocomplete="email">
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" required autocomplete="current-password">
+      </label>
+      <button type="submit" class="secondary">Log in</button>
+    </form>
+  </details>
+
+  <p>New here? <a href="/signup{{if .Next}}?next={{.Next}}{{end}}">Sign up</a></p>
+</article>
+{{end}}
+{{end}}

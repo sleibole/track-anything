@@ -42,6 +42,13 @@ func loadViews(fsys fs.FS) (*views, error) {
 	return v, nil
 }
 
+// view is what every template receives: the logged-in user (nil when logged out)
+// for the layout, and the page's own data.
+type view struct {
+	User *User
+	Data any
+}
+
 // render writes a full page, or only the page's "content" block for HTMX requests.
 func (a *app) render(w http.ResponseWriter, r *http.Request, status int, page string, data any) {
 	block := "layout"
@@ -61,7 +68,7 @@ func (a *app) renderBlock(w http.ResponseWriter, r *http.Request, status int, pa
 
 	// Render to a buffer first so a template error doesn't send a half-written page.
 	var buf bytes.Buffer
-	if err := t.ExecuteTemplate(&buf, block, data); err != nil {
+	if err := t.ExecuteTemplate(&buf, block, view{User: currentUser(r), Data: data}); err != nil {
 		a.serverError(w, r, err)
 		return
 	}

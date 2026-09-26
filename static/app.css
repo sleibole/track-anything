@@ -9,3 +9,24 @@
 .brand {
   text-decoration: none;
 }
+
+form.inline {
+  margin: 0;
+}
+
+nav form.inline button {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+}
+
+article.narrow {
+  max-width: 32rem;
+}
+
+.error {
+  color: var(--pico-del-color);
+}
+
+.saved {
+  color: var(--pico-ins-color);
+}

@@ -1,0 +1,24 @@
+{{define "title"}}Sign up · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<article class="narrow">
+  <h1>Sign up</h1>
+  {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
+  <form method="post" action="/signup">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <input type="hidden" name="timezone" data-browser-timezone>
+    <label>
+      Email
+      <input type="email" name="email" value="{{.Email}}" required autocomplete="email" autofocus>
+    </label>
+    <label>
+      Password <small>(optional)</small>
+      <input type="password" name="password" autocomplete="new-password" minlength="8" maxlength="72" aria-describedby="password-help">
+      <small id="password-help">At least 8 characters. Skip it and we'll email you a login link whenever you need one.</small>
+    </label>
+    <button type="submit">Create account</button>
+  </form>
+  <p>Already have an account? <a href="/login{{if .Next}}?next={{.Next}}{{end}}">Log in</a></p>
+</article>
+{{end}}
+{{end}}

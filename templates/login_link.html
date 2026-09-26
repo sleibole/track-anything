@@ -1,0 +1,18 @@
+{{define "title"}}Log in · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<article class="narrow">
+  {{if .Valid}}
+  <h1>Log in</h1>
+  <form method="post">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <button type="submit">Log in as {{.Email}}</button>
+  </form>
+  {{else}}
+  <h1>This link has expired</h1>
+  <p>Login links work once and expire after 15 minutes.</p>
+  <p><a href="/login" role="button">Get a new link</a></p>
+  {{end}}
+</article>
+{{end}}
+{{end}}

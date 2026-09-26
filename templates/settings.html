@@ -1,0 +1,39 @@
+{{define "title"}}Settings · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<h1>Settings</h1>
+
+<article class="narrow">
+  <h2>Time zone</h2>
+  {{if eq .Saved "timezone"}}<p role="status" class="saved">Time zone saved.</p>{{end}}
+  {{if .TimeZoneError}}<p role="alert" class="error">{{.TimeZoneError}}</p>{{end}}
+  <form method="post" action="/settings/timezone">
+    <label>
+      Time zone
+      <input type="text" name="timezone" value="{{.TimeZone}}" required aria-describedby="timezone-help">
+      <small id="timezone-help">Used to decide when "today" starts. An IANA name like America/Los_Angeles.</small>
+    </label>
+    <button type="button" class="secondary outline" data-use-browser-timezone hidden>Use this device's time zone</button>
+    <button type="submit">Save time zone</button>
+  </form>
+</article>
+
+<article class="narrow">
+  <h2>Password</h2>
+  {{if eq .Saved "password"}}<p role="status" class="saved">Password saved. Other devices have been logged out.</p>{{end}}
+  {{if .PasswordError}}<p role="alert" class="error">{{.PasswordError}}</p>{{end}}
+  <p>{{if .HasPassword}}Change your password. Other devices will be logged out.{{else}}You log in with email links. Set a password if you'd like to use one too.{{end}}</p>
+  <form method="post" action="/settings/password">
+    <label>
+      New password
+      <input type="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password">
+    </label>
+    <label>
+      Confirm new password
+      <input type="password" name="confirm" required minlength="8" maxlength="72" autocomplete="new-password">
+    </label>
+    <button type="submit">{{if .HasPassword}}Change password{{else}}Set password{{end}}</button>
+  </form>
+</article>
+{{end}}
+{{end}}
