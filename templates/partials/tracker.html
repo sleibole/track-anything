@@ -1,0 +1,56 @@
+{{/* Tracker fragments shared by home, the tracker page, and the share page. */}}
+
+{{define "logControl"}}
+<div class="log-control" data-tracker>
+  <p class="tracker-summary" data-summary data-count="{{.Count}}">{{.Summary}}</p>
+  <div class="log-buttons">
+    <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick>
+      {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
+      <button type="submit">{{.Tracker.Label}}</button>
+    </form>
+    {{with .UndoURL}}
+    <form method="post" action="{{.}}" hx-post="{{.}}">
+      {{with $.Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
+      <button type="submit" class="secondary outline">{{icon "arrow-back-up"}} Undo</button>
+    </form>
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{define "card"}}
+<article class="tracker-card{{with .Tracker.Accent}} accent-{{.}}{{end}}">
+  <a href="{{.Link}}" class="tracker-name"><span class="tracker-icon">{{trackerIcon .Tracker.Icon}}</span> {{.Tracker.Name}}</a>
+  {{template "logControl" .}}
+</article>
+{{end}}
+
+{{define "trackerTitle"}}
+<h1 class="tracker-title{{with .Accent}} accent-{{.}}{{end}}"><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</h1>
+{{end}}
+
+{{define "entry"}}
+<li class="entry">
+  <span class="entry-time">{{.Time}}</span>
+  {{with .Note}}<span class="entry-note">{{.}}</span>{{end}}
+  {{if .By}}<small class="muted">{{if .ViaLink}}via share link{{else}}by {{.By}}{{end}}</small>{{end}}
+  {{with .UndoURL}}
+  <form method="post" action="{{.}}" hx-post="{{.}}" class="inline">
+    <button type="submit" class="quiet">Undo</button>
+  </form>
+  {{end}}
+  {{if .Owner}}
+  <details class="entry-edit">
+    <summary>Edit</summary>
+    <form method="post" action="/entries/{{.ID}}" hx-post="/entries/{{.ID}}">
+      <label>When <input type="datetime-local" name="time" value="{{.TimeValue}}" required></label>
+      <label>Note <input type="text" name="note" value="{{.Note}}" maxlength="500"></label>
+      <button type="submit">Save</button>
+    </form>
+    <form method="post" action="/entries/{{.ID}}/delete" hx-post="/entries/{{.ID}}/delete" hx-confirm="Delete this entry?">
+      <button type="submit" class="quiet">{{icon "trash"}} Delete entry</button>
+    </form>
+  </details>
+  {{end}}
+</li>
+{{end}}

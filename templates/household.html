@@ -1,0 +1,81 @@
+{{define "title"}}{{.Data.Household.Name}} · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<div class="household-page">
+<hgroup>
+  <h1>{{.Household.Name}}</h1>
+  {{with .CreatedBy}}<p>Created by {{.}}</p>{{end}}
+</hgroup>
+
+<section>
+  <h2>{{icon "users"}} Members</h2>
+  <ul class="rows">
+    {{range .Members}}
+    <li>
+      <span>{{.Email}}{{if .IsSelf}} (you){{end}} <small class="muted">{{if .IsOwner}}Owner{{else}}Member{{end}}</small></span>
+      {{if and $.Data.IsOwner (not .IsOwner)}}
+      <span class="row-actions">
+        <form method="post" action="/households/{{$.Data.Household.ID}}/members/{{.UserID}}/owner" hx-post="/households/{{$.Data.Household.ID}}/members/{{.UserID}}/owner" hx-confirm="Make {{.Email}} an owner? Owners can't be removed." class="inline">
+          <button type="submit" class="quiet">Make owner</button>
+        </form>
+        <form method="post" action="/households/{{$.Data.Household.ID}}/members/{{.UserID}}/delete" hx-post="/households/{{$.Data.Household.ID}}/members/{{.UserID}}/delete" hx-confirm="Remove {{.Email}} from this household?" class="inline">
+          <button type="submit" class="quiet">Remove</button>
+        </form>
+      </span>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+</section>
+
+{{if .IsOwner}}
+<section>
+  <h2>{{icon "link"}} Invite link</h2>
+  {{with .InviteURL}}
+  <p>Anyone with this link can join as a member after logging in or signing up. Send it yourself; Track Anything doesn't email it.</p>
+  <input type="text" readonly value="{{.}}" aria-label="Invite link" data-select-on-focus>
+  <div class="row-actions">
+    <form method="post" action="/households/{{$.Data.Household.ID}}/invite" hx-post="/households/{{$.Data.Household.ID}}/invite" hx-confirm="Make a new link? The current one will stop working." class="inline">
+      <button type="submit" class="quiet">Make a new link</button>
+    </form>
+    <form method="post" action="/households/{{$.Data.Household.ID}}/invite/delete" hx-post="/households/{{$.Data.Household.ID}}/invite/delete" class="inline">
+      <button type="submit" class="quiet">Turn off invites</button>
+    </form>
+  </div>
+  {{else}}
+  <p>Invite someone so they can see and log this household's trackers.</p>
+  <form method="post" action="/households/{{.Household.ID}}/invite" hx-post="/households/{{.Household.ID}}/invite">
+    <button type="submit" class="secondary outline">Create invite link</button>
+  </form>
+  {{end}}
+</section>
+{{end}}
+
+<section>
+  <h2>Trackers</h2>
+  <ul class="rows">
+    {{range .Trackers}}
+    <li><a href="/trackers/{{.ID}}"><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</a></li>
+    {{else}}
+    <li class="muted">No trackers yet.</li>
+    {{end}}
+  </ul>
+  {{if .Archived}}
+  <details class="archived">
+    <summary>{{icon "archive"}} Archived trackers ({{len .Archived}})</summary>
+    <ul class="rows">
+      {{range .Archived}}
+      <li>
+        <span><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</span>
+        <form method="post" action="/trackers/{{.ID}}/restore" hx-post="/trackers/{{.ID}}/restore" class="inline">
+          <button type="submit" class="quiet">Restore</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+  </details>
+  {{end}}
+</section>
+</div>
+{{end}}
+{{end}}

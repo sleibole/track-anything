@@ -1,0 +1,24 @@
+{{define "title"}}{{.Data.Tracker.Name}} · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<section class="tracker-log share-page">
+  {{template "trackerTitle" .Tracker}}
+  {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
+  {{template "logControl" .Card}}
+
+  {{with .Today.Zero}}
+    {{if $.Data.ZeroNew}}
+    <form method="post" action="/s/{{$.Data.Token}}/zeros/{{.ID}}/undo" hx-post="/s/{{$.Data.Token}}/zeros/{{.ID}}/undo" class="inline"><button type="submit" class="quiet">Undo none</button></form>
+    {{end}}
+  {{else}}{{if eq .Today.Count 0}}
+    <form method="post" action="/s/{{.Token}}/zero" hx-post="/s/{{.Token}}/zero" class="inline"><button type="submit" class="quiet">Record none for today</button></form>
+  {{end}}{{end}}
+
+  <h2>Today</h2>
+  <ul class="entries">
+    {{range .Entries}}{{template "entry" .}}{{else}}<li class="muted">{{if .Today.Zero}}Recorded as none.{{else}}Nothing logged yet.{{end}}</li>{{end}}
+  </ul>
+  <p class="muted"><small>{{icon "link"}} Anyone with this link can log here.</small></p>
+</section>
+{{end}}
+{{end}}

@@ -4,7 +4,7 @@
 <article class="auth-card">
   {{if .Valid}}
   <h1>Log in</h1>
-  <form method="post" class="auth-form">
+  <form method="post" class="auth-form" data-autosubmit>
     <input type="hidden" name="next" value="{{.Next}}">
     <button type="submit">Log in as {{.Email}}</button>
   </form>

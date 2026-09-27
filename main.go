@@ -74,6 +74,7 @@ type app struct {
 	loginLimiter  *rateLimiter
 	linkLimiter   *rateLimiter
 	signupLimiter *rateLimiter
+	shareLimiter  *rateLimiter
 }
 
 func newApp(cfg config, db *gorm.DB, v *views, logger *slog.Logger, m mailer) *app {
@@ -82,6 +83,7 @@ func newApp(cfg config, db *gorm.DB, v *views, logger *slog.Logger, m mailer) *a
 	a.loginLimiter = newRateLimiter(10, time.Minute, clock)
 	a.linkLimiter = newRateLimiter(5, 15*time.Minute, clock)
 	a.signupLimiter = newRateLimiter(10, time.Hour, clock)
+	a.shareLimiter = newRateLimiter(30, time.Minute, clock)
 	return a
 }
 
@@ -180,6 +182,39 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /settings", a.requireUser(a.handleSettings))
 	mux.HandleFunc("POST /settings/timezone", a.requireUser(a.handleSettingsTimeZone))
 	mux.HandleFunc("POST /settings/password", a.requireUser(a.handleSettingsPassword))
+
+	mux.HandleFunc("GET /households/{hid}", a.requireUser(a.handleHousehold))
+	mux.HandleFunc("POST /households/{hid}/invite", a.requireUser(a.handleInviteOn))
+	mux.HandleFunc("POST /households/{hid}/invite/delete", a.requireUser(a.handleInviteOff))
+	mux.HandleFunc("POST /households/{hid}/members/{uid}/delete", a.requireUser(a.handleRemoveMember))
+	mux.HandleFunc("POST /households/{hid}/members/{uid}/owner", a.requireUser(a.handlePromoteMember))
+	mux.HandleFunc("GET /join/{token}", a.requireUser(a.handleJoinPage))
+	mux.HandleFunc("POST /join/{token}", a.requireUser(a.handleJoin))
+
+	mux.HandleFunc("GET /trackers/new", a.requireUser(a.handleNewTracker))
+	mux.HandleFunc("POST /trackers", a.requireUser(a.handleCreateTracker))
+	mux.HandleFunc("GET /trackers/{id}", a.requireUser(a.handleShowTracker))
+	mux.HandleFunc("GET /trackers/{id}/edit", a.requireUser(a.handleEditTracker))
+	mux.HandleFunc("POST /trackers/{id}", a.requireUser(a.handleUpdateTracker))
+	mux.HandleFunc("POST /trackers/{id}/archive", a.requireUser(a.handleArchiveTracker))
+	mux.HandleFunc("POST /trackers/{id}/restore", a.requireUser(a.handleRestoreTracker))
+	mux.HandleFunc("POST /trackers/{id}/share", a.requireUser(a.handleShareOn))
+	mux.HandleFunc("POST /trackers/{id}/share/delete", a.requireUser(a.handleShareOff))
+
+	mux.HandleFunc("POST /trackers/{id}/quick", a.requireUser(a.handleQuickLog))
+	mux.HandleFunc("POST /trackers/{id}/entries", a.requireUser(a.handleLogEntry))
+	mux.HandleFunc("POST /trackers/{id}/zero", a.requireUser(a.handleRecordZero))
+	mux.HandleFunc("POST /entries/{eid}/undo", a.requireUser(a.handleUndoEntry))
+	mux.HandleFunc("POST /entries/{eid}", a.requireUser(a.handleEditEntry))
+	mux.HandleFunc("POST /entries/{eid}/delete", a.requireUser(a.handleDeleteEntry))
+	mux.HandleFunc("POST /zeros/{zid}/undo", a.requireUser(a.handleUndoZero))
+	mux.HandleFunc("POST /zeros/{zid}/delete", a.requireUser(a.handleDeleteZero))
+
+	mux.HandleFunc("GET /s/{token}", a.handleShare)
+	mux.HandleFunc("POST /s/{token}/quick", a.handleShareQuickLog)
+	mux.HandleFunc("POST /s/{token}/zero", a.handleShareZero)
+	mux.HandleFunc("POST /s/{token}/entries/{eid}/undo", a.handleShareUndoEntry)
+	mux.HandleFunc("POST /s/{token}/zeros/{zid}/undo", a.handleShareUndoZero)
 
 	csrf := http.NewCrossOriginProtection()
 	return a.recoverPanic(a.logRequests(csrf.Handler(a.loadUser(mux))))

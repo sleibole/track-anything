@@ -12,6 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="Track Anything">
   <link rel="stylesheet" href="/static/pico.min.css">
   <link rel="stylesheet" href="/static/app.css">
+  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[234]..","swap":true},{"code":"...","swap":false,"error":true}]}'>
   <script src="/static/htmx.min.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
@@ -34,7 +35,7 @@
       </ul>
     </nav>
   </header>
-  <main class="container" id="content">
+  <main class="container" id="content" hx-target="#content" hx-swap="innerHTML show:none">
     {{template "content" .}}
   </main>
 </body>

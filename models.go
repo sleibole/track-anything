@@ -32,3 +32,68 @@ type LoginToken struct {
 	UsedAt    *time.Time
 	CreatedAt time.Time
 }
+
+const (
+	roleOwner  = "owner"
+	roleMember = "member"
+
+	personalHouseholdName = "My trackers"
+)
+
+type Household struct {
+	ID          uint
+	Name        string  `gorm:"not null"`
+	InviteToken *string `gorm:"uniqueIndex"` // nil = invites off
+	CreatedAt   time.Time
+}
+
+type HouseholdMember struct {
+	HouseholdID uint   `gorm:"primaryKey"`
+	UserID      uint   `gorm:"primaryKey;index"`
+	Role        string `gorm:"not null"` // roleOwner or roleMember
+	CreatedAt   time.Time
+}
+
+type Tracker struct {
+	ID          uint
+	HouseholdID uint    `gorm:"index;not null"`
+	Name        string  `gorm:"not null"`
+	Icon        string  // empty means the tally mark; see trackerIcons
+	Accent      string  // empty means none; see trackerAccents
+	LogLabel    string  // empty means "+ Log"
+	Kind        string  `gorm:"not null;default:count"`
+	ShareToken  *string `gorm:"uniqueIndex"` // nil = no share link
+	Position    int
+	ArchivedAt  *time.Time // archiving also clears ShareToken
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func (t Tracker) Label() string {
+	if t.LogLabel == "" {
+		return defaultLogLabel
+	}
+	return t.LogLabel
+}
+
+type Entry struct {
+	ID           uint
+	TrackerID    uint      `gorm:"index;not null"`
+	OccurredAt   time.Time `gorm:"index;not null"` // UTC; only owners choose or edit it
+	RecordedByID *uint     // nil when logged through a share link
+	ViaLink      bool
+	Note         string
+	CreatedAt    time.Time // drives the undo window
+	UpdatedAt    time.Time
+}
+
+// RecordedZero is a deliberate "none" for one local calendar day. It is not an event.
+// No entries and no RecordedZero for a day means nothing was logged.
+type RecordedZero struct {
+	ID           uint
+	TrackerID    uint   `gorm:"uniqueIndex:idx_tracker_day;not null"`
+	Day          string `gorm:"uniqueIndex:idx_tracker_day;not null"` // YYYY-MM-DD in the logger's zone
+	RecordedByID *uint
+	ViaLink      bool
+	CreatedAt    time.Time // drives the undo window
+}

@@ -2,7 +2,10 @@
 {{define "content"}}
 {{with .Data}}
 <div class="form-stack">
-<h1>Settings</h1>
+<hgroup>
+  <h1>Settings</h1>
+  <p>Logged in as {{$.User.Email}}.</p>
+</hgroup>
 
 <article class="form-card">
   <h2>Time zone</h2>

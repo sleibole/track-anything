@@ -1,0 +1,10 @@
+{{define "title"}}{{.Data.Title}} · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<article class="auth-card">
+  <h1>{{.Title}}</h1>
+  <p>{{.Text}}</p>
+  <p class="auth-foot"><a href="/">Back to Track Anything</a></p>
+</article>
+{{end}}
+{{end}}

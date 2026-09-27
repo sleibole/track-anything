@@ -1,0 +1,17 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Your trackers</h1>
+  <a href="/trackers/new" role="button" class="secondary outline">{{icon "plus"}} New tracker</a>
+</div>
+{{range .Data}}
+<section class="household-group">
+  <h2>
+    <a href="/households/{{.Household.ID}}">{{.Household.Name}}</a>
+    {{with .CreatedBy}}<small class="muted">{{.}}</small>{{end}}
+  </h2>
+  {{range .Cards}}{{template "card" .}}{{else}}
+  <p class="muted">{{if .IsOwner}}No trackers yet. <a href="/trackers/new">Create one</a> to start logging.{{else}}No trackers here yet.{{end}}</p>
+  {{end}}
+</section>
+{{end}}
+{{end}}

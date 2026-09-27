@@ -240,3 +240,327 @@ main:has(.auth-card) {
 .saved {
   color: var(--pico-ins-color);
 }
+
+.muted {
+  color: var(--pico-muted-color);
+}
+
+.form-stack > hgroup {
+  margin-bottom: 1.15rem;
+}
+
+.form-stack > hgroup h1 {
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+/* A text-like secondary action: Record none, Undo on an entry, Restore. */
+button.quiet {
+  width: auto;
+  margin: 0;
+  padding: 0.25rem 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--pico-muted-color);
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+button.quiet:hover {
+  color: var(--pico-color);
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.page-head h1 {
+  margin: 0;
+}
+
+.page-head [role="button"] {
+  padding: 0.4rem 0.8rem;
+}
+
+/* Tracker accents: soft tints on the card and icon, never the only label. */
+.accent-blue { --accent: #3b82f6; }
+.accent-green { --accent: #22a06b; }
+.accent-amber { --accent: #d99a00; }
+.accent-rose { --accent: #e0607e; }
+.accent-violet { --accent: #8b5cf6; }
+
+.tracker-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--accent, var(--pico-muted-border-color)) 22%, transparent);
+  vertical-align: middle;
+}
+
+.tracker-icon .icon {
+  vertical-align: 0;
+}
+
+.tracker-icon .emoji {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.tracker-page h2,
+.share-page h2,
+.household-page h2 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1.2rem;
+}
+
+.household-group {
+  margin-bottom: 2rem;
+}
+
+.household-group h2 {
+  font-size: 1.1rem;
+}
+
+.household-group h2 a {
+  text-decoration: none;
+}
+
+.tracker-card {
+  margin-bottom: 1rem;
+}
+
+.tracker-card[class*="accent-"] {
+  border-inline-start: 4px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--pico-card-background-color));
+}
+
+.tracker-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--pico-color);
+}
+
+.tracker-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.tracker-summary {
+  margin: 0.75rem 0;
+  font-size: 1.1rem;
+}
+
+.log-buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.log-buttons form {
+  margin: 0;
+}
+
+.log-buttons button {
+  margin: 0;
+}
+
+.log-buttons form:first-child {
+  flex: 1;
+}
+
+.log-buttons form:first-child button {
+  width: 100%;
+}
+
+.log-details {
+  margin-top: 1rem;
+}
+
+.log-details summary,
+.entry-edit summary {
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+}
+
+.entries {
+  padding: 0;
+}
+
+.entries li {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+
+.entry-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-edit {
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.entry-edit[open] {
+  flex-basis: 100%;
+}
+
+.entry-edit > summary {
+  display: inline;
+  margin: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.entry-edit > summary::after {
+  display: none;
+}
+
+.entry-edit form {
+  margin: 0.5rem 0;
+}
+
+.day-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0.9rem 0 0.2rem;
+}
+
+.day-head h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.day-summary {
+  min-width: 7.5rem;
+  text-align: end;
+}
+
+.history-day.unlogged h3 {
+  color: var(--pico-muted-color);
+  font-weight: 400;
+}
+
+.history-day.unlogged .day-summary {
+  color: var(--pico-muted-color);
+  font-style: italic;
+}
+
+.rows {
+  padding: 0;
+}
+
+.rows li {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+
+.rows a {
+  text-decoration: none;
+}
+
+.row-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.picker legend {
+  width: 100%;
+  margin-bottom: 0.4rem;
+}
+
+.form-card .picker label {
+  display: inline-flex;
+  margin: 0;
+  cursor: pointer;
+}
+
+.picker input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.picker .tracker-icon,
+.picker .swatch {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 2px solid transparent;
+}
+
+.picker .swatch {
+  display: inline-block;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent, var(--pico-muted-border-color)) 45%, transparent);
+}
+
+.picker input:checked + span {
+  border-color: var(--pico-primary);
+}
+
+.picker input:focus-visible + span {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
+}
+
+.archive-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  margin: 1rem 0;
+}
+
+.archive-form small,
+.form-foot {
+  color: var(--pico-muted-color);
+  font-size: 0.875rem;
+}
+
+/* Wide screens: history sits beside the logging column, never above it. */
+@media (min-width: 1024px) {
+  .tracker-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 3rem;
+    align-items: start;
+  }
+
+  .share-page {
+    max-width: 36rem;
+  }
+}

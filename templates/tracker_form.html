@@ -1,0 +1,79 @@
+{{define "title"}}{{if .Data.Tracker}}Edit tracker{{else}}New tracker{{end}} · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<div class="form-stack">
+<h1>{{if .Tracker}}Edit tracker{{else}}New tracker{{end}}</h1>
+
+<article class="form-card">
+  {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
+  <form method="post" action="{{with .Tracker}}/trackers/{{.ID}}{{else}}/trackers{{end}}">
+    {{if not .Tracker}}
+      {{if gt (len .Households) 1}}
+      <label>
+        {{icon "users"}} Household
+        <select name="household">
+          {{range .Households}}<option value="{{.ID}}"{{if eq .ID $.Data.HouseholdID}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </label>
+      {{else}}{{range .Households}}<input type="hidden" name="household" value="{{.ID}}">{{end}}{{end}}
+    {{end}}
+    <label>
+      Name
+      <input type="text" name="name" value="{{.Name}}" required maxlength="60" placeholder="Dog ate" {{if not .Tracker}}autofocus{{end}}>
+    </label>
+    <fieldset class="picker">
+      <legend>Icon</legend>
+      {{range .Icons}}
+      <label title="{{.Label}}">
+        <input type="radio" name="icon" value="{{.Value}}" aria-label="{{.Label}}"{{if eq .Value $.Data.Icon}} checked{{end}}>
+        <span class="tracker-icon">{{trackerIcon .Value}}</span>
+      </label>
+      {{end}}
+    </fieldset>
+    <fieldset class="picker">
+      <legend>Color</legend>
+      {{range .Accents}}
+      <label title="{{.Label}}"{{with .Value}} class="accent-{{.}}"{{end}}>
+        <input type="radio" name="accent" value="{{.Value}}" aria-label="{{.Label}}"{{if eq .Value $.Data.Accent}} checked{{end}}>
+        <span class="swatch"></span>
+      </label>
+      {{end}}
+    </fieldset>
+    <label>
+      Button label
+      <input type="text" name="log_label" value="{{.LogLabel}}" maxlength="24" placeholder="+ Log" aria-describedby="label-help">
+      <small id="label-help">A few words, like "+ Ate".</small>
+    </label>
+    <button type="submit">{{if .Tracker}}Save{{else}}Create tracker{{end}}</button>
+  </form>
+</article>
+
+{{with .Tracker}}
+<article class="form-card">
+  <h2>{{icon "share"}} Share link</h2>
+  {{with $.Data.ShareURL}}
+  <p>Anyone with this link can log, record none for today, and undo recent entries, without an account.</p>
+  <input type="text" readonly value="{{.}}" aria-label="Share link" data-select-on-focus>
+  <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/share">
+    <button type="submit" class="secondary outline">Make a new link</button>
+  </form>
+  <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/share/delete">
+    <button type="submit" class="quiet">Turn off the share link</button>
+  </form>
+  {{else}}
+  <p>Let someone log without an account, like a dog sitter or a kitchen tablet.</p>
+  <form method="post" action="/trackers/{{.ID}}/share">
+    <button type="submit" class="secondary outline">Turn on a share link</button>
+  </form>
+  {{end}}
+</article>
+
+<form method="post" action="/trackers/{{.ID}}/archive" class="archive-form">
+  <button type="submit" class="quiet">{{icon "archive"}} Archive this tracker</button>
+  <small>Hides it and turns off its share link. Entries are kept; restore it from the household page.</small>
+</form>
+<p class="form-foot"><a href="/trackers/{{.ID}}">Back to {{.Name}}</a></p>
+{{end}}
+</div>
+{{end}}
+{{end}}

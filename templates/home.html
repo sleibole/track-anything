@@ -1,11 +1,4 @@
 {{define "content"}}
-{{with .User}}
-<hgroup>
-  <h1>Your trackers</h1>
-  <p>Logged in as {{.Email}}.</p>
-</hgroup>
-<p>Trackers arrive in the next phase.</p>
-{{else}}
 <hgroup>
   <h1>Track Anything</h1>
   <p>Track how often anything happens: dog meals, workouts, habits.</p>
@@ -14,5 +7,4 @@
   <a href="/signup" role="button">Sign up</a>
   <a href="/login" role="button" class="secondary outline">Log in</a>
 </p>
-{{end}}
 {{end}}

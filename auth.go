@@ -262,7 +262,13 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u := User{Email: form.Email, PasswordHash: string(hash), TimeZone: tz}
-	if err := a.db.Create(&u).Error; err != nil {
+	err := a.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&u).Error; err != nil {
+			return err
+		}
+		return createPersonalHousehold(tx, u.ID)
+	})
+	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -402,8 +408,9 @@ type linkConfirmPage struct {
 	Next  string
 }
 
-// handleLoginLinkConfirm shows a button instead of logging in on GET, because email
-// security scanners open links before the person does and would use up the token.
+// handleLoginLinkConfirm does not log in on GET. Email security scanners open links
+// before the person does and would use up the token. The page posts the form itself
+// when JavaScript runs; the button still works without it.
 func (a *app) handleLoginLinkConfirm(w http.ResponseWriter, r *http.Request) {
 	page := linkConfirmPage{Next: r.URL.Query().Get("next")}
 

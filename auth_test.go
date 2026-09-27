@@ -116,7 +116,7 @@ func (b *browser) login(email, password string) response {
 
 func (b *browser) loggedInAs(email string) bool {
 	b.t.Helper()
-	return strings.Contains(b.get("/").body, "Logged in as "+email)
+	return strings.Contains(b.get("/settings").body, "Logged in as "+email)
 }
 
 var linkRE = regexp.MustCompile(`http://example\.test(/login/link/[A-Za-z0-9_-]+(?:\?next=\S+)?)`)

@@ -1,0 +1,61 @@
+{{define "title"}}{{.Data.Tracker.Name}} · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<div class="tracker-page">
+  <section class="tracker-log">
+    <div class="page-head">
+      {{template "trackerTitle" .Tracker}}
+      {{if .IsOwner}}<a href="/trackers/{{.Tracker.ID}}/edit" aria-label="Edit tracker" title="Edit tracker">{{icon "pencil"}}</a>{{end}}
+    </div>
+    {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
+    {{template "logControl" .Card}}
+
+    {{with .Today.Zero}}
+      {{if $.Data.ZeroNew}}
+      <form method="post" action="/zeros/{{.ID}}/undo" hx-post="/zeros/{{.ID}}/undo" class="inline"><button type="submit" class="quiet">Undo none</button></form>
+      {{else if $.Data.IsOwner}}
+      <form method="post" action="/zeros/{{.ID}}/delete" hx-post="/zeros/{{.ID}}/delete" class="inline"><button type="submit" class="quiet">Clear none</button></form>
+      {{end}}
+    {{else}}{{if eq .Today.Count 0}}
+      <form method="post" action="/trackers/{{.Tracker.ID}}/zero" hx-post="/trackers/{{.Tracker.ID}}/zero" class="inline"><button type="submit" class="quiet">Record none for today</button></form>
+    {{end}}{{end}}
+
+    <details class="log-details"{{if or .Error .Note}} open{{end}}>
+      <summary>{{if .IsOwner}}Log with a note or time{{else}}Log with a note{{end}}</summary>
+      <form method="post" action="/trackers/{{.Tracker.ID}}/entries" hx-post="/trackers/{{.Tracker.ID}}/entries">
+        {{if .IsOwner}}<label>{{icon "calendar"}} When <input type="datetime-local" name="time" value="{{.NowValue}}"></label>{{end}}
+        <label>Note <input type="text" name="note" value="{{.Note}}" maxlength="500"></label>
+        <button type="submit">Log</button>
+      </form>
+    </details>
+
+    <h2>Today</h2>
+    <ul class="entries">
+      {{range .Entries}}{{template "entry" .}}{{else}}<li class="muted">{{if .Today.Zero}}Recorded as none.{{else}}Nothing logged yet.{{end}}</li>{{end}}
+    </ul>
+  </section>
+
+  <section class="tracker-history">
+    <h2>History</h2>
+    {{range .History}}
+    <div class="history-day{{if not .Logged}} unlogged{{end}}">
+      <div class="day-head">
+        <h3>{{.Label}}</h3>
+        {{with .Zero}}{{if $.Data.IsOwner}}
+        <form method="post" action="/zeros/{{.ID}}/delete" hx-post="/zeros/{{.ID}}/delete" class="inline"><button type="submit" class="quiet">Clear</button></form>
+        {{end}}{{end}}
+        {{if and $.Data.IsOwner (not .Logged)}}
+        <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/zero" hx-post="/trackers/{{$.Data.Tracker.ID}}/zero" class="inline">
+          <input type="hidden" name="day" value="{{.Day}}">
+          <button type="submit" class="quiet">Record none</button>
+        </form>
+        {{end}}
+        <span class="day-summary">{{.Summary}}</span>
+      </div>
+      {{if .Entries}}<ul class="entries">{{range .Entries}}{{template "entry" .}}{{end}}</ul>{{end}}
+    </div>
+    {{end}}
+  </section>
+</div>
+{{end}}
+{{end}}
