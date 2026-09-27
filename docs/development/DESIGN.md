@@ -54,7 +54,9 @@ On a wider screen, history and the trend may sit beside the logging column. They
 
 The household name, then its members with their roles. An owner sees the invite link controls, and **Remove** and **Make owner** on each member's row. Owner rows, including your own, have no remove control. Members see the list without those controls.
 
-Below that, an owner sees a collapsed **Archived trackers** section (a `<details>` element), closed by default and left out when nothing is archived. Each archived tracker shows its icon and name with a quiet **Restore** action. There is no separate archive page.
+Below that, the household's trackers. An owner sees **New tracker**, which opens the create form already set to this household. Members don't.
+
+An owner also sees a collapsed **Archived trackers** section (a `<details>` element), closed by default and left out when nothing is archived. Each archived tracker shows its icon and name with a quiet **Restore** action. There is no separate archive page.
 
 ### History
 

@@ -341,6 +341,15 @@ func (a *app) handleNewTracker(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	// A household page links here with its own id. Ignore one the user doesn't own.
+	if id := parseID(r.URL.Query().Get("household")); id != 0 {
+		for _, h := range f.Households {
+			if h.ID == id {
+				f.HouseholdID = id
+				break
+			}
+		}
+	}
 	a.render(w, r, http.StatusOK, "tracker_form.html", f)
 }
 

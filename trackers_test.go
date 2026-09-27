@@ -108,6 +108,26 @@ func TestCreateTrackerValidation(t *testing.T) {
 	}
 }
 
+func TestNewTrackerFormSelectsRequestedHousehold(t *testing.T) {
+	ts, owner, member, h := sharedHouse(t)
+	personal := ts.personalHousehold(t, "member@example.com")
+	owner.post(fmt.Sprintf("/households/%d/members/%d/owner", h.ID, ts.user(t, "member@example.com").ID), nil)
+
+	page := member.get(fmt.Sprintf("/trackers/new?household=%d", h.ID)).body
+	if !strings.Contains(page, fmt.Sprintf(`value="%d" selected`, h.ID)) {
+		t.Fatal("requested household isn't selected")
+	}
+	if strings.Contains(page, fmt.Sprintf(`value="%d" selected`, personal.ID)) {
+		t.Fatal("personal household stayed selected")
+	}
+
+	// A household this person doesn't own is ignored.
+	ignored := member.get(fmt.Sprintf("/trackers/new?household=%d", h.ID+1000)).body
+	if strings.Contains(ignored, `selected`) && strings.Contains(ignored, fmt.Sprintf(`value="%d" selected`, h.ID+1000)) {
+		t.Fatal("unowned household was selected")
+	}
+}
+
 func TestCantCreateTrackerInAHouseholdYouDontOwn(t *testing.T) {
 	ts, _, member, h := sharedHouse(t)
 	if r := member.post("/trackers", url.Values{"household": {fmt.Sprint(h.ID)}, "name": {"Sneaky"}}); r.status != http.StatusForbidden {

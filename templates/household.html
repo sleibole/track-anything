@@ -60,6 +60,9 @@
     <li class="muted">No trackers yet.</li>
     {{end}}
   </ul>
+  {{if .IsOwner}}
+  <a href="/trackers/new?household={{.Household.ID}}" role="button" class="secondary outline">{{icon "plus"}} New tracker</a>
+  {{end}}
   {{if .Archived}}
   <details class="archived">
     <summary>{{icon "archive"}} Archived trackers ({{len .Archived}})</summary>

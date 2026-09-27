@@ -323,6 +323,12 @@ button.quiet:hover {
   font-size: 1.2rem;
 }
 
+.household-page a[role="button"] {
+  display: block;
+  width: 100%;
+  margin-top: 1rem;
+}
+
 .household-group {
   margin-bottom: 2rem;
 }

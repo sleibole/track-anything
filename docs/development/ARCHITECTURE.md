@@ -10,7 +10,7 @@ If `PLAN.md` or this document describes a behavior, `make test` covers it.
 - **One process, one database.** No microservices, distributed databases, queues, or background workers. Mail is sent in the request. The rate limiter is in memory. Do not add a job runner without a demonstrated need.
 - **No schema language or plugin system** before a concrete tracker type requires one.
 - **Do not optimize for hypothetical scale** before the product has users. Exactly one instance, because of SQLite.
-- **Three direct Go dependencies:** GORM, `github.com/glebarez/sqlite`, and `golang.org/x/crypto`. Everything else is the standard library, vendored static files, or HTTP calls.
+- **Direct Go dependencies:** GORM, `github.com/glebarez/sqlite`, `golang.org/x/crypto`, and `github.com/prometheus/client_golang` for metrics. Everything else is the standard library, vendored static files, or HTTP calls.
 - **No offline mode and no public API.**
 - **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js is the only focused client-side library, and the only chart library. It loads only where a historical chart or an overlay is shown, from phase 3 on, and the log control works without it. Phase 2 does not load it. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password are the exception: those forms require Cloudflare Turnstile, described under Security.
 
@@ -23,6 +23,7 @@ If `PLAN.md` or this document describes a behavior, `make test` covers it.
 | Templates | `html/template` | Auto-escaping, layouts via `{{block}}` / `{{template}}` |
 | Static files and templates | `embed` | Ship a single binary |
 | Logging | `log/slog` | Structured logs to stdout |
+| Metrics | Prometheus | The process exposes metrics for a scraper. See Metrics |
 | ORM | GORM (`gorm.io/gorm`) | `AutoMigrate` for schema |
 | Database | SQLite, one shared app database | A database per user was considered and rejected: it complicates migrations, backups, and especially sharing |
 | SQLite driver | `github.com/glebarez/sqlite` | Pure-Go GORM driver, so no CGO and easy cross-compiling |
@@ -350,6 +351,7 @@ POST   /billing/portal            redirect to Paddle's customer portal to manage
 POST   /billing/webhook           Paddle webhook, verified by signature (phase 5)
 
 GET    /static/...                embedded files
+GET    /metrics                   Prometheus text format, no session
 GET    /healthz
 ```
 
@@ -434,6 +436,14 @@ Set on connect:
 - Local webhook testing uses a tunnel (for example `cloudflared tunnel --url http://localhost:8080`) or Paddle's simulator against the deployed app. Automated tests sign payloads themselves against a test secret and point the portal handler at a stub API URL.
 - Ad and consent scripts are omitted entirely for ad-free users, users in the grace period, and on share, login, and settings pages.
 
+## Metrics
+
+Server metrics are collected in Prometheus. The process exposes them on `GET /metrics` in the Prometheus text format. A scraper pulls that endpoint. The app does not run Prometheus, and it does not push metrics.
+
+What is collected is operational: request counts, latency, and errors, and whether the database check behind `/healthz` succeeds. Nothing about a person, a household, or a tracker is included. Logs stay `log/slog` to stdout. Product charts stay Chart.js, as in `PLAN.md`. Prometheus is not that analytics, and it is not a second charting stack.
+
+`github.com/prometheus/client_golang` is the exposition library. On the homelab, Prometheus scrapes the Dokku app over the private network. The public ingress does not need to publish `/metrics`.
+
 ## Deployment
 
 ### Initial: homelab behind Fly.io ingress
@@ -495,6 +505,7 @@ What the suite has to pin down:
 - **Deletion (phase 5).** Permanent tracker delete removes the tracker and its entries, owner only, with confirmation.
 - **Ads and billing (phase 5).** No ad markup for ad-free users, users in the grace period, or on share/login/settings pages. The Paddle webhook rejects bad signatures and old timestamps, applies an event once even if delivered twice, ignores an older event arriving after a newer one, finds the user through `custom_data`, and sets and clears the plan. Tests build the `Paddle-Signature` header the way Paddle does, against a test secret, and the portal handler talks to a stub API URL.
 - **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes.
+- **Metrics.** `GET /metrics` needs no session, is Prometheus text, and contains no account, household, or tracker data.
 
 ## Decision log
 
@@ -509,7 +520,8 @@ What the suite has to pin down:
 | Archive | `ArchivedAt` plus clearing `ShareToken` | Restore leaves sharing off. Permanent delete is phase 5 |
 | Phase 1 households | One-time idempotent backfill after `AutoMigrate` | No request-time fallback. Deleted once existing databases have run it |
 | Persistence | SQLite, one shared database | Database per user rejected: migrations, backups, and sharing all get worse |
-| Dependencies | GORM, pure-Go SQLite, `x/crypto` | No Paddle SDK. No background queue |
+| Dependencies | GORM, pure-Go SQLite, `x/crypto`, Prometheus client | No Paddle SDK. No background queue. The client is only for exposing metrics |
+| Metrics | Prometheus scrape | `GET /metrics`. Operational only: requests, latency, errors, database health. Not product analytics |
 | Time zone | UTC timestamps, stored IANA zone | Detected once at signup. Not revised from the browser. Grouped in Go |
 | Email | `net/smtp`, console logger in dev | Optional `.env`. Relay vendor still open |
 | Bot protection | Cloudflare Turnstile | Signup, login (password and magic link), and change password. Siteverify over HTTP, no SDK. Rate limits stay |

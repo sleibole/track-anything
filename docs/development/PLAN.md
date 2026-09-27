@@ -39,7 +39,7 @@ If the answer is yes for dog meals, yes for recording a woods outing, and eventu
 
 - Do not become a full fitness platform.
 - Do not become a medical diagnostic product, or an analytics product that computes causes. Charts are for looking. A pattern is not a diagnosis.
-- Do not add a frontend framework or an analytics stack in order to draw charts. Chart.js on the existing pages is enough (`ARCHITECTURE.md`).
+- Do not add a frontend framework or a product-analytics stack in order to draw charts. Chart.js on the existing pages is enough (`ARCHITECTURE.md`). Operational metrics for the server are collected in Prometheus; that is specified in `ARCHITECTURE.md` and is not a charting tool.
 - Do not become a habit-coaching or gamification platform unless real users clearly demand it.
 - Do not sacrifice the one-tap tracking experience for generic configurability.
 - No native mobile apps. Home-screen install is a web app manifest, not a store app.
@@ -306,6 +306,7 @@ TOI                               #10 TOI            08:00
 | Start without account | Later idea | Share links cover most of the need for now |
 | Install | Manifest + icons, no service worker | Verified on a phone at first deploy. Not a store app |
 | First public deploy | End of phase 2 | Backups live from the start. Email relay and backup method are picked before deploy, not before building |
+| Server metrics | Prometheus | Scrape of the process for requests, latency, errors, and database health. Not product analytics. See `ARCHITECTURE.md` |
 
 ## Open questions
 

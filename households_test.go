@@ -199,11 +199,15 @@ func TestMembersCantManageHousehold(t *testing.T) {
 		t.Error("member changed roles")
 	}
 	page := member.get(fmt.Sprintf("/households/%d", h.ID)).body
-	if strings.Contains(page, "Remove") || strings.Contains(page, "/join/") {
+	if strings.Contains(page, "Remove") || strings.Contains(page, "/join/") || strings.Contains(page, "New tracker") {
 		t.Error("member sees owner controls")
 	}
-	if !strings.Contains(owner.get(fmt.Sprintf("/households/%d", h.ID)).body, "Make owner") {
+	ownerPage := owner.get(fmt.Sprintf("/households/%d", h.ID)).body
+	if !strings.Contains(ownerPage, "Make owner") {
 		t.Error("owner doesn't see member controls")
+	}
+	if !strings.Contains(ownerPage, fmt.Sprintf(`/trackers/new?household=%d`, h.ID)) {
+		t.Error("owner has no way to add a tracker from the household page")
 	}
 }
 
