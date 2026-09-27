@@ -53,7 +53,7 @@ func (l *rateLimiter) allow(key string) bool {
 }
 
 // clientIP trusts the proxy headers because in production the app is only reachable
-// through Cloudflare and the Fly.io ingress (see PLAN.md, Deployment).
+// through Cloudflare and the Fly.io ingress (see docs/development/ARCHITECTURE.md, Deployment).
 func clientIP(r *http.Request) string {
 	if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); ip != "" {
 		return ip

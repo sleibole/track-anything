@@ -7,19 +7,21 @@ import (
 )
 
 type settingsPage struct {
-	TimeZone      string
-	HasPassword   bool
-	Saved         string // "timezone" or "password" after a successful save
-	TimeZoneError string
-	PasswordError string
+	TimeZoneLabel   string
+	TimeZoneOptions []timeZoneOption
+	HasPassword     bool
+	Saved           string // "timezone" or "password" after a successful save
+	TimeZoneError   string
+	PasswordError   string
 }
 
 func (a *app) settingsPageFor(r *http.Request) settingsPage {
 	u := currentUser(r)
 	return settingsPage{
-		TimeZone:    u.TimeZone,
-		HasPassword: u.HasPassword(),
-		Saved:       r.URL.Query().Get("saved"),
+		TimeZoneLabel:   timeZoneLabel(u.TimeZone),
+		TimeZoneOptions: timeZoneOptions(u.TimeZone, a.now()),
+		HasPassword:     u.HasPassword(),
+		Saved:           r.URL.Query().Get("saved"),
 	}
 }
 
@@ -30,10 +32,9 @@ func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 func (a *app) handleSettingsTimeZone(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	tz := r.PostFormValue("timezone")
-	if !validTimeZone(tz) {
+	if !listedTimeZone(tz) && tz != u.TimeZone {
 		page := a.settingsPageFor(r)
-		page.TimeZone = tz
-		page.TimeZoneError = "Unknown time zone. Use a name like America/Los_Angeles or Europe/London."
+		page.TimeZoneError = "Pick a time zone from the list."
 		a.render(w, r, http.StatusUnprocessableEntity, "settings.html", page)
 		return
 	}

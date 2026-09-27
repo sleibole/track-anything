@@ -1,4 +1,5 @@
 /bin/
+/tmp/
 /data/
 *.db
 *.db-shm

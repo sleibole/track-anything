@@ -1,36 +1,30 @@
 {{define "title"}}Log in · Track Anything{{end}}
 {{define "content"}}
 {{with .Data}}
-<article class="narrow">
+<article class="auth-card">
   <h1>Log in</h1>
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
-
-  <form method="post" action="/login/link">
+  <form method="post" action="/login/link" class="auth-form">
     <input type="hidden" name="next" value="{{.Next}}">
-    <label>
-      Email
-      <input type="email" name="email" value="{{.Email}}" required autocomplete="email" autofocus>
+    <label class="auth-email">
+      {{icon "mail"}} Email
+      <input type="email" name="email" value="{{.Email}}" required autocomplete="email" {{if not .ShowPassword}}autofocus{{end}}>
     </label>
-    <button type="submit">Email me a login link</button>
+    <label class="auth-password">
+      {{icon "lock"}} Password
+      <input type="password" name="password" data-auth-password autocomplete="current-password" minlength="8" maxlength="72" {{if .ShowPassword}}autofocus{{end}}>
+    </label>
+    <button type="submit" class="auth-link-submit">Continue</button>
+    <button type="submit" class="auth-password-submit" formaction="/login">Log in</button>
+    <div class="auth-switch">
+      <input type="checkbox" id="login-password" class="auth-password-toggle" {{if .ShowPassword}}checked{{end}}>
+      <label for="login-password">
+        <span class="when-closed">Log in with a password instead</span>
+        <span class="when-open">Use an email link instead</span>
+      </label>
+    </div>
   </form>
-
-  <details>
-    <summary>Use a password instead</summary>
-    <form method="post" action="/login">
-      <input type="hidden" name="next" value="{{.Next}}">
-      <label>
-        Email
-        <input type="email" name="email" value="{{.Email}}" required autocomplete="email">
-      </label>
-      <label>
-        Password
-        <input type="password" name="password" required autocomplete="current-password">
-      </label>
-      <button type="submit" class="secondary">Log in</button>
-    </form>
-  </details>
-
-  <p>New here? <a href="/signup{{if .Next}}?next={{.Next}}{{end}}">Sign up</a></p>
+  <p class="auth-foot">Don't have an account? <a href="/signup{{if .Next}}?next={{.Next | urlquery}}{{end}}">Sign up</a></p>
 </article>
 {{end}}
 {{end}}

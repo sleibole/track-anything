@@ -6,6 +6,10 @@
   vertical-align: -0.25em;
 }
 
+label > .icon {
+  margin-inline-end: 0.3rem;
+}
+
 .brand {
   text-decoration: none;
 }
@@ -19,8 +23,214 @@ nav form.inline button {
   padding: 0.4rem 0.6rem;
 }
 
-article.narrow {
-  max-width: 32rem;
+/* Focused form pages: a narrow column, centered under the header. */
+main:has(.form-stack) {
+  padding-top: 3rem;
+}
+
+.form-stack {
+  width: min(100%, 30rem);
+  margin-inline: auto;
+}
+
+.form-stack > h1 {
+  margin-bottom: 1.15rem;
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.form-card h2 {
+  margin-bottom: 0.85rem;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.form-card > p {
+  margin-bottom: 0.85rem;
+}
+
+.form-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 0;
+}
+
+.form-card label,
+.form-card button,
+.form-card input,
+.form-card select,
+.form-card small {
+  margin-bottom: 0;
+}
+
+.form-card details.timezone {
+  margin-bottom: 0;
+}
+
+.form-card details.timezone[open] > summary {
+  margin-bottom: 0.85rem;
+}
+
+.form-card small {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--pico-muted-color);
+  font-size: 0.875rem;
+}
+
+.form-card button.quiet {
+  align-self: center;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--pico-muted-color);
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.form-card input:focus,
+.form-card select:focus,
+.form-card button:focus-visible,
+.form-card a:focus-visible,
+.form-card button.quiet:focus-visible {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
+}
+
+.form-card input:focus {
+  border-color: var(--pico-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pico-primary) 40%, transparent);
+}
+
+/* Auth cards sit centered under the header. Other pages stay in the normal grid. */
+main:has(.auth-card) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 3rem;
+}
+
+.auth-card {
+  width: min(100%, 30rem);
+  margin-bottom: 2rem;
+}
+
+.auth-card h1 {
+  margin-bottom: 1.15rem;
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.auth-card > p {
+  margin-bottom: 1rem;
+}
+
+.auth-form {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 0;
+}
+
+.auth-form label,
+.auth-form button {
+  margin-bottom: 0;
+}
+
+.auth-form button,
+.auth-card [role="button"] {
+  width: 100%;
+}
+
+.auth-card [role="button"] {
+  display: block;
+  text-align: center;
+}
+
+.auth-password,
+.auth-password-submit,
+.auth-form:has(.auth-password-toggle:checked) .auth-link-submit,
+.when-open,
+.auth-form:has(.auth-password-toggle:checked) .when-closed {
+  display: none;
+}
+
+.auth-form:has(.auth-password-toggle:checked) .auth-password,
+.auth-form:has(.auth-password-toggle:checked) .auth-password-submit,
+.auth-form:has(.auth-password-toggle:checked) .when-open {
+  display: block;
+}
+
+.auth-form:has(.auth-password-toggle:checked) .when-open {
+  display: inline;
+}
+
+.auth-card input.auth-password-toggle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  appearance: none;
+}
+
+.auth-switch {
+  text-align: center;
+}
+
+.auth-switch label {
+  display: inline-block;
+  margin: 0;
+  color: var(--pico-muted-color);
+  font-size: 0.875rem;
+  font-weight: 400;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.auth-foot {
+  margin: 1.15rem 0 0;
+  text-align: center;
+  color: var(--pico-muted-color);
+  font-size: 0.875rem;
+}
+
+.auth-note {
+  margin-bottom: 0;
+  color: var(--pico-muted-color);
+  font-size: 0.875rem;
+}
+
+.auth-card input:not(.auth-password-toggle):focus,
+.auth-card button:focus-visible,
+.auth-card a:focus-visible,
+.auth-card input.auth-password-toggle:focus-visible + label {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
+}
+
+.auth-card input:not(.auth-password-toggle):focus {
+  border-color: var(--pico-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pico-primary) 40%, transparent);
+}
+
+@media (max-width: 576px) {
+  main:has(.auth-card),
+  main:has(.form-stack) {
+    padding-top: 1.25rem;
+  }
 }
 
 .error {

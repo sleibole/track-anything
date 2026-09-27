@@ -146,6 +146,33 @@ func (ts *testServer) user(t *testing.T, email string) User {
 
 // Signup
 
+func TestAuthPagesLeadWithEmail(t *testing.T) {
+	ts := newTestServer(t)
+	b := ts.browser(t)
+
+	signup := b.get("/signup")
+	for _, want := range []string{"<h1>Sign up</h1>", ">Continue</button>", "Sign up with a password instead", "Already have an account?"} {
+		if !strings.Contains(signup.body, want) {
+			t.Errorf("signup missing %q", want)
+		}
+	}
+	if strings.Contains(signup.body, `auth-password-toggle" checked`) {
+		t.Error("signup opens the password field by default")
+	}
+
+	login := b.get("/login")
+	for _, want := range []string{"<h1>Log in</h1>", `action="/login/link"`, ">Continue</button>", "Log in with a password instead", "Don't have an account?"} {
+		if !strings.Contains(login.body, want) {
+			t.Errorf("login missing %q", want)
+		}
+	}
+
+	bad := b.post("/login", url.Values{"email": {"nobody@example.com"}, "password": {"longenough"}})
+	if bad.status != http.StatusUnauthorized || !strings.Contains(bad.body, `auth-password-toggle" checked`) {
+		t.Fatalf("password login error did not keep the password form open: %d", bad.status)
+	}
+}
+
 func TestSignupLogsIn(t *testing.T) {
 	ts := newTestServer(t)
 	b := ts.browser(t)
@@ -601,12 +628,48 @@ func TestSettingsTimeZone(t *testing.T) {
 		t.Fatalf("stored %q", tz)
 	}
 
-	r = b.post("/settings/timezone", url.Values{"timezone": {"Mars/Olympus_Mons"}})
-	if r.status != http.StatusUnprocessableEntity || !strings.Contains(r.body, "Unknown time zone") {
-		t.Fatalf("invalid zone: %d", r.status)
+	for _, tz := range []string{"Mars/Olympus_Mons", "America/Boise", ""} {
+		r = b.post("/settings/timezone", url.Values{"timezone": {tz}})
+		if r.status != http.StatusUnprocessableEntity || !strings.Contains(r.body, "Pick a time zone from the list") {
+			t.Fatalf("%q: %d", tz, r.status)
+		}
+		if got := ts.user(t, "dog@example.com").TimeZone; got != "Europe/London" {
+			t.Fatalf("%q changed it to %q", tz, got)
+		}
 	}
-	if tz := ts.user(t, "dog@example.com").TimeZone; tz != "Europe/London" {
-		t.Fatalf("invalid zone changed it to %q", tz)
+}
+
+func TestSettingsTimeZoneIsAFriendlyList(t *testing.T) {
+	ts := newTestServer(t)
+	b := ts.browser(t)
+	b.signup("dog@example.com", "")
+
+	r := b.get("/settings")
+	if strings.Contains(r.body, `<input type="text" name="timezone"`) {
+		t.Error("settings still has a raw time zone text field")
+	}
+	for _, want := range []string{`<select name="timezone"`, `<summary>Pacific Time (US &amp; Canada)</summary>`, `value="America/Los_Angeles" selected`} {
+		if !strings.Contains(r.body, want) {
+			t.Errorf("settings missing %q", want)
+		}
+	}
+}
+
+func TestSettingsKeepsUnlistedSignupZone(t *testing.T) {
+	ts := newTestServer(t)
+	b := ts.browser(t)
+	b.post("/signup", url.Values{"email": {"boise@example.com"}, "timezone": {"America/Boise"}})
+
+	r := b.get("/settings")
+	if !strings.Contains(r.body, `value="America/Boise" selected`) || !strings.Contains(r.body, "<summary>Boise</summary>") {
+		t.Fatal("unlisted signup zone not shown as current")
+	}
+	r = b.post("/settings/timezone", url.Values{"timezone": {"America/Boise"}})
+	if r.url.Path != "/settings" || !strings.Contains(r.body, "Time zone saved") {
+		t.Fatalf("re-save: %d at %s", r.status, r.url.Path)
+	}
+	if tz := ts.user(t, "boise@example.com").TimeZone; tz != "America/Boise" {
+		t.Fatalf("stored %q", tz)
 	}
 }
 

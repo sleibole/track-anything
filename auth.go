@@ -198,9 +198,10 @@ func (a *app) requireUser(next http.HandlerFunc) http.HandlerFunc {
 // Signup
 
 type signupForm struct {
-	Email string
-	Next  string
-	Error string
+	Email        string
+	Next         string
+	Error        string
+	ShowPassword bool
 }
 
 func (a *app) handleSignupForm(w http.ResponseWriter, r *http.Request) {
@@ -212,9 +213,11 @@ func (a *app) handleSignupForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
+	password := r.PostFormValue("password")
 	form := signupForm{
-		Email: normalizeEmail(r.PostFormValue("email")),
-		Next:  r.PostFormValue("next"),
+		Email:        normalizeEmail(r.PostFormValue("email")),
+		Next:         r.PostFormValue("next"),
+		ShowPassword: password != "",
 	}
 	fail := func(status int, msg string) {
 		form.Error = msg
@@ -230,7 +233,6 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	password := r.PostFormValue("password")
 	var hash []byte
 	if password != "" {
 		if msg := validatePassword(password); msg != "" {
@@ -274,9 +276,10 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 // Password login
 
 type loginForm struct {
-	Email string
-	Next  string
-	Error string
+	Email        string
+	Next         string
+	Error        string
+	ShowPassword bool
 }
 
 func (a *app) handleLoginForm(w http.ResponseWriter, r *http.Request) {
@@ -289,8 +292,9 @@ func (a *app) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	form := loginForm{
-		Email: normalizeEmail(r.PostFormValue("email")),
-		Next:  r.PostFormValue("next"),
+		Email:        normalizeEmail(r.PostFormValue("email")),
+		Next:         r.PostFormValue("next"),
+		ShowPassword: true,
 	}
 	fail := func(status int, msg string) {
 		form.Error = msg

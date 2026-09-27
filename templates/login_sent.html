@@ -1,11 +1,11 @@
 {{define "title"}}Check your email · Track Anything{{end}}
 {{define "content"}}
 {{with .Data}}
-<article class="narrow">
+<article class="auth-card">
   <h1>Check your email</h1>
   <p>If there's an account for <strong>{{.Email}}</strong>, a login link is on its way. It works once and expires in 15 minutes.</p>
-  {{if .Dev}}<p><small>Development: no email server is configured, so the link is printed in the server log.</small></p>{{end}}
-  <p><a href="/login">Back to log in</a></p>
+  {{if .Dev}}<p class="auth-note">Development: the link is in the server log.</p>{{end}}
+  <p class="auth-foot"><a href="/login">Back to log in</a></p>
 </article>
 {{end}}
 {{end}}

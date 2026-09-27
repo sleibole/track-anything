@@ -7,13 +7,16 @@ document.querySelectorAll("input[data-browser-timezone]").forEach((input) => {
   input.value = browserTimeZone;
 });
 
-// Settings: a button that fills in this device's time zone.
-document.querySelectorAll("button[data-use-browser-timezone]").forEach((button) => {
-  const input = button.form.elements.timezone;
-  button.textContent = `Use this device's time zone (${browserTimeZone})`;
-  button.hidden = input.value === browserTimeZone;
-  button.addEventListener("click", () => {
-    input.value = browserTimeZone;
-    button.hidden = true;
+// A closed password field must not be submitted with the email-only form.
+document.querySelectorAll(".auth-password-toggle").forEach((toggle) => {
+  const input = toggle.form?.querySelector("[data-auth-password]");
+  if (!input) return;
+  const sync = () => {
+    input.disabled = !toggle.checked;
+  };
+  toggle.addEventListener("change", () => {
+    if (!toggle.checked) input.value = "";
+    sync();
   });
+  sync();
 });
