@@ -119,7 +119,10 @@ func (b *browser) loggedInAs(email string) bool {
 	return strings.Contains(b.get("/settings").body, "Logged in as "+email)
 }
 
-var linkRE = regexp.MustCompile(`http://example\.test(/login/link/[A-Za-z0-9_-]+(?:\?next=\S+)?)`)
+var (
+	linkRE   = regexp.MustCompile(`http://example\.test(/login/link/[A-Za-z0-9_-]+(?:\?next=\S+)?)`)
+	verifyRE = regexp.MustCompile(`http://example\.test(/verify/[A-Za-z0-9_-]+)`)
+)
 
 // lastLoginLink returns the path of the most recent emailed login link.
 func (ts *testServer) lastLoginLink(t *testing.T) string {
@@ -133,6 +136,19 @@ func (ts *testServer) lastLoginLink(t *testing.T) string {
 		t.Fatalf("no login link in email body: %q", msgs[len(msgs)-1].Body)
 	}
 	return m[1]
+}
+
+// lastVerifyLink returns the path of the most recent emailed verification link.
+func (ts *testServer) lastVerifyLink(t *testing.T) string {
+	t.Helper()
+	msgs := ts.mailer.messages()
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if m := verifyRE.FindStringSubmatch(msgs[i].Body); m != nil {
+			return m[1]
+		}
+	}
+	t.Fatal("no verification link in email")
+	return ""
 }
 
 func (ts *testServer) user(t *testing.T, email string) User {
@@ -211,6 +227,8 @@ func TestSignupValidation(t *testing.T) {
 	ts := newTestServer(t)
 	for _, tc := range []struct{ name, email, password, want string }{
 		{"bad email", "not-an-email", "", "valid email"},
+		{"empty email", "", "", "valid email"},
+		{"blank email", "   ", "", "valid email"},
 		{"display name", "Dog <dog@example.com>", "", "valid email"},
 		{"short password", "a@example.com", "short", "at least 8"},
 		{"long password", "b@example.com", strings.Repeat("x", 73), "at most 72"},
@@ -364,7 +382,8 @@ func TestMagicLinkLogsInOnce(t *testing.T) {
 		t.Fatalf("request link: %d", r.status)
 	}
 	msgs := ts.mailer.messages()
-	if len(msgs) != 1 || msgs[0].To != "dog@example.com" {
+	last := msgs[len(msgs)-1]
+	if last.To != "dog@example.com" || !strings.Contains(last.Body, "/login/link/") {
 		t.Fatalf("emails: %+v", msgs)
 	}
 	link := ts.lastLoginLink(t)
@@ -534,8 +553,14 @@ func TestMagicLinkRateLimit(t *testing.T) {
 	if r := b.post("/login/link", url.Values{"email": {"dog@example.com"}}); r.status != http.StatusTooManyRequests {
 		t.Fatalf("6th request: status %d", r.status)
 	}
-	if n := len(ts.mailer.messages()); n != 5 {
-		t.Fatalf("%d emails sent, want 5", n)
+	n := 0
+	for _, msg := range ts.mailer.messages() {
+		if strings.Contains(msg.Body, "/login/link/") {
+			n++
+		}
+	}
+	if n != 5 {
+		t.Fatalf("%d login emails sent, want 5", n)
 	}
 }
 

@@ -23,12 +23,18 @@ func (a *app) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 type messagePage struct {
-	Title string
-	Text  string
+	Title  string
+	Text   string
+	Action string // empty keeps the default "Back to Track Anything" link
+	Href   string
 }
 
 func (a *app) message(w http.ResponseWriter, r *http.Request, status int, title, text string) {
 	a.render(w, r, status, "message.html", messagePage{Title: title, Text: text})
+}
+
+func (a *app) messageTo(w http.ResponseWriter, r *http.Request, status int, title, text, action, href string) {
+	a.render(w, r, status, "message.html", messagePage{Title: title, Text: text, Action: action, Href: href})
 }
 
 // notFound is also the answer for things that exist but the viewer can't see.

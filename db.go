@@ -42,7 +42,7 @@ func openDB(path string) (*gorm.DB, error) {
 // migrate creates or updates tables for every model. Add models here as phases introduce them.
 func migrate(db *gorm.DB) error {
 	return db.AutoMigrate(
-		&User{}, &Session{}, &LoginToken{},
+		&User{}, &Session{}, &LoginToken{}, &VerificationToken{},
 		&Household{}, &HouseholdMember{}, &Tracker{}, &Entry{}, &RecordedZero{},
 	)
 }

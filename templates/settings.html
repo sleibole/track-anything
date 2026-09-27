@@ -7,6 +7,19 @@
   <p>Logged in as {{$.User.Email}}.</p>
 </hgroup>
 
+{{if .VerifyNote}}<p role="status" class="saved">{{.VerifyNote}}</p>{{end}}
+{{if not .EmailVerified}}
+<article class="form-card">
+  <h2>Email</h2>
+  {{if eq .Saved "verification"}}<p role="status" class="saved">Verification email sent. The link works once and expires in 24 hours.</p>{{end}}
+  {{if .VerifyError}}<p role="alert" class="error">{{.VerifyError}}</p>{{end}}
+  <p>Your email isn't verified yet.</p>
+  <form method="post" action="/settings/verify">
+    <button type="submit">Send verification email</button>
+  </form>
+</article>
+{{end}}
+
 <article class="form-card">
   <h2>Time zone</h2>
   {{if eq .Saved "timezone"}}<p role="status" class="saved">Time zone saved.</p>{{end}}

@@ -1,0 +1,17 @@
+{{define "title"}}Verify email · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<article class="auth-card">
+  {{if .Valid}}
+  <h1>Verify your email</h1>
+  <form method="post" class="auth-form" data-autosubmit>
+    <button type="submit">Verify {{.Email}}</button>
+  </form>
+  {{else}}
+  <h1>This link has expired</h1>
+  <p>Verification links work once and last 24 hours.</p>
+  <p class="auth-foot"><a href="/settings" role="button">Send a new link</a></p>
+  {{end}}
+</article>
+{{end}}
+{{end}}

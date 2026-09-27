@@ -20,14 +20,15 @@ import (
 )
 
 const (
-	sessionCookie     = "session"
-	sessionLifetime   = 30 * 24 * time.Hour
-	loginLinkLifetime = 15 * time.Minute
-	minPasswordLen    = 8
-	maxPasswordLen    = 72 // bcrypt ignores bytes past 72
+	sessionCookie      = "session"
+	sessionLifetime    = 30 * 24 * time.Hour
+	loginLinkLifetime  = 15 * time.Minute
+	verifyLinkLifetime = 24 * time.Hour
+	minPasswordLen     = 8
+	maxPasswordLen     = 72 // bcrypt ignores bytes past 72
 )
 
-// newToken returns 32 random bytes, base64url-encoded, for session IDs and login links.
+// newToken returns 32 random bytes, base64url-encoded, for session IDs and emailed links.
 func newToken() string {
 	b := make([]byte, 32)
 	rand.Read(b)
@@ -50,6 +51,8 @@ func normalizeEmail(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
+// validEmail accepts one plain address. net/mail would also accept a display name
+// ("Bob <bob@example.com>"); requiring the parsed address to equal the input rejects that.
 func validEmail(email string) bool {
 	addr, err := mail.ParseAddress(email)
 	return err == nil && addr.Address == email
@@ -276,6 +279,10 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	// Verification is best-effort. The account and session stand either way.
+	if err := a.sendVerificationEmail(&u); err != nil {
+		a.logger.Error("server error", "method", r.Method, "path", r.URL.Path, "err", err)
+	}
 	http.Redirect(w, r, safeNext(form.Next), http.StatusSeeOther)
 }
 
@@ -371,7 +378,15 @@ func (a *app) handleLoginLinkRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		if err := a.sendLoginLink(u, safeNext(form.Next)); err != nil {
-			a.serverError(w, r, err)
+			a.logger.Error("server error", "method", r.Method, "path", r.URL.Path, "err", err)
+			back := "/login"
+			if next := safeNext(form.Next); next != "/" {
+				back = "/login?next=" + url.QueryEscape(next)
+			}
+			a.messageTo(w, r, http.StatusInternalServerError,
+				"We couldn't send your login link",
+				"Something went wrong while sending the email. Please try again in a moment.",
+				"Back to log in", back)
 			return
 		}
 	}
@@ -458,11 +473,103 @@ func (a *app) handleLoginLinkUse(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	// The link was delivered to the mailbox, so this login also confirms the address.
+	if err := a.markEmailVerified(lt.UserID); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	if err := a.startSession(w, lt.UserID); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
 	http.Redirect(w, r, safeNext(r.PostFormValue("next")), http.StatusSeeOther)
+}
+
+// Email verification
+
+func (a *app) markEmailVerified(userID uint) error {
+	return a.db.Model(&User{}).
+		Where("id = ? AND email_verified_at IS NULL", userID).
+		Update("email_verified_at", a.now()).Error
+}
+
+func (a *app) sendVerificationEmail(u *User) error {
+	token := newToken()
+	vt := VerificationToken{UserID: u.ID, TokenHash: hashToken(token), ExpiresAt: a.now().Add(verifyLinkLifetime)}
+	if err := a.db.Create(&vt).Error; err != nil {
+		return err
+	}
+	link := a.cfg.BaseURL + "/verify/" + token
+	body := "Confirm your email for Track Anything:\n\n" + link +
+		"\n\nIt works once and expires in 24 hours. If you didn't sign up, you can ignore this email.\n"
+	return a.mailer.Send(u.Email, "Confirm your Track Anything email", body)
+}
+
+func (a *app) findVerificationToken(token string) (VerificationToken, error) {
+	var vt VerificationToken
+	err := a.db.Take(&vt, "token_hash = ? AND used_at IS NULL AND expires_at > ?", hashToken(token), a.now()).Error
+	return vt, err
+}
+
+type verifyPage struct {
+	Valid bool
+	Email string
+}
+
+// handleVerifyConfirm does not verify on GET. Mailbox scanners open links, and a
+// GET that confirmed the address would be used up before the person clicked.
+func (a *app) handleVerifyConfirm(w http.ResponseWriter, r *http.Request) {
+	page := verifyPage{}
+	vt, err := a.findVerificationToken(r.PathValue("token"))
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		a.serverError(w, r, err)
+		return
+	}
+	if err == nil {
+		var u User
+		if err := a.db.Take(&u, vt.UserID).Error; err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		page.Valid = true
+		page.Email = u.Email
+	}
+	status := http.StatusOK
+	if !page.Valid {
+		status = http.StatusGone
+	}
+	a.render(w, r, status, "verify.html", page)
+}
+
+func (a *app) handleVerifyUse(w http.ResponseWriter, r *http.Request) {
+	hash := hashToken(r.PathValue("token"))
+	now := a.now()
+	res := a.db.Model(&VerificationToken{}).
+		Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", hash, now).
+		Update("used_at", now)
+	if res.Error != nil {
+		a.serverError(w, r, res.Error)
+		return
+	}
+	if res.RowsAffected == 0 {
+		a.render(w, r, http.StatusGone, "verify.html", verifyPage{})
+		return
+	}
+
+	var vt VerificationToken
+	if err := a.db.Take(&vt, "token_hash = ?", hash).Error; err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if err := a.markEmailVerified(vt.UserID); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/verify/done", http.StatusSeeOther)
+}
+
+func (a *app) handleVerifyDone(w http.ResponseWriter, r *http.Request) {
+	a.messageTo(w, r, http.StatusOK, "Email verified", "Thanks. This address is confirmed.", "Back to Track Anything", "/")
 }
 
 func (a *app) handleLogout(w http.ResponseWriter, r *http.Request) {

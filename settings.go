@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"golang.org/x/crypto/bcrypt"
@@ -10,9 +11,12 @@ type settingsPage struct {
 	TimeZoneLabel   string
 	TimeZoneOptions []timeZoneOption
 	HasPassword     bool
-	Saved           string // "timezone" or "password" after a successful save
+	EmailVerified   bool
+	Saved           string // "timezone", "password", or "verification" after a successful save
 	TimeZoneError   string
 	PasswordError   string
+	VerifyError     string
+	VerifyNote      string
 }
 
 func (a *app) settingsPageFor(r *http.Request) settingsPage {
@@ -21,6 +25,7 @@ func (a *app) settingsPageFor(r *http.Request) settingsPage {
 		TimeZoneLabel:   timeZoneLabel(u.TimeZone),
 		TimeZoneOptions: timeZoneOptions(u.TimeZone, a.now()),
 		HasPassword:     u.HasPassword(),
+		EmailVerified:   u.EmailVerifiedAt != nil,
 		Saved:           r.URL.Query().Get("saved"),
 	}
 }
@@ -77,4 +82,28 @@ func (a *app) handleSettingsPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/settings?saved=password", http.StatusSeeOther)
+}
+
+func (a *app) handleSettingsVerify(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	if u.EmailVerifiedAt != nil {
+		page := a.settingsPageFor(r)
+		page.VerifyNote = "This email is already verified."
+		a.render(w, r, http.StatusOK, "settings.html", page)
+		return
+	}
+	if !a.verifyLimiter.allow(fmt.Sprintf("%d", u.ID)) {
+		page := a.settingsPageFor(r)
+		page.VerifyError = "Too many verification emails. Try again in a few minutes."
+		a.render(w, r, http.StatusTooManyRequests, "settings.html", page)
+		return
+	}
+	if err := a.sendVerificationEmail(u); err != nil {
+		a.logger.Error("server error", "method", r.Method, "path", r.URL.Path, "err", err)
+		page := a.settingsPageFor(r)
+		page.VerifyError = "We couldn't send the verification email. Please try again in a moment."
+		a.render(w, r, http.StatusInternalServerError, "settings.html", page)
+		return
+	}
+	http.Redirect(w, r, "/settings?saved=verification", http.StatusSeeOther)
 }

@@ -73,6 +73,7 @@ type app struct {
 
 	loginLimiter  *rateLimiter
 	linkLimiter   *rateLimiter
+	verifyLimiter *rateLimiter
 	signupLimiter *rateLimiter
 	shareLimiter  *rateLimiter
 }
@@ -82,6 +83,7 @@ func newApp(cfg config, db *gorm.DB, v *views, logger *slog.Logger, m mailer) *a
 	clock := func() time.Time { return a.now() }
 	a.loginLimiter = newRateLimiter(10, time.Minute, clock)
 	a.linkLimiter = newRateLimiter(5, 15*time.Minute, clock)
+	a.verifyLimiter = newRateLimiter(5, 15*time.Minute, clock)
 	a.signupLimiter = newRateLimiter(10, time.Hour, clock)
 	a.shareLimiter = newRateLimiter(30, time.Minute, clock)
 	return a
@@ -177,11 +179,15 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /login/link", a.handleLoginLinkRequest)
 	mux.HandleFunc("GET /login/link/{token}", a.handleLoginLinkConfirm)
 	mux.HandleFunc("POST /login/link/{token}", a.handleLoginLinkUse)
+	mux.HandleFunc("GET /verify/done", a.handleVerifyDone)
+	mux.HandleFunc("GET /verify/{token}", a.handleVerifyConfirm)
+	mux.HandleFunc("POST /verify/{token}", a.handleVerifyUse)
 	mux.HandleFunc("POST /logout", a.handleLogout)
 
 	mux.HandleFunc("GET /settings", a.requireUser(a.handleSettings))
 	mux.HandleFunc("POST /settings/timezone", a.requireUser(a.handleSettingsTimeZone))
 	mux.HandleFunc("POST /settings/password", a.requireUser(a.handleSettingsPassword))
+	mux.HandleFunc("POST /settings/verify", a.requireUser(a.handleSettingsVerify))
 
 	mux.HandleFunc("GET /households/{hid}", a.requireUser(a.handleHousehold))
 	mux.HandleFunc("POST /households/{hid}/invite", a.requireUser(a.handleInviteOn))

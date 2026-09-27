@@ -3,12 +3,13 @@ package main
 import "time"
 
 type User struct {
-	ID           uint
-	Email        string `gorm:"uniqueIndex;not null"` // stored lowercased
-	PasswordHash string // empty if they only use magic links
-	TimeZone     string `gorm:"not null;default:UTC"` // IANA name, e.g. "America/Los_Angeles"
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID              uint
+	Email           string     `gorm:"uniqueIndex;not null"` // stored lowercased
+	PasswordHash    string     // empty if they only use magic links
+	EmailVerifiedAt *time.Time // nil until they confirm the address, or log in with a magic link
+	TimeZone        string     `gorm:"not null;default:UTC"` // IANA name, e.g. "America/Los_Angeles"
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 func (u User) HasPassword() bool {
@@ -28,6 +29,17 @@ type LoginToken struct {
 	ID        uint
 	UserID    uint   `gorm:"index;not null"`
 	TokenHash string `gorm:"uniqueIndex;not null"` // sha256 hex of the token in the emailed link
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	CreatedAt time.Time
+}
+
+// VerificationToken is a one-time email confirmation link. It lives in its own
+// table so it cannot be presented as a login link. Only the hash is stored.
+type VerificationToken struct {
+	ID        uint
+	UserID    uint   `gorm:"index;not null"`
+	TokenHash string `gorm:"uniqueIndex;not null"`
 	ExpiresAt time.Time
 	UsedAt    *time.Time
 	CreatedAt time.Time

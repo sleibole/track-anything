@@ -11,19 +11,30 @@ import (
 	"testing"
 )
 
-// memMailer records emails instead of sending them.
+// memMailer records emails instead of sending them. setErr makes Send fail
+// without recording a message, for delivery-failure tests.
 type memMailer struct {
 	mu   sync.Mutex
 	sent []sentEmail
+	err  error
 }
 
 type sentEmail struct {
 	To, Subject, Body string
 }
 
+func (m *memMailer) setErr(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.err = err
+}
+
 func (m *memMailer) Send(to, subject, body string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.err != nil {
+		return m.err
+	}
 	m.sent = append(m.sent, sentEmail{to, subject, body})
 	return nil
 }
