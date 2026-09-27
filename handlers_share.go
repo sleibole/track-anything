@@ -59,8 +59,13 @@ func (a *app) renderShare(w http.ResponseWriter, r *http.Request, status int, t 
 		a.serverError(w, r, err)
 		return
 	}
+	card, err := a.cardView(t, today, loc, now, nil)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	p := sharePage{
-		Card:    cardFor(t, today, now, nil),
+		Card:    card,
 		Token:   *t.ShareToken,
 		Today:   today,
 		ZeroNew: today.Zero != nil && recent(today.Zero.CreatedAt, now),

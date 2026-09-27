@@ -1,13 +1,24 @@
 package main
 
 import (
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/mail"
 	"net/smtp"
+	"net/textproto"
 	"strings"
 	"time"
+)
+
+const (
+	// smtpSendTimeout bounds one delivery attempt, including the dial.
+	smtpSendTimeout = 5 * time.Second
+	// smtpRetryAfter is the pause before the single retry.
+	smtpRetryAfter = 500 * time.Millisecond
+	smtpAttempts   = 2
 )
 
 type mailer interface {
@@ -24,23 +35,22 @@ func (m consoleMailer) Send(to, subject, body string) error {
 	return nil
 }
 
-// smtpMailer sends plain-text email through a transactional relay. net/smtp upgrades
+// smtpMailer sends plain-text email through a transactional relay. It upgrades
 // to TLS with STARTTLS when the server offers it, which PlainAuth requires.
+// Each attempt has a deadline. A transient failure is retried once.
 type smtpMailer struct {
-	addr     string // host:port
-	username string
-	password string
-	from     *mail.Address
+	addr       string // host:port
+	username   string
+	password   string
+	from       *mail.Address
+	timeout    time.Duration
+	retryAfter time.Duration
 }
 
 func (m smtpMailer) Send(to, subject, body string) error {
 	host, _, err := net.SplitHostPort(m.addr)
 	if err != nil {
 		return err
-	}
-	var auth smtp.Auth
-	if m.username != "" {
-		auth = smtp.PlainAuth("", m.username, m.password, host)
 	}
 
 	var msg strings.Builder
@@ -51,8 +61,90 @@ func (m smtpMailer) Send(to, subject, body string) error {
 	msg.WriteString("MIME-Version: 1.0\r\n")
 	msg.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
 	msg.WriteString(strings.ReplaceAll(body, "\n", "\r\n"))
+	raw := []byte(msg.String())
 
-	return smtp.SendMail(m.addr, auth, m.from.Address, []string{to}, []byte(msg.String()))
+	var last error
+	for attempt := 1; attempt <= smtpAttempts; attempt++ {
+		if attempt > 1 {
+			time.Sleep(m.retryAfter)
+		}
+		last = m.sendOnce(host, to, raw)
+		if last == nil || !transientSMTPError(last) {
+			return last
+		}
+	}
+	return last
+}
+
+// sendOnce dials, speaks SMTP, and returns. The deadline covers the dial and
+// every later read and write on that connection.
+func (m smtpMailer) sendOnce(host, to string, msg []byte) error {
+	deadline := time.Now().Add(m.timeout)
+	conn, err := (&net.Dialer{Deadline: deadline}).Dial("tcp", m.addr)
+	if err != nil {
+		return err
+	}
+	if err := conn.SetDeadline(deadline); err != nil {
+		conn.Close()
+		return err
+	}
+
+	c, err := smtp.NewClient(conn, host)
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	defer c.Close()
+
+	// Same conversation as smtp.SendMail: greet, STARTTLS when offered, then AUTH.
+	if err := c.Hello("localhost"); err != nil {
+		return err
+	}
+	if ok, _ := c.Extension("STARTTLS"); ok {
+		if err := c.StartTLS(&tls.Config{ServerName: host}); err != nil {
+			return err
+		}
+	}
+	var auth smtp.Auth
+	if m.username != "" {
+		auth = smtp.PlainAuth("", m.username, m.password, host)
+	}
+	if auth != nil {
+		if ok, _ := c.Extension("AUTH"); !ok {
+			return errors.New("smtp: server doesn't support AUTH")
+		}
+		if err := c.Auth(auth); err != nil {
+			return err
+		}
+	}
+	if err := c.Mail(m.from.Address); err != nil {
+		return err
+	}
+	if err := c.Rcpt(to); err != nil {
+		return err
+	}
+	w, err := c.Data()
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write(msg); err != nil {
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	return c.Quit()
+}
+
+// transientSMTPError reports whether a second attempt is worthwhile.
+// A 5xx reply means the server rejected the message. Anything else — a 4xx
+// reply, a timeout, or a broken connection — is tried once more.
+func transientSMTPError(err error) bool {
+	var reply *textproto.Error
+	if errors.As(err, &reply) {
+		return reply.Code >= 400 && reply.Code < 500
+	}
+	return true
 }
 
 func newMailer(cfg config, logger *slog.Logger) (mailer, error) {
@@ -64,9 +156,11 @@ func newMailer(cfg config, logger *slog.Logger) (mailer, error) {
 		return nil, fmt.Errorf("MAIL_FROM: %w", err)
 	}
 	return smtpMailer{
-		addr:     net.JoinHostPort(cfg.SMTPHost, cfg.SMTPPort),
-		username: cfg.SMTPUser,
-		password: cfg.SMTPPass,
-		from:     from,
+		addr:       net.JoinHostPort(cfg.SMTPHost, cfg.SMTPPort),
+		username:   cfg.SMTPUser,
+		password:   cfg.SMTPPass,
+		from:       from,
+		timeout:    smtpSendTimeout,
+		retryAfter: smtpRetryAfter,
 	}, nil
 }

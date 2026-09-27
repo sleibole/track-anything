@@ -163,6 +163,41 @@ func TestSharePageTodayFollowsTheHouseholdCreatorsZone(t *testing.T) {
 	}
 }
 
+func TestSharePageMatchesTheCardSummary(t *testing.T) {
+	ts := newTestServer(t)
+	owner := ts.browser(t)
+	owner.signup("owner@example.com", "")
+	h := ts.personalHousehold(t, "owner@example.com")
+	done := owner.createTracker(h, "McGill Big 3", url.Values{"summary_display": {summaryDone}})
+	last := owner.createTracker(h, "Logan Motrin", url.Values{"summary_display": {summaryLast}})
+
+	la := location("America/Los_Angeles")
+	now := ts.clock.now().In(la)
+	ts.clock.t = time.Date(now.Year(), now.Month(), now.Day(), 6, 42, 0, 0, la)
+	owner.post(fmt.Sprintf("/trackers/%d/quick", done.ID), nil)
+	owner.post(fmt.Sprintf("/trackers/%d/quick", last.ID), nil)
+	for _, id := range []uint{done.ID, last.ID} {
+		owner.post(fmt.Sprintf("/trackers/%d/share", id), nil)
+	}
+	done = ts.tracker(t, done.ID)
+	last = ts.tracker(t, last.ID)
+	sitter := ts.browser(t)
+
+	for _, tr := range []Tracker{done, last} {
+		card := summaryText(t, owner.get(fmt.Sprintf("/trackers/%d", tr.ID)).body)
+		shared := summaryText(t, sitter.get("/s/"+*tr.ShareToken).body)
+		if card != shared || card == "" {
+			t.Errorf("%s card %q, share %q", tr.Name, card, shared)
+		}
+	}
+	if summaryText(t, sitter.get("/s/"+*done.ShareToken).body) != "Done today" {
+		t.Error("share page didn't show Done today")
+	}
+	if summaryText(t, sitter.get("/s/"+*last.ShareToken).body) != "Last: 6:42 AM" {
+		t.Error("share page didn't show the last occurrence")
+	}
+}
+
 func TestShareLinkPostsAreRateLimited(t *testing.T) {
 	ts, _, _, link := shareLink(t)
 	sitter := ts.browser(t)

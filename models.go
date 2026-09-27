@@ -55,18 +55,19 @@ type HouseholdMember struct {
 }
 
 type Tracker struct {
-	ID          uint
-	HouseholdID uint    `gorm:"index;not null"`
-	Name        string  `gorm:"not null"`
-	Icon        string  // empty means the tally mark; see trackerIcons
-	Accent      string  // empty means none; see trackerAccents
-	LogLabel    string  // empty means "+ Log"
-	Kind        string  `gorm:"not null;default:count"`
-	ShareToken  *string `gorm:"uniqueIndex"` // nil = no share link
-	Position    int
-	ArchivedAt  *time.Time // archiving also clears ShareToken
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID             uint
+	HouseholdID    uint    `gorm:"index;not null"`
+	Name           string  `gorm:"not null"`
+	Icon           string  // empty means the tally mark; see trackerIcons
+	Accent         string  // empty means none; see trackerAccents
+	LogLabel       string  // empty means "+ Log"
+	SummaryDisplay string  `gorm:"not null;default:times"` // "times", "done", or "last". Empty means times.
+	Kind           string  `gorm:"not null;default:count"`
+	ShareToken     *string `gorm:"uniqueIndex"` // nil = no share link
+	Position       int
+	ArchivedAt     *time.Time // archiving also clears ShareToken
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 func (t Tracker) Label() string {
@@ -74,6 +75,14 @@ func (t Tracker) Label() string {
 		return defaultLogLabel
 	}
 	return t.LogLabel
+}
+
+// SummaryMode is the summary-display value the page should mark, with empty read as times.
+func (t Tracker) SummaryMode() string {
+	if t.SummaryDisplay == "" {
+		return summaryTimes
+	}
+	return t.SummaryDisplay
 }
 
 type Entry struct {

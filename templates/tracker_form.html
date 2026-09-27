@@ -44,6 +44,15 @@
       <input type="text" name="log_label" value="{{.LogLabel}}" maxlength="24" placeholder="+ Log" aria-describedby="label-help">
       <small id="label-help">A few words, like "+ Ate".</small>
     </label>
+    <fieldset>
+      <legend>Summary display</legend>
+      {{range .Summaries}}
+      <label>
+        <input type="radio" name="summary_display" value="{{.Value}}"{{if or (eq .Value $.Data.SummaryDisplay) (and (eq .Value "times") (eq $.Data.SummaryDisplay ""))}} checked{{end}}>
+        {{.Label}}
+      </label>
+      {{end}}
+    </fieldset>
     <button type="submit">{{if .Tracker}}Save{{else}}Create tracker{{end}}</button>
   </form>
 </article>

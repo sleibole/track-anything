@@ -2,17 +2,17 @@
 
 How Track Anything is built. What the product is is `PLAN.md`. How it should look and behave is `DESIGN.md`. User help, when it exists, belongs in `docs/help/`.
 
-If `PLAN.md` or this document describes a behavior, `make test` covers it.
+If `PLAN.md` or this document describes a current behavior, `make test` covers it. Later enhancements (offline logging, event-relative summaries) are specified here and join the suite when they are built. Recurring, scheduled, and goal-based trackers are a later product direction in `PLAN.md`. They are not specified here: no schema, no notification channel, and no routes until that direction is ready to build.
 
 ## Constraints
 
 - **Boring technology.** Standard Go, server-rendered HTML, SQLite, straightforward code.
-- **One process, one database.** No microservices, distributed databases, queues, or background workers. Mail is sent in the request. The rate limiter is in memory. Do not add a job runner without a demonstrated need.
+- **One process, one database.** No microservices, distributed databases, server-side queues, or background workers. Mail is sent in the request. The rate limiter is in memory. Do not add a job runner without a demonstrated need. The later offline queue lives in the browser. See Offline logging.
 - **No schema language or plugin system** before a concrete tracker type requires one.
 - **Do not optimize for hypothetical scale** before the product has users. Exactly one instance, because of SQLite.
 - **Direct Go dependencies:** GORM, `github.com/glebarez/sqlite`, `golang.org/x/crypto`, and `github.com/prometheus/client_golang` for metrics. Everything else is the standard library, vendored static files, or HTTP calls.
-- **No offline mode and no public API.**
-- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js is the only focused client-side library, and the only chart library. It loads only where a historical chart or an overlay is shown, from phase 3 on, and the log control works without it. Phase 2 does not load it. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password are the exception: those forms require Cloudflare Turnstile, described under Security.
+- **No public API, and no offline mode through phase 5.** Basic offline logging is a later enhancement: a small cache and a browser queue around the existing log action. The app stays server-rendered. See Offline logging.
+- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js is the only focused client-side library, and the only chart library. It loads only where a historical chart or an overlay is shown, from phase 3 on, and the log control works without it. Phase 2 does not load it. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password are the exception: those forms require Cloudflare Turnstile, described under Security. The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
 
 ## Stack
 
@@ -44,7 +44,7 @@ Start flat: one `main` package, split only when navigation or coupling becomes p
 ```
 track-anything/
 ├── docs/
-│   ├── development/    # PLAN.md, DESIGN.md, ARCHITECTURE.md
+│   ├── development/    # PLAN.md, DESIGN.md, ARCHITECTURE.md, SUMMARY-DISPLAY.md
 │   └── help/           # future user-facing Markdown; none yet
 ├── go.mod
 ├── main.go             # config, load .env, open DB, migrate, build mux, start server
@@ -166,25 +166,26 @@ type HouseholdMember struct {
 }
 
 type Tracker struct {
-    ID          uint
-    HouseholdID uint    `gorm:"index;not null"`
-    Name        string  `gorm:"not null"`
-    Icon        string  // empty means the tally-mark default. Allow-list only: a curated Tabler name or an emoji.
-    Accent      string  // empty means no accent. Allow-list only.
-    LogLabel    string  // empty means "+ Log". A few words, 24 characters at most.
-    Kind        string  `gorm:"not null;default:count"` // "count", later "number" and "duration"
-    Unit        string  // number trackers only: "kg", "lb"
-    ShareToken  *string `gorm:"uniqueIndex"` // nil = no share link
-    Position    int
-    ArchivedAt  *time.Time // archived trackers are hidden; archiving also clears ShareToken
-    CreatedAt   time.Time
-    UpdatedAt   time.Time
+    ID             uint
+    HouseholdID    uint       `gorm:"index;not null"`
+    Name           string     `gorm:"not null"`
+    Icon           string     // empty means the tally-mark default. Allow-list only: a curated Tabler name or an emoji.
+    Accent         string     // empty means no accent. Allow-list only.
+    LogLabel       string     // empty means "+ Log". A few words, 24 characters at most.
+    SummaryDisplay string     `gorm:"not null;default:times"` // "times", "done", or "last". Empty means times. Presentation only.
+    Kind           string     `gorm:"not null;default:count"` // "count", later "number" and "duration"
+    Unit           string     // number trackers only: "kg", "lb"
+    ShareToken     *string    `gorm:"uniqueIndex"` // nil = no share link
+    Position       int
+    ArchivedAt     *time.Time // archived trackers are hidden; archiving also clears ShareToken
+    CreatedAt      time.Time
+    UpdatedAt      time.Time
 }
 
 type Entry struct {
     ID           uint
     TrackerID    uint      `gorm:"index;not null"`
-    OccurredAt   time.Time `gorm:"index;not null"` // when it happened (UTC); only owners choose or edit it
+    OccurredAt   time.Time `gorm:"index;not null"` // when it happened (UTC). Owners choose or edit it. Later offline sync stores the tap time.
     RecordedByID *uint     // nil when logged through a share link
     ViaLink      bool
     Note         string
@@ -209,8 +210,8 @@ type RecordedZero struct {
 
 ### Decisions worth calling out
 
-- **`OccurredAt` vs `CreatedAt`**: owners can backfill, so when it happened is separate from when the row was written. The undo window uses `CreatedAt`.
-- **Only owners set `OccurredAt`.** `POST /trackers/{id}/entries` reads the time field only when the role is owner, interpreting it in the owner's stored zone. For a member it ignores any submitted time and uses the server's current time, so a hand-built request can't backfill. The note is accepted from both. Share-link posts never read a time.
+- **`OccurredAt` vs `CreatedAt`**: owners can backfill, so when it happened is separate from when the row was written. The undo window uses `CreatedAt`. Later offline sync uses the same split: `OccurredAt` is the tap, and `CreatedAt` is when the server writes the row.
+- **Only owners set `OccurredAt` on an ordinary post.** `POST /trackers/{id}/entries` reads the time field only when the role is owner, interpreting it in the owner's stored zone. For a member it ignores any submitted time and uses the server's current time, so a hand-built request can't backfill. The note is accepted from both. Share-link posts never read a time. The later offline sync is the exception, and only for a new client id. See Offline logging.
 - **Personal household.** Signup creates the user, a `Household` named "My trackers", and an owner `HouseholdMember` row in one transaction.
 - **Phase 1 → phase 2 backfill.** Accounts created in phase 1 have no household. After `AutoMigrate`, `db.go` runs a one-time step in a transaction: every user with no `household_members` row gets a "My trackers" household with that user as owner. It is idempotent, so running it again changes nothing. Request handlers do not check for a missing household. Once every existing database has run the step (local development databases; production first launches with phase 2), the step is deleted.
 - **Ownership stays small.** Removing deletes a `member` row. The handler refuses to remove any owner, including the person asking. There is no demotion and no leave route. Account deletion (phase 5) handles sole-owner cases.
@@ -218,6 +219,7 @@ type RecordedZero struct {
 - **Email is stored lowercased** so `Sheldon@…` and `sheldon@…` can't become two accounts.
 - **Archive, not delete**, for trackers. Archiving sets `ArchivedAt` and clears `ShareToken`. Restoring clears `ArchivedAt` and leaves sharing off, so an old link can't come back. Entries are untouched either way. Permanent delete is a separate confirmed action in phase 5.
 - **Icon, accent, and log label** are optional strings. Empty means the default: the tally-mark icon, no accent, and the button text "+ Log". Writes accept only the built-in allow-lists (icon and accent) and a log label of at most 24 characters. A tracker icon that later leaves the picker falls back to the tally mark when rendered. A missing chrome icon is still a template error.
+- **Summary display** is `times`, `done`, or `last` on `Tracker`. Empty means `times`. The column default is `times`, so existing rows keep the phase 2 wording with no entry backfill. It does not change `Kind` or `Entry`. Done today does not enforce one entry per day. Last occurrence is the entry with the latest `OccurredAt`, rendered in the page's zone, and it does not clear at midnight. No entries at all read "Never logged". A recorded zero is not an entry, so those two modes ignore it. The wording is in `PLAN.md`. Create and edit gain the field in the follow-on after phase 2; phase 2 forms do not send it.
 - **`RecordedZero.Day`** is the local calendar date that page already calls "today" or a backfilled day: the viewer's stored zone, or the household first owner's zone on a share page. It is not a UTC timestamp, because the mark is about a day rather than an instant. Logging an entry whose local day matches `Day` deletes that row in the same request. A day with events cannot also have a recorded zero.
 
 ### Access checks
@@ -298,7 +300,7 @@ Everything except auth, share links, the Paddle webhook, and static files requir
 
 ```
 GET    /                          logged out: what the app is + log in / sign up
-                                  logged in: tracker cards grouped by household (name, icon, accent, today's summary, log button)
+                                  logged in: tracker cards grouped by household (name, icon, accent, summary, log button)
 GET    /signup, POST /signup
 GET    /login,  POST /login       password login
 POST   /login/link                email a magic link
@@ -317,11 +319,11 @@ POST   /households/{hid}/members/{uid}/owner  make a member an owner (owner; no 
 GET    /join/{token}                          invitation page (log in or sign up first); does not join
 POST   /join/{token}                          join as a member
 
-GET    /trackers/new              new tracker form (pick household, icon, accent, log label)
+GET    /trackers/new              new tracker form (household, icon, accent, log label; summary display after phase 2)
 GET    /trackers/{id}/edit        edit form, share link controls, archive (owner)
 POST   /trackers                  create tracker
 GET    /trackers/{id}             tracker page: log control and today's entries first, then history; trend from phase 3
-POST   /trackers/{id}             rename, icon, accent, log label (owner)
+POST   /trackers/{id}             rename, icon, accent, log label; summary display after phase 2 (owner)
 POST   /trackers/{id}/archive     archive; clears the share link (owner)
 POST   /trackers/{id}/restore     restore an archived tracker, sharing stays off (owner)
 POST   /trackers/{id}/delete      permanently delete, with confirmation (owner, phase 5)
@@ -338,7 +340,7 @@ POST   /entries/{eid}/delete      delete any entry (owner)
 POST   /zeros/{zid}/undo          undo a recorded zero from the last 15 minutes (any member)
 POST   /zeros/{zid}/delete        clear an older recorded zero (owner)
 
-GET    /s/{token}                 share page: name, icon, today's summary, log button, today's entries
+GET    /s/{token}                 share page: name, icon, the same summary line as the card, log button, today's entries
 POST   /s/{token}/quick           log "now" via the link
 POST   /s/{token}/zero            record none for today via the link
 POST   /s/{token}/entries/{eid}/undo  undo a recent entry via the link
@@ -355,12 +357,14 @@ GET    /metrics                   Prometheus text format, no session
 GET    /healthz
 ```
 
+Later offline sync reuses `POST /trackers/{id}/quick`, `POST /s/{token}/quick`, and, once it exists, `POST /trackers/{id}/repeat`. Those requests add a client id and the tap time. Without them, the posts behave as they do now. See Offline logging.
+
 ## HTMX
 
 The render helper checks `HX-Request` and returns either the full page or a partial. Ad and consent scripts live in `layout.html`, outside any element HTMX swaps, so they load once per page and are not re-run by partial updates.
 
 - **Forms post, then redirect.** Every form works as a plain `POST` that redirects back to its page. With HTMX, the form also has `hx-post`; HTMX follows the redirect, the page comes back as its content block, and `<main>` is swapped in place. Handlers have one code path either way.
-- **Log button**: a small delegated handler in `app.js` updates the summary on tap before the response arrives.
+- **Log button**: a small delegated handler in `app.js` updates the summary on tap before the response arrives. The optimistic line follows the tracker's summary display: the next Times today count, "Done today", or "Last" at the current time. The server response replaces it. The Done today attribute value is `done`. The later offline path keeps this update when the POST cannot reach the server. The server reply still replaces the line once sync succeeds. See Offline logging.
 - **Errors swap too.** The `htmx-config` meta tag swaps 4xx responses, so a validation message or "too late to undo" appears in place.
 - Owner deletes, member removal, promotion, and invite regeneration use `hx-confirm`.
 
@@ -423,8 +427,30 @@ Set on connect:
 
 - `manifest.webmanifest` with `name`, `start_url: "/"`, `display: "standalone"`, and 192 and 512 icons. The 512 icon is also the maskable icon; the artwork has safe-zone padding.
 - Apple touch icon and `apple-mobile-web-app-capable`, since iOS uses Share → Add to Home Screen.
-- No service worker, so deploys do not leave stale CSS and JS. Add a minimal worker only if the install option is missing on a real phone.
+- No service worker through phase 5, so deploys do not leave stale CSS and JS. Add a minimal worker only if the install option is missing on a real phone, and that fallback does not cache pages. The later offline-logging worker is specified under Offline logging. While online it prefers the network, so a deploy still reaches the new pages.
 - The manifest is served as `application/manifest+json`.
+
+## Offline logging (later)
+
+Specified now, built later. It is outside phases 0–5. Product scope is in `PLAN.md`. The pending mark is in `DESIGN.md`.
+
+The app stays server-rendered Go templates and HTMX. Offline support is a thin addition: a small service worker, a queue in IndexedDB, and the existing log handler in `app.js`. It adds no Go dependency, no server-side queue, and no frontend framework. There is no local copy of the database.
+
+**Cache.** The worker stores the shell (the HTML, CSS, and script needed to show tracker cards and the log button) and a snapshot of trackers already loaded: id, name, icon, accent, log label, summary display, and the summary state the optimistic update needs. That is enough to recognize a tracker and tap Log. A share page already loaded contributes that one tracker. History, charts, forms, households, settings, and account pages stay out of this cache. While a request can reach the server, the worker uses the network, so a deploy is what the browser runs. The cache is the fallback when that request fails.
+
+**Queue.** Each pending entry is one row in IndexedDB on that device: the tracker id, the one-tap POST the card already uses (`/trackers/{id}/quick`, `/s/{token}/quick`, or `/trackers/{id}/repeat` once phase 4 exists), a client-generated id (`crypto.randomUUID()`), and the occurrence time from the device clock at the tap. When that tap repeats a value, the value is stored on the same row. The script writes the row and updates the summary in the same tap that already does the optimistic line. If today's entries are already on the page, it adds the pending row there too. Another browser does not see the queue.
+
+**Sync.** When the open app can reach the server again, and on the next load if rows are still pending, each row is sent with an ordinary POST. The request carries the client id and the recorded occurrence time, and it follows the same CSRF and permission checks as the live log button. A success response removes that row from IndexedDB. The server reply replaces the summary, as it already does online. A failure, including a lost session or a rate limit, leaves the row queued and the card on the quiet "Not synced" status. The next successful reach tries again. Sync does not use the browser Background Sync API and does not add a server worker. A synced entry clears a recorded zero on the local day of its occurrence time, in that same request, as an online log does.
+
+**Idempotency.** The server stores the client id on the entry. A unique index means a retry for an id that already exists returns that row and inserts nothing. Ordinary online logs leave the id unset. SQLite allows many NULLs in a unique index, so those rows stay out of it.
+
+```go
+ClientID *string `gorm:"uniqueIndex"` // set by offline sync; nil for an ordinary online log
+```
+
+**Time.** The queued occurrence time is an absolute UTC instant from the device clock at the tap. The server stores it as `OccurredAt`. `CreatedAt` is when the server writes the row during sync. Which calendar day the entry belongs to still uses the account zone, or the household first owner's zone on a share page. The optimistic clock uses that same stored zone. The 15-minute undo window still uses `CreatedAt`, and only after the entry exists on the server. This path is the one place a non-owner occurrence time is accepted, and only together with a new client id. It is separate from owner backfill on `POST /trackers/{id}/entries`. A normal log POST from a member or a share link still ignores a submitted time. Whether to reject a tap time far from the server clock is open. See Open questions.
+
+The cases to pin down are under Testing. They wait until this enhancement is built.
 
 ## Billing (phase 5)
 
@@ -496,7 +522,8 @@ What the suite has to pin down:
 - **Archive and restore.** Archiving hides the tracker from the dashboard, makes its tracker page and entry routes 404, and clears its share link. The owner's household page lists it under archived trackers; a member's doesn't. Restore brings it back with its entries and with sharing off. Members can't archive or restore.
 - **Permissions.** For every owner-only route, a member gets refused and nothing changes. Non-members get 404 for trackers, entries, and households.
 - **Share links.** Logging and undo work without a session. The share page shows only that tracker. Undo fails after 15 minutes. Regenerated, disabled, and archived-tracker links return 404, and so does the old link after a restore. Owner-only actions are unreachable through a link.
-- **Logging.** The log button records now, owner backfill, notes from members and owners, undo within the window, undo refused after it, owner delete, `RecordedByID` and `ViaLink` set correctly. A member who submits a time gets an entry at the current time, never the submitted one. The member's tracker page has no time field. An empty log label renders as "+ Log". A label longer than 24 characters is rejected.
+- **Logging.** The log button records now, owner backfill, notes from members and owners, undo within the window, undo refused after it, owner delete, `RecordedByID` and `ViaLink` set correctly. A member who submits a time on an ordinary log gets an entry at the current time, never the submitted one. The member's tracker page has no time field. An empty log label renders as "+ Log". A label longer than 24 characters is rejected. The log label and the summary display are stored independently.
+- **Summary display.** Omitted or empty stores `times`. `done` and `last` store as sent. Any other value, including `boolean`, is rejected and nothing changes. The summary line on the home card, the tracker page, and the share page follows `PLAN.md`: Times today ("Nothing logged today", "1 time today", "3 times today", "None today"); Done today ("Done today" with one or many entries today, "Not done today" with none, including when today is a recorded zero or the only entries are on other days); Last occurrence ("Never logged", "Last: 6:42 AM" today, "Last: Yesterday, 8:15 PM" on the previous local day, "Last: Mon, Jan 2, 8:15 PM" when older). A second entry on a Done today tracker is stored. Last occurrence uses the latest `OccurredAt`, stays after midnight, and ignores a recorded zero. Undo and delete recompute the line. History rows stay count, none, or nothing logged. The default `times` column leaves existing phase 2 cards on the Times today wording.
 - **Icons and accents.** An empty icon renders as the tally mark and an empty accent adds none. A picker value is stored. A value outside the allow-list is rejected. The name is present wherever the icon is.
 - **Recorded zeros.** Marking today as none does not increment the count. An event that day deletes the mark. A day with neither is absent from the per-day series. A recorded zero is present as zero. A member or share link can undo a mark from the last 15 minutes. Clearing an older mark, or marking an earlier day, is owner-only, and a member's attempt changes nothing.
 - **Time.** "Today" and per-day grouping follow the viewer's stored time zone (or the household owner's on share pages), not the browser's current zone. DST changes don't double-count or skip a day.
@@ -505,6 +532,7 @@ What the suite has to pin down:
 - **Deletion (phase 5).** Permanent tracker delete removes the tracker and its entries, owner only, with confirmation.
 - **Ads and billing (phase 5).** No ad markup for ad-free users, users in the grace period, or on share/login/settings pages. The Paddle webhook rejects bad signatures and old timestamps, applies an event once even if delivered twice, ignores an older event arriving after a newer one, finds the user through `custom_data`, and sets and clears the plan. Tests build the `Paddle-Signature` header the way Paddle does, against a test secret, and the portal handler talks to a stub API URL.
 - **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes.
+- **Offline logging (later).** A repeated sync with the same client id inserts one entry and returns it again on retry. `OccurredAt` is the tap time sent with that id. `CreatedAt` is the sync, and the undo window uses it. A member or share-link log that omits the client id still stores the server's current time. The cached snapshot is enough to show the tracker name, icon, and log button. History and charts are not required for the log tap.
 - **Metrics.** `GET /metrics` needs no session, is Prometheus text, and contains no account, household, or tracker data.
 
 ## Decision log
@@ -515,19 +543,23 @@ What the suite has to pin down:
 | Frontend | Go templates + HTMX + Pico.css | No SPA. Forms work without JavaScript |
 | Charts | Chart.js, vendored | JSON embedded by the server. Historical chart, then overlay, both phase 3. Not loaded in phase 2. Logging works without it. No frontend framework. |
 | Tracker icon | Optional allow-listed string | Empty renders the tally mark. Emoji are text. A removed picker name falls back to the tally mark. |
+| Summary display | `times`, `done`, or `last` on `Tracker` | Empty and the column default are `times`. Presentation only. Wording in `PLAN.md`. After phase 2. |
+| Schedules and reminders | Not specified | Later product direction in `PLAN.md`. No schema, notification channel, or routes until that direction is ready to build. |
 | Recorded zero | One row per tracker per local day | Not an entry. Cleared when an event is logged that day. |
-| Entry time | Server sets `OccurredAt` to now for members and share links | Only owners' submitted times are read |
+| Entry time | Server sets `OccurredAt` to now for members and share links | Only owners' submitted times are read on an ordinary post. Later offline sync stores the tap time for a new client id. See Offline logging |
 | Archive | `ArchivedAt` plus clearing `ShareToken` | Restore leaves sharing off. Permanent delete is phase 5 |
 | Phase 1 households | One-time idempotent backfill after `AutoMigrate` | No request-time fallback. Deleted once existing databases have run it |
 | Persistence | SQLite, one shared database | Database per user rejected: migrations, backups, and sharing all get worse |
-| Dependencies | GORM, pure-Go SQLite, `x/crypto`, Prometheus client | No Paddle SDK. No background queue. The client is only for exposing metrics |
+| Dependencies | GORM, pure-Go SQLite, `x/crypto`, Prometheus client | No Paddle SDK. No server-side queue. The client is only for exposing metrics |
 | Metrics | Prometheus scrape | `GET /metrics`. Operational only: requests, latency, errors, database health. Not product analytics |
 | Time zone | UTC timestamps, stored IANA zone | Detected once at signup. Not revised from the browser. Grouped in Go |
 | Email | `net/smtp`, console logger in dev | Optional `.env`. Relay vendor still open |
 | Bot protection | Cloudflare Turnstile | Signup, login (password and magic link), and change password. Siteverify over HTTP, no SDK. Rate limits stay |
 | First public deploy | Dokku on the homelab, Fly.io as ingress only | App has no TLS and no host-specific code, so a later move to Fly.io is a redeploy |
+| Offline logging | Later, around the existing log POST | Browser cache and IndexedDB queue. Client id for idempotent retry. `OccurredAt` is the tap; `CreatedAt` is the sync. No server queue and no client framework |
 
 ## Open questions
 
 - **Email relay** for magic links: Postmark, Amazon SES, Resend, or another provider with SMTP? Doesn't block building phase 2; must be answered and working before the first public deploy.
 - **Backup and export**: method and destination (before the first public deploy), format, and how long backups retain deleted rows (with the phase 5 privacy policy). The privacy policy has to state the retention; that product question is also in `PLAN.md`.
+- **Offline tap time:** sync stores the device's tap time. Whether to reject a time far from the server clock is undecided. Ordinary log posts still ignore a submitted time.

@@ -93,6 +93,40 @@ func todaySummary(count int, zero bool) string {
 	return "Nothing logged today"
 }
 
+// summaryLine is the sentence above the log button.
+// latest is nil when the tracker has no entries. zero is ignored unless display is times.
+func summaryLine(display string, count int, zero bool, latest *time.Time, loc *time.Location, now time.Time) string {
+	switch display {
+	case summaryDone:
+		if count > 0 {
+			return "Done today"
+		}
+		return "Not done today"
+	case summaryLast:
+		return lastOccurrenceSummary(latest, loc, now)
+	default:
+		return todaySummary(count, zero)
+	}
+}
+
+// lastOccurrenceSummary formats the latest entry in the page's zone.
+// Yesterday is the previous local calendar day, not 24 hours earlier.
+func lastOccurrenceSummary(latest *time.Time, loc *time.Location, now time.Time) string {
+	if latest == nil {
+		return "Never logged"
+	}
+	when := latest.In(loc)
+	clock := when.Format("3:04 PM")
+	day := localDay(*latest, loc)
+	if day == localDay(now, loc) {
+		return "Last: " + clock
+	}
+	if day == localDay(now.In(loc).AddDate(0, 0, -1), loc) {
+		return "Last: Yesterday, " + clock
+	}
+	return "Last: " + when.Format("Mon, Jan 2, 3:04 PM")
+}
+
 func (d dayCount) Summary() string {
 	switch {
 	case d.Count > 0:

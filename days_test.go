@@ -90,6 +90,67 @@ func TestTodaySummary(t *testing.T) {
 	}
 }
 
+func TestSummaryLine(t *testing.T) {
+	la := location("America/Los_Angeles")
+	at := func(s string) time.Time {
+		v, err := time.ParseInLocation("2006-01-02 15:04", s, la)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	ptr := func(v time.Time) *time.Time { return &v }
+
+	now := at("2026-06-15 12:00")
+	otherDay := at("2026-06-01 09:00")
+	for _, tc := range []struct {
+		display string
+		count   int
+		zero    bool
+		latest  *time.Time
+		now     time.Time
+		want    string
+	}{
+		{"", 0, false, nil, now, "Nothing logged today"},
+		{"", 0, true, nil, now, "None today"},
+		{"", 1, false, nil, now, "1 time today"},
+		{summaryTimes, 3, false, nil, now, "3 times today"},
+		{summaryDone, 0, false, nil, now, "Not done today"},
+		{summaryDone, 0, true, ptr(otherDay), now, "Not done today"},
+		{summaryDone, 1, false, nil, now, "Done today"},
+		{summaryDone, 4, true, nil, now, "Done today"},
+		{summaryLast, 0, true, nil, now, "Never logged"},
+		{summaryLast, 3, false, nil, now, "Never logged"},
+	} {
+		if got := summaryLine(tc.display, tc.count, tc.zero, tc.latest, la, tc.now); got != tc.want {
+			t.Errorf("summaryLine(%q, %d, %v) = %q, want %q", tc.display, tc.count, tc.zero, got, tc.want)
+		}
+	}
+
+	same := at("2026-06-15 18:42")
+	if got, want := summaryLine(summaryLast, 0, false, ptr(same), la, same), "Last: "+same.Format("3:04 PM"); got != want {
+		t.Errorf("same day = %q, want %q", got, want)
+	}
+
+	yesterday := at("2026-06-14 20:15")
+	if got, want := summaryLine(summaryLast, 0, true, ptr(yesterday), la, now), "Last: Yesterday, "+yesterday.Format("3:04 PM"); got != want {
+		t.Errorf("yesterday = %q, want %q", got, want)
+	}
+
+	// Spring forward: 23:30 the evening before is still yesterday on the 23-hour day.
+	springEntry := at("2026-03-07 23:30")
+	springNow := at("2026-03-08 12:00")
+	if got := summaryLine(summaryLast, 0, false, ptr(springEntry), la, springNow); got != "Last: Yesterday, 11:30 PM" {
+		t.Errorf("spring forward = %q", got)
+	}
+
+	older := at("2026-01-02 15:04")
+	later := at("2026-01-05 12:00")
+	if got, want := summaryLine(summaryLast, 9, true, ptr(older), la, later), "Last: "+older.Format("Mon, Jan 2, 3:04 PM"); got != want {
+		t.Errorf("older = %q, want %q", got, want)
+	}
+}
+
 func TestUndoWindow(t *testing.T) {
 	now := time.Now()
 	if !recent(now.Add(-14*time.Minute-59*time.Second), now) {

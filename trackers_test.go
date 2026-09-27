@@ -169,7 +169,7 @@ func TestOwnerOnlyTrackerRoutesRefuseMembers(t *testing.T) {
 		t.Errorf("GET edit: %d", r.status)
 	}
 	for path, form := range map[string]url.Values{
-		base:              {"name": {"Renamed"}},
+		base:              {"name": {"Renamed"}, "summary_display": {summaryDone}},
 		base + "/archive": nil,
 		base + "/share":   nil,
 	} {
@@ -178,7 +178,7 @@ func TestOwnerOnlyTrackerRoutesRefuseMembers(t *testing.T) {
 		}
 	}
 	got := ts.tracker(t, tr.ID)
-	if got.Name != "Dog ate" || got.ArchivedAt != nil || got.ShareToken != nil {
+	if got.Name != "Dog ate" || got.ArchivedAt != nil || got.ShareToken != nil || got.SummaryDisplay == summaryDone {
 		t.Fatalf("member changed the tracker: %+v", got)
 	}
 	owner.post(base+"/share", nil)
@@ -534,5 +534,241 @@ func TestTodayFollowsEachViewersStoredZone(t *testing.T) {
 	}
 	if !strings.Contains(member.get("/").body, "Nothing logged today") {
 		t.Error("Los Angeles viewer should see a new day")
+	}
+}
+
+func summaryText(t *testing.T, body string) string {
+	t.Helper()
+	const mark = `class="tracker-summary"`
+	i := strings.Index(body, mark)
+	if i < 0 {
+		t.Fatalf("no summary in %s", body)
+	}
+	rest := body[i:]
+	start := strings.Index(rest, ">")
+	end := strings.Index(rest, "</p>")
+	if start < 0 || end < start {
+		t.Fatalf("summary tag in %s", rest)
+	}
+	return rest[start+1 : end]
+}
+
+func TestSummaryDisplayDefaultsToTimes(t *testing.T) {
+	_, owner, _, h := sharedHouse(t)
+	page := owner.get("/trackers/new?household=" + fmt.Sprint(h.ID)).body
+	for _, want := range []string{
+		"Times today — show how many times it happened today",
+		"Done today — show whether it happened today",
+		"Last occurrence — show when it last happened",
+		`value="times" checked`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("new form missing %q", want)
+		}
+	}
+
+	tr := owner.createTracker(h, "Millie ate", nil)
+	if tr.SummaryDisplay != summaryTimes && tr.SummaryDisplay != "" {
+		t.Fatalf("stored %q", tr.SummaryDisplay)
+	}
+	if summaryText(t, owner.get("/").body) != "Nothing logged today" {
+		t.Fatal("omitted summary display did not render Times today")
+	}
+}
+
+func TestSummaryDisplayIsIndependentOfTheLogLabel(t *testing.T) {
+	ts, owner, _, h := sharedHouse(t)
+	tr := owner.createTracker(h, "Logan Motrin", url.Values{
+		"summary_display": {summaryDone},
+		"log_label":       {"+ Ate"},
+	})
+	if tr.SummaryDisplay != summaryDone || tr.LogLabel != "+ Ate" {
+		t.Fatalf("created %+v", tr)
+	}
+	path := fmt.Sprintf("/trackers/%d", tr.ID)
+	owner.post(path, url.Values{
+		"name": {"Logan Motrin"}, "log_label": {"Gave Motrin"}, "summary_display": {summaryDone},
+	})
+	got := ts.tracker(t, tr.ID)
+	if got.LogLabel != "Gave Motrin" || got.SummaryDisplay != summaryDone {
+		t.Fatalf("label change cleared the summary: %+v", got)
+	}
+	owner.post(path, url.Values{
+		"name": {"Logan Motrin"}, "icon": {"💊"}, "accent": {"green"},
+		"log_label": {"Gave Motrin"}, "summary_display": {summaryLast},
+	})
+	got = ts.tracker(t, tr.ID)
+	if got.LogLabel != "Gave Motrin" || got.SummaryDisplay != summaryLast || got.Icon != "💊" || got.Accent != "green" {
+		t.Fatalf("summary change cleared the label: %+v", got)
+	}
+	edit := owner.get(path + "/edit").body
+	if !strings.Contains(edit, `value="last" checked`) || !strings.Contains(edit, `value="Gave Motrin"`) {
+		t.Fatal("edit form didn't keep Last occurrence and the label")
+	}
+}
+
+func TestSummaryDisplayRejectsUnknownValues(t *testing.T) {
+	ts, owner, _, h := sharedHouse(t)
+	before := owner.createTracker(h, "Dog ate", nil)
+	path := fmt.Sprintf("/trackers/%d", before.ID)
+	for _, bad := range []string{"habit", "boolean"} {
+		r := owner.post(path, url.Values{"name": {"Dog ate"}, "summary_display": {bad}})
+		if r.status != http.StatusUnprocessableEntity || !strings.Contains(r.body, "Pick a summary from the list.") {
+			t.Fatalf("%s: %d", bad, r.status)
+		}
+		if got := ts.tracker(t, before.ID); got.SummaryDisplay != before.SummaryDisplay || got.Name != "Dog ate" {
+			t.Fatalf("%s changed the tracker to %+v", bad, got)
+		}
+	}
+	n := 0
+	ts.app.db.Model(&Tracker{}).Select("count(*)").Scan(&n)
+	if r := owner.post("/trackers", url.Values{"household": {fmt.Sprint(h.ID)}, "name": {"Nope"}, "summary_display": {"habit"}}); r.status != http.StatusUnprocessableEntity {
+		t.Fatalf("create: %d", r.status)
+	}
+	var after int
+	ts.app.db.Model(&Tracker{}).Select("count(*)").Scan(&after)
+	if after != n {
+		t.Fatalf("invalid create stored a tracker: %d to %d", n, after)
+	}
+}
+
+func TestTimesTodaySummaryOnHomeTrackerAndShare(t *testing.T) {
+	ts, owner, _, h := sharedHouse(t)
+	tr := owner.createTracker(h, "Millie ate", nil)
+	base := fmt.Sprintf("/trackers/%d", tr.ID)
+	la := location("America/Los_Angeles")
+	yesterday := ts.clock.now().In(la).AddDate(0, 0, -1).Format(dayLayout)
+	owner.post(base+"/zero", url.Values{"day": {yesterday}})
+	owner.post(base+"/quick", nil)
+	owner.post(base+"/quick", nil)
+
+	owner.post(base+"/share", nil)
+	tr = ts.tracker(t, tr.ID)
+	link := "/s/" + *tr.ShareToken
+	sitter := ts.browser(t)
+
+	for name, body := range map[string]string{
+		"home":    owner.get("/").body,
+		"tracker": owner.get(base).body,
+		"share":   sitter.get(link).body,
+	} {
+		if summaryText(t, body) != "2 times today" {
+			t.Errorf("%s summary = %q", name, summaryText(t, body))
+		}
+	}
+	page := owner.get(base).body
+	if !strings.Contains(page, `<span class="day-summary">None</span>`) || strings.Contains(page, "Done today") {
+		t.Error("history followed the summary display")
+	}
+}
+
+func TestDoneTodaySummary(t *testing.T) {
+	ts, owner, _, h := sharedHouse(t)
+	tr := owner.createTracker(h, "McGill Big 3", url.Values{"summary_display": {summaryDone}})
+	base := fmt.Sprintf("/trackers/%d", tr.ID)
+	la := location("America/Los_Angeles")
+	yesterday := ts.clock.now().In(la).AddDate(0, 0, -1).Truncate(time.Minute)
+
+	owner.post(base+"/entries", url.Values{"time": {yesterday.Format(timeInputLayout)}})
+	if summaryText(t, owner.get(base).body) != "Not done today" {
+		t.Fatal("an earlier entry counted as today")
+	}
+
+	owner.post(base+"/quick", nil)
+	if summaryText(t, owner.get(base).body) != "Done today" || len(ts.entries(t, tr.ID)) != 2 {
+		t.Fatal("first log today")
+	}
+	owner.post(base+"/quick", nil)
+	if summaryText(t, owner.get(base).body) != "Done today" || len(ts.entries(t, tr.ID)) != 3 {
+		t.Fatal("second log today changed the summary or dropped the entry")
+	}
+	for _, e := range ts.entries(t, tr.ID) {
+		if localDay(e.OccurredAt, la) == localDay(ts.clock.now(), la) {
+			owner.post(fmt.Sprintf("/entries/%d/undo", e.ID), nil)
+		}
+	}
+	if summaryText(t, owner.get(base).body) != "Not done today" {
+		t.Fatal("undoing today's entries left the summary done")
+	}
+
+	for _, e := range ts.entries(t, tr.ID) {
+		owner.post(fmt.Sprintf("/entries/%d/delete", e.ID), nil)
+	}
+	owner.post(base+"/zero", url.Values{"day": {yesterday.Format(dayLayout)}})
+	page := owner.get(base).body
+	if summaryText(t, page) != "Not done today" || !strings.Contains(page, `<span class="day-summary">None</span>`) {
+		t.Fatal("a recorded zero on an earlier day changed Done today, or history hid it")
+	}
+	owner.post(base+"/zero", nil)
+	page = owner.get(base).body
+	if summaryText(t, page) != "Not done today" || !strings.Contains(page, "Recorded as none.") {
+		t.Fatalf("today marked none: %s", summaryText(t, page))
+	}
+}
+
+func TestLastOccurrenceSummary(t *testing.T) {
+	ts, owner, _, h := sharedHouse(t)
+	tr := owner.createTracker(h, "Logan Motrin", url.Values{
+		"summary_display": {summaryLast},
+		"log_label":       {"Gave Motrin"},
+		"icon":            {"💊"},
+		"accent":          {"green"},
+	})
+	base := fmt.Sprintf("/trackers/%d", tr.ID)
+	la := location("America/Los_Angeles")
+
+	page := owner.get(base).body
+	if summaryText(t, page) != "Never logged" || !strings.Contains(page, "Nothing logged yet") {
+		t.Fatalf("empty tracker: summary %q", summaryText(t, page))
+	}
+
+	now := ts.clock.now().In(la)
+	at := time.Date(now.Year(), now.Month(), now.Day(), 6, 42, 0, 0, la)
+	ts.clock.t = at
+	owner.post(base+"/quick", nil)
+	if summaryText(t, owner.get(base).body) != "Last: 6:42 AM" {
+		t.Fatalf("today: %s", summaryText(t, owner.get(base).body))
+	}
+
+	earlier := at.AddDate(0, 0, -3).Truncate(time.Minute)
+	owner.post(base+"/entries", url.Values{"time": {earlier.Format(timeInputLayout)}})
+	if summaryText(t, owner.get(base).body) != "Last: 6:42 AM" {
+		t.Fatal("an older backfill replaced today's occurrence")
+	}
+
+	var todayEntry Entry
+	for _, e := range ts.entries(t, tr.ID) {
+		if localDay(e.OccurredAt, la) == localDay(at, la) {
+			todayEntry = e
+		}
+	}
+	yesterday := at.AddDate(0, 0, -1).Truncate(time.Minute)
+	owner.post(fmt.Sprintf("/entries/%d", todayEntry.ID), url.Values{"time": {yesterday.Format(timeInputLayout)}})
+	if got, want := summaryText(t, owner.get(base).body), "Last: Yesterday, "+yesterday.Format("3:04 PM"); got != want {
+		t.Fatalf("edited time: %q, want %q", got, want)
+	}
+
+	ts.clock.t = at
+	owner.post(base+"/quick", nil)
+	ts.clock.t = time.Date(at.Year(), at.Month(), at.Day(), 8, 0, 0, 0, la).AddDate(0, 0, 1)
+	page = owner.get(base).body
+	if summaryText(t, page) != "Last: Yesterday, 6:42 AM" || strings.Contains(page, "Nothing logged today") {
+		t.Fatalf("next day: %q", summaryText(t, page))
+	}
+
+	older := owner.createTracker(h, "Older", url.Values{"summary_display": {summaryLast}})
+	when := ts.clock.now().In(la).AddDate(0, 0, -3).Truncate(time.Minute)
+	owner.post(fmt.Sprintf("/trackers/%d/entries", older.ID), url.Values{"time": {when.Format(timeInputLayout)}})
+	if got, want := summaryText(t, owner.get(fmt.Sprintf("/trackers/%d", older.ID)).body), "Last: "+when.Format("Mon, Jan 2, 3:04 PM"); got != want {
+		t.Fatalf("older: %q, want %q", got, want)
+	}
+
+	marked := owner.createTracker(h, "Marked none", url.Values{"summary_display": {summaryLast}})
+	markedBase := fmt.Sprintf("/trackers/%d", marked.ID)
+	prior := ts.clock.now().In(la).AddDate(0, 0, -1).Truncate(time.Minute)
+	owner.post(markedBase+"/entries", url.Values{"time": {prior.Format(timeInputLayout)}})
+	owner.post(markedBase+"/zero", nil)
+	if got, want := summaryText(t, owner.get(markedBase).body), "Last: Yesterday, "+prior.Format("3:04 PM"); got != want {
+		t.Fatalf("recorded zero counted as an occurrence: %q, want %q", got, want)
 	}
 }

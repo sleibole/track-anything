@@ -14,8 +14,19 @@ const (
 	maxTrackerName  = 60
 	maxNote         = 500
 
+	summaryTimes = "times"
+	summaryDone  = "done"
+	summaryLast  = "last"
+
 	timeInputLayout = "2006-01-02T15:04" // <input type="datetime-local">
 )
+
+// summaryDisplays is the create/edit choice. Empty is not a value; a missing field stores times.
+var summaryDisplays = []choice{
+	{summaryTimes, "Times today — show how many times it happened today"},
+	{summaryDone, "Done today — show whether it happened today"},
+	{summaryLast, "Last occurrence — show when it last happened"},
+}
 
 // Today's state of one tracker, in the zone of whoever is looking.
 
@@ -53,6 +64,7 @@ type trackerCard struct {
 	Tracker  Tracker
 	Count    int
 	Summary  string
+	Zone     string // IANA name used for this summary, for the optimistic last-occurrence clock
 	Link     string // tracker page; empty on the share page
 	QuickURL string
 	UndoURL  string // set while the viewer's latest entry can still be undone
@@ -65,14 +77,42 @@ func (a *app) card(t Tracker, loc *time.Location, now time.Time, viewerID *uint)
 	if err != nil {
 		return trackerCard{}, err
 	}
-	return cardFor(t, s, now, viewerID), nil
+	return a.cardView(t, s, loc, now, viewerID)
 }
 
-func cardFor(t Tracker, s todayState, now time.Time, viewerID *uint) trackerCard {
+// cardView builds a card from today's state. Last occurrence also loads the latest entry.
+func (a *app) cardView(t Tracker, s todayState, loc *time.Location, now time.Time, viewerID *uint) (trackerCard, error) {
+	var latest *Entry
+	if t.SummaryDisplay == summaryLast {
+		var err error
+		latest, err = a.latestEntry(t.ID)
+		if err != nil {
+			return trackerCard{}, err
+		}
+	}
+	return cardFor(t, s, latest, now, loc, viewerID), nil
+}
+
+// latestEntry is the entry with the latest OccurredAt. A later write of an older time does not win.
+func (a *app) latestEntry(trackerID uint) (*Entry, error) {
+	var entries []Entry
+	err := a.db.Where("tracker_id = ?", trackerID).Order("occurred_at DESC, id DESC").Limit(1).Find(&entries).Error
+	if err != nil || len(entries) == 0 {
+		return nil, err
+	}
+	return &entries[0], nil
+}
+
+func cardFor(t Tracker, s todayState, latest *Entry, now time.Time, loc *time.Location, viewerID *uint) trackerCard {
+	var occurred *time.Time
+	if latest != nil {
+		occurred = &latest.OccurredAt
+	}
 	c := trackerCard{
 		Tracker:  t,
 		Count:    s.Count,
-		Summary:  todaySummary(s.Count, s.Zero != nil),
+		Summary:  summaryLine(t.SummaryDisplay, s.Count, s.Zero != nil, occurred, loc, now),
+		Zone:     loc.String(),
 		Link:     fmt.Sprintf("/trackers/%d", t.ID),
 		QuickURL: fmt.Sprintf("/trackers/%d/quick", t.ID),
 	}
@@ -80,18 +120,18 @@ func cardFor(t Tracker, s todayState, now time.Time, viewerID *uint) trackerCard
 		c.Link = ""
 		c.QuickURL = "/s/" + *t.ShareToken + "/quick"
 	}
-	var latest *Entry
+	var undoable *Entry
 	for i, e := range s.Entries {
 		mine := e.ViaLink
 		if viewerID != nil {
 			mine = e.RecordedByID != nil && *e.RecordedByID == *viewerID
 		}
-		if mine && recent(e.CreatedAt, now) && (latest == nil || e.CreatedAt.After(latest.CreatedAt)) {
-			latest = &s.Entries[i]
+		if mine && recent(e.CreatedAt, now) && (undoable == nil || e.CreatedAt.After(undoable.CreatedAt)) {
+			undoable = &s.Entries[i]
 		}
 	}
-	if latest != nil {
-		c.UndoURL = entryUndoURL(t, latest.ID, viewerID == nil)
+	if undoable != nil {
+		c.UndoURL = entryUndoURL(t, undoable.ID, viewerID == nil)
 	}
 	return c
 }
@@ -191,8 +231,12 @@ func (a *app) trackerPage(t Tracker, role string, u *User) (trackerPage, error) 
 	if err != nil {
 		return trackerPage{}, err
 	}
+	card, err := a.cardView(t, today, loc, now, &u.ID)
+	if err != nil {
+		return trackerPage{}, err
+	}
 	p := trackerPage{
-		Card:     cardFor(t, today, now, &u.ID),
+		Card:     card,
 		IsOwner:  role == roleOwner,
 		Today:    today,
 		ZeroNew:  today.Zero != nil && recent(today.Zero.CreatedAt, now),
@@ -286,21 +330,23 @@ func (a *app) renderTrackerError(w http.ResponseWriter, r *http.Request, t Track
 // Create and edit.
 
 type trackerForm struct {
-	Households  []Household // households the user owns, for a new tracker
-	HouseholdID uint
-	Name        string
-	Icon        string
-	Accent      string
-	LogLabel    string
-	Error       string
-	Icons       []choice
-	Accents     []choice
-	Tracker     *Tracker // set when editing
-	ShareURL    string
+	Households     []Household // households the user owns, for a new tracker
+	HouseholdID    uint
+	Name           string
+	Icon           string
+	Accent         string
+	LogLabel       string
+	SummaryDisplay string
+	Error          string
+	Icons          []choice
+	Accents        []choice
+	Summaries      []choice
+	Tracker        *Tracker // set when editing
+	ShareURL       string
 }
 
 func (a *app) newTrackerForm(u *User) (trackerForm, error) {
-	f := trackerForm{Icons: trackerIcons, Accents: trackerAccents}
+	f := trackerForm{Icons: trackerIcons, Accents: trackerAccents, Summaries: summaryDisplays, SummaryDisplay: summaryTimes}
 	err := a.db.Table("households").
 		Select("households.*").
 		Joins("JOIN household_members ON household_members.household_id = households.id").
@@ -320,6 +366,10 @@ func readTrackerForm(r *http.Request, f *trackerForm) string {
 	f.Icon = r.PostFormValue("icon")
 	f.Accent = r.PostFormValue("accent")
 	f.LogLabel = strings.TrimSpace(r.PostFormValue("log_label"))
+	f.SummaryDisplay = r.PostFormValue("summary_display")
+	if f.SummaryDisplay == "" {
+		f.SummaryDisplay = summaryTimes
+	}
 	switch {
 	case f.Name == "":
 		return "Give the tracker a name."
@@ -331,6 +381,8 @@ func readTrackerForm(r *http.Request, f *trackerForm) string {
 		return "Pick an icon from the list."
 	case !listed(trackerAccents, f.Accent):
 		return "Pick a color from the list."
+	case !listed(summaryDisplays, f.SummaryDisplay):
+		return "Pick a summary from the list."
 	}
 	return ""
 }
@@ -381,13 +433,14 @@ func (a *app) handleCreateTracker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t := Tracker{
-		HouseholdID: f.HouseholdID,
-		Name:        f.Name,
-		Icon:        f.Icon,
-		Accent:      f.Accent,
-		LogLabel:    f.LogLabel,
-		Kind:        "count",
-		Position:    last + 1,
+		HouseholdID:    f.HouseholdID,
+		Name:           f.Name,
+		Icon:           f.Icon,
+		Accent:         f.Accent,
+		LogLabel:       f.LogLabel,
+		SummaryDisplay: f.SummaryDisplay,
+		Kind:           "count",
+		Position:       last + 1,
 	}
 	if err := a.db.Create(&t).Error; err != nil {
 		a.serverError(w, r, err)
@@ -413,13 +466,15 @@ func (a *app) ownedTracker(w http.ResponseWriter, r *http.Request) (t Tracker, o
 
 func (a *app) editForm(t Tracker) trackerForm {
 	f := trackerForm{
-		Name:     t.Name,
-		Icon:     t.Icon,
-		Accent:   t.Accent,
-		LogLabel: t.LogLabel,
-		Icons:    trackerIcons,
-		Accents:  trackerAccents,
-		Tracker:  &t,
+		Name:           t.Name,
+		Icon:           t.Icon,
+		Accent:         t.Accent,
+		LogLabel:       t.LogLabel,
+		SummaryDisplay: t.SummaryDisplay,
+		Icons:          trackerIcons,
+		Accents:        trackerAccents,
+		Summaries:      summaryDisplays,
+		Tracker:        &t,
 	}
 	if t.ShareToken != nil {
 		f.ShareURL = a.cfg.BaseURL + "/s/" + *t.ShareToken
@@ -446,7 +501,7 @@ func (a *app) handleUpdateTracker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := a.db.Model(&t).Updates(map[string]any{
-		"name": f.Name, "icon": f.Icon, "accent": f.Accent, "log_label": f.LogLabel,
+		"name": f.Name, "icon": f.Icon, "accent": f.Accent, "log_label": f.LogLabel, "summary_display": f.SummaryDisplay,
 	}).Error
 	if err != nil {
 		a.serverError(w, r, err)

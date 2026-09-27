@@ -28,8 +28,11 @@ Logged-in home keeps the household groups. Inside a group, each tracker is one c
 - The name, always visible.
 - The chosen icon, or the tally-mark default.
 - An optional accent, as a soft tint on the card or the icon. No accent means an ordinary Pico card.
-- A useful summary, such as "2 times today", "None today", or "Nothing logged today".
-- One prominent logging button. On the dog card that button is **+ Ate**. The default label is **+ Log**. One tap records the current time and then offers **Undo**.
+- A summary line, from that tracker's summary display (`PLAN.md`). The log label does not choose this line.
+  - **Times today** (the default, and every card in phase 2): "Nothing logged today", "1 time today", "3 times today", or "None today".
+  - **Done today**: "Done today" when today has at least one entry, "Not done today" otherwise. A second entry today does not change the line.
+  - **Last occurrence**: "Last: 6:42 AM" when the latest entry is today, "Last: Yesterday, 8:15 PM" when it was yesterday, "Last: Mon, Jan 2, 8:15 PM" when it was earlier, or "Never logged" when the tracker has no entries. After midnight, today's time becomes "Last: Yesterday, …". It does not become "Nothing logged today".
+- One prominent logging button. On the Millie card that button is **+ Ate**. Logan Motrin can say **Gave Motrin**. The default label is **+ Log**. One tap records the current time and then offers **Undo**. The button text is the log label, not the summary.
 
 Cards stack in a single column. They do not tile into a dense grid. On a wide screen they may sit in a quiet row, still with room around them and with the name and the button readable.
 
@@ -41,14 +44,14 @@ The header repeats the icon and the name, with the accent if there is one.
 
 Order on a phone:
 
-1. Today's logging control: the log button, then a small form with an optional note. Owners also see a time field, set to now, for backfill. Members don't see it.
+1. Today's logging control: the summary line, then the log button, then a small form with an optional note. The summary is the same line as on the card. Owners also see a time field, set to now, for backfill. Members don't see it.
 2. Today's entries. Each one can be undone while it is recent. An owner can edit the time or note in place, or delete with confirmation.
 3. History.
 4. The trend, once that tracker has one. Counts arrive in phase 3. Weight and duration arrive in phase 4.
 
 On a wider screen, history and the trend may sit beside the logging column. They do not move above it. Logging does not require scrolling past a chart.
 
-**Record none** is a quiet text action, not a second primary button. It marks today as a recorded zero when today has no events yet. "None today" and "Nothing logged today" stay visually distinct in the summary and in history.
+**Record none** is a quiet text action, not a second primary button. It marks today as a recorded zero when today has no events yet. On a Times today summary, "None today" and "Nothing logged today" stay visually distinct. Done today stays "Not done today" for both, because a recorded zero is not an entry. Last occurrence does not move. History still shows none and nothing logged as different rows. The today-list's empty sentence ("Nothing logged yet") is separate from the summary line, including "Never logged".
 
 ### Household
 
@@ -92,7 +95,13 @@ That covers authentication, settings, create and edit forms, and any other singl
 
 A form can sit to one side when the leftover space is doing something: accompanying copy, another panel, a chart, or a preview.
 
-The new-tracker form is one of these cards. The name, the icon picker, the optional accent, and the log label sit in it. The primary button is still the single full-width action that creates the tracker.
+The new-tracker form is one of these cards. The name, the icon picker, the optional accent, the log label, and the summary display sit in it. Summary display is three ordinary radios, not the icon picker:
+
+- **Times today** — show how many times it happened today
+- **Done today** — show whether it happened today
+- **Last occurrence** — show when it last happened
+
+Times today is selected by default. It is not tied to the log label. Edit offers the same choice. Phase 2's form does not have it yet; the follow-on after phase 2 adds it. The primary button is still the single full-width action that creates the tracker.
 
 Inside a focused form:
 
@@ -117,14 +126,23 @@ Authentication should have almost no cognitive overhead.
 
 Recording stays faster than reading.
 
-- The log button posts in place, updates today's summary immediately, and shows a short-lived **Undo**. The server response confirms the summary. Undo disappears once the 15-minute window has passed. The default label is **+ Log**. A tracker can use a short custom label such as **+ Ate**. The tap still records the current time.
-- **Record none** is a quiet action, not a second primary button. It marks today as a recorded zero when today has no events. The summary then says "None today", which is different from "Nothing logged today".
+- The log button posts in place, updates the summary line immediately, and shows a short-lived **Undo**. The server response confirms the summary. The update follows the summary display: a new Times today count, "Done today", or "Last" at the current time. Undo disappears once the 15-minute window has passed. The default label is **+ Log**. A tracker can use a short custom label such as **+ Ate** or **Gave Motrin**. The tap still records the current time. Another tap on a Done today tracker records another entry.
+- **Record none** is a quiet action, not a second primary button. It marks today as a recorded zero when today has no events. A Times today summary then says "None today", which is different from "Nothing logged today". Done today stays "Not done today". Last occurrence keeps the latest entry.
 - Logging with a note, a time (owners), or a value (phase 4) adds the new row and leaves the form ready for the next one, prefilled from what was just logged. The note does not carry forward onto the next entry, and the time goes back to now.
-- Controls a person can't use aren't shown. Members get the note field but no time field. Share-link visitors get the log button, **Record none**, and **Undo**.
+- Controls a person can't use aren't shown. Members get the note field but no time field. Share-link visitors get the summary line, the log button, **Record none**, and **Undo**. The summary is the same line as on the card.
 - Owners edit an entry's time or note in place. Delete asks for confirmation. Those controls sit on the entry. Members and share links still only undo while the entry is recent.
 - **Archive** is a quiet owner action on the tracker's edit form, not a button on the card. Restoring happens on the household page.
 - A trend never sits above the log control, and the log control works without the chart script. Chart pages describe a pattern and never claim a cause.
 - Empty and early screens say what is missing in one or two sentences and offer the next action. They do not lecture.
+
+Offline logging is a later enhancement (`PLAN.md`). The log button stays one tap. The offline path adds no confirm step, no second button, and no queue screen.
+
+- A tap while offline records the current time and updates the summary immediately. The line follows the summary display, same as an online tap: the next Times today count, "Done today", or "Last" at that time. If today's entries are already on the page, the new row appears there too.
+- The card adds a quiet status next to that summary: "Waiting to sync", or "Not synced" when the send keeps failing. The same words sit on a pending row. The status does not replace the summary, move the log button, or cover the card.
+- **Undo** stays hidden while the entry is still queued. After it syncs, the usual short-lived Undo appears.
+- The next tap stays the primary action. The unsynced state stays visible and stays out of the way.
+- A note, a chosen time, record none, and editing a value stay on the online form.
+- History, charts, create and edit, households, settings, and account screens stay online. This enhancement does not add offline versions of them.
 
 ## Navigation
 
@@ -146,7 +164,7 @@ When ads exist, they stay out of share, login, and settings pages, and out of th
 
 ## Responsive behavior
 
-Design the narrow screen first. There is still one web layout and no native app. Home-screen install is a manifest, specified in `ARCHITECTURE.md`.
+Design the narrow screen first. There is still one web layout and no native app. Home-screen install is a manifest, specified in `ARCHITECTURE.md`. Offline logging, later, keeps this same log button.
 
 On a phone, tracker cards stack, and the logging control is the first content on a tracker page. History and trends follow, so reviewing is a scroll down the same page.
 

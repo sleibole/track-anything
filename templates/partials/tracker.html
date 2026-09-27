@@ -2,7 +2,7 @@
 
 {{define "logControl"}}
 <div class="log-control" data-tracker>
-  <p class="tracker-summary" data-summary data-count="{{.Count}}">{{.Summary}}</p>
+  <p class="tracker-summary" data-summary data-count="{{.Count}}" data-summary-display="{{.Tracker.SummaryMode}}" data-time-zone="{{.Zone}}">{{.Summary}}</p>
   <div class="log-buttons">
     <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick>
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
