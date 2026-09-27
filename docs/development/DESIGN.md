@@ -33,13 +33,15 @@ Logged-in home keeps the household groups. Inside a group, each tracker is one c
 
 Cards stack in a single column. They do not tile into a dense grid. On a wide screen they may sit in a quiet row, still with room around them and with the name and the button readable.
 
+Each group's heading is the household name. A household someone else created adds that person's email in quieter text, so a partner's "My trackers" doesn't look like your own.
+
 ### Tracker detail
 
 The header repeats the icon and the name, with the accent if there is one.
 
 Order on a phone:
 
-1. Today's logging control.
+1. Today's logging control: the log button, then a small form with an optional note. Owners also see a time field, set to now, for backfill. Members don't see it.
 2. Today's entries. Each one can be undone while it is recent. An owner can edit the time or note in place, or delete with confirmation.
 3. History.
 4. The trend, once that tracker has one. Counts arrive in phase 3. Weight and duration arrive in phase 4.
@@ -47,6 +49,12 @@ Order on a phone:
 On a wider screen, history and the trend may sit beside the logging column. They do not move above it. Logging does not require scrolling past a chart.
 
 **Record none** is a quiet text action, not a second primary button. It marks today as a recorded zero when today has no events yet. "None today" and "Nothing logged today" stay visually distinct in the summary and in history.
+
+### Household
+
+The household name, then its members with their roles. An owner sees the invite link controls, and **Remove** and **Make owner** on each member's row. Owner rows, including your own, have no remove control. Members see the list without those controls.
+
+Below that, an owner sees a collapsed **Archived trackers** section (a `<details>` element), closed by default and left out when nothing is archived. Each archived tracker shows its icon and name with a quiet **Restore** action. There is no separate archive page.
 
 ### History
 
@@ -64,13 +72,13 @@ Choose the chart from the tracker's data:
 
 A recorded zero is a zero. A day with nothing logged is a gap, not a zero bar.
 
-Comparing separate trackers is the phase 3 charts view, not the first screen. It can put dog eating next to off-leash woods time and shift one series by one, two, or three days so the following days line up. The page describes that alignment and does not claim a cause. On a phone the chart follows the comparison controls. On a wider screen it can sit beside them.
+The historical chart is on the tracker page. Overlaying another tracker comes after that, on the phase 3 charts view. Events from the second tracker sit on the first tracker's time series as a marker, an annotation, or a shaded vertical region. Which of those is still open (`PLAN.md`). Woods outings on the meals chart are the reference. The page describes the chart and does not claim a cause. On a phone the chart follows the overlay controls. On a wider screen it can sit beside them.
 
 ### Icon and accent
 
 The create and edit forms offer a small picker. It contains a curated handful of clear Tabler icons — a paw, a pill, trees, a barbell — and a few emoji. It is not the whole Tabler set, not a free-text emoji field, and not an upload. The tally-mark icon is selected by default. The owner can change the icon or the accent later.
 
-Show the icon on the home card, the tracker header, and every control that picks a tracker, including the phase 3 comparison picker. The name stays beside it. Color and icon help recognition. They are not the only way to identify a tracker.
+Show the icon on the home card, the tracker header, and every control that picks a tracker, including the phase 3 overlay picker. The name stays beside it. Color and icon help recognition. They are not the only way to identify a tracker.
 
 Uploading an icon is a later idea.
 
@@ -109,8 +117,10 @@ Recording stays faster than reading.
 
 - The log button posts in place, updates today's summary immediately, and shows a short-lived **Undo**. The server response confirms the summary. Undo disappears once the 15-minute window has passed. The default label is **+ Log**. A tracker can use a short custom label such as **+ Ate**. The tap still records the current time.
 - **Record none** is a quiet action, not a second primary button. It marks today as a recorded zero when today has no events. The summary then says "None today", which is different from "Nothing logged today".
-- Logging with a time, note, or value adds the new row and leaves the form ready for the next one, prefilled from what was just logged. The note does not carry forward onto the next entry.
+- Logging with a note, a time (owners), or a value (phase 4) adds the new row and leaves the form ready for the next one, prefilled from what was just logged. The note does not carry forward onto the next entry, and the time goes back to now.
+- Controls a person can't use aren't shown. Members get the note field but no time field. Share-link visitors get the log button, **Record none**, and **Undo**.
 - Owners edit an entry's time or note in place. Delete asks for confirmation. Those controls sit on the entry. Members and share links still only undo while the entry is recent.
+- **Archive** is a quiet owner action on the tracker's edit form, not a button on the card. Restoring happens on the household page.
 - A trend never sits above the log control, and the log control works without the chart script. Chart pages describe a pattern and never claim a cause.
 - Empty and early screens say what is missing in one or two sentences and offer the next action. They do not lecture.
 

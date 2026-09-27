@@ -12,7 +12,7 @@ If `PLAN.md` or this document describes a behavior, `make test` covers it.
 - **Do not optimize for hypothetical scale** before the product has users. Exactly one instance, because of SQLite.
 - **Three direct Go dependencies:** GORM, `github.com/glebarez/sqlite`, and `golang.org/x/crypto`. Everything else is the standard library, vendored static files, or HTTP calls.
 - **No offline mode and no public API.**
-- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js is the only focused client-side library. It loads only where a trend or comparison is shown, from phase 3 on, and the log control works without it. Phase 2 does not load it.
+- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js is the only focused client-side library, and the only chart library. It loads only where a historical chart or an overlay is shown, from phase 3 on, and the log control works without it. Phase 2 does not load it. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password are the exception: those forms require Cloudflare Turnstile, described under Security.
 
 ## Stack
 
@@ -29,11 +29,12 @@ If `PLAN.md` or this document describes a behavior, `make test` covers it.
 | Password hashing | `golang.org/x/crypto/bcrypt` | |
 | Email (magic links) | `net/smtp` to a transactional email relay | In development, links are logged to the console instead of sent |
 | Frontend | HTMX (vendored `htmx.min.js`) | Served from `/static`, no CDN |
-| Charts | Chart.js (vendored `chart.umd.min.js`) | Only where a trend or comparison is shown (phase 3+). Logging does not depend on it. Not loaded in phase 2. |
+| Charts | Chart.js (vendored `chart.umd.min.js`) | Fits server-rendered HTML and HTMX. Only where a historical chart or overlay is shown (phase 3+). Logging does not depend on it. Not loaded in phase 2. |
 | CSS | Pico.css (vendored `pico.min.css`) | Classless-first, minimal custom CSS. Visual rules are in `DESIGN.md` |
 | Icons | Tabler, individual SVGs vendored and embedded | MIT. Inlined so `stroke="currentColor"` follows Pico, including dark mode. A tracker's own icon is an allow-listed Tabler name or emoji. |
 | Payments | Paddle Billing via `net/http` | No Paddle SDK. Paddle is the merchant of record |
 | Ads | Google AdSense with a certified consent platform | Phase 5, after the app is live |
+| Bot protection | Cloudflare Turnstile | Signup, login, and change password. Verified with an HTTP call; no SDK |
 
 ## Project layout
 
@@ -46,18 +47,20 @@ track-anything/
 │   └── help/           # future user-facing Markdown; none yet
 ├── go.mod
 ├── main.go             # config, load .env, open DB, migrate, build mux, start server
-├── db.go               # GORM setup, AutoMigrate, SQLite pragmas
-├── models.go           # structs below + small helpers (day boundaries, tokens)
-├── access.go           # trackerForUser, trackerForShareToken, role checks
+├── db.go               # GORM setup, AutoMigrate, SQLite pragmas, one-time data backfills
+├── models.go           # structs below
+├── days.go             # day boundaries, per-day counts, undo window, summaries
+├── access.go           # trackerForUser, trackerForShareToken, archivedTrackerForOwner, household lookups
 ├── auth.go             # signup, login, logout, magic links, session middleware
 ├── mail.go             # net/smtp sender, console sender for development
 ├── env.go              # load .env at startup; existing environment variables win
 ├── .env.example        # local MailHog settings; copy to .env (gitignored)
 ├── settings.go         # time zone and password settings
 ├── ratelimit.go        # per-IP fixed-window limiter, client IP behind the proxies
-├── handlers_trackers.go
-├── handlers_entries.go
-├── handlers_households.go # members, invite link, join
+├── handlers.go         # health check, dashboard, shared handler helpers
+├── handlers_trackers.go # create, edit, archive, restore, share link, tracker page
+├── handlers_entries.go  # log, undo, owner corrections, recorded zeros
+├── handlers_households.go # members, invite link, join, archived trackers
 ├── handlers_share.go   # share-link pages, no login
 ├── handlers_charts.go
 ├── handlers_billing.go # upgrade page, Paddle webhook, customer portal link (phase 5)
@@ -67,10 +70,13 @@ track-anything/
 │   ├── layout.html     # ad and consent scripts live here, outside any HTMX swap target
 │   ├── dashboard.html
 │   ├── tracker_show.html
+│   ├── tracker_form.html # new and edit, plus the share link and archive
 │   ├── share.html      # what a share-link visitor sees
 │   ├── household.html
+│   ├── join.html       # invitation confirm page
+│   ├── message.html    # 404, 403, and other one-line answers
 │   ├── charts.html
-│   └── partials/       # fragments returned to HTMX requests
+│   └── partials/       # fragments shared by pages: card, log control, entry
 ├── icons/              # Tabler SVGs we use, inlined by the icon template func
 ├── static/
 │   ├── htmx.min.js
@@ -107,7 +113,7 @@ The process environment is the source of truth. On startup, `main` loads a gitig
 
 Local MailHog, when used, is `SMTP_HOST=127.0.0.1` and `SMTP_PORT=1025` (web inbox on port 8025). With `SMTP_HOST` unset, the mailer logs the link to the console.
 
-Production sets the same names with `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`, `BASE_URL`, `ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`. Phase 5 adds `PADDLE_ENV` (`sandbox` or `production`), `PADDLE_API_KEY`, `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_ID`.
+Production sets the same names with `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`, `BASE_URL`, `ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`. Phase 5 adds `PADDLE_ENV` (`sandbox` or `production`), `PADDLE_API_KEY`, `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_ID`.
 
 `ENV=dev` turns off the `Secure` cookie flag so browsers work on `http://localhost`.
 
@@ -146,7 +152,7 @@ type LoginToken struct {
 
 type Household struct {
     ID          uint
-    Name        string  `gorm:"not null"` // "Sheldon's trackers", "Leibole house"
+    Name        string  `gorm:"not null"` // "My trackers" for a personal household; no rename UI in phase 2
     InviteToken *string `gorm:"uniqueIndex"` // nil = invites off
     CreatedAt   time.Time
 }
@@ -169,7 +175,7 @@ type Tracker struct {
     Unit        string  // number trackers only: "kg", "lb"
     ShareToken  *string `gorm:"uniqueIndex"` // nil = no share link
     Position    int
-    ArchivedAt  *time.Time // archived trackers are hidden and their share link stops working
+    ArchivedAt  *time.Time // archived trackers are hidden; archiving also clears ShareToken
     CreatedAt   time.Time
     UpdatedAt   time.Time
 }
@@ -177,7 +183,7 @@ type Tracker struct {
 type Entry struct {
     ID           uint
     TrackerID    uint      `gorm:"index;not null"`
-    OccurredAt   time.Time `gorm:"index;not null"` // when it happened (UTC), editable by owners
+    OccurredAt   time.Time `gorm:"index;not null"` // when it happened (UTC); only owners choose or edit it
     RecordedByID *uint     // nil when logged through a share link
     ViaLink      bool
     Note         string
@@ -203,15 +209,19 @@ type RecordedZero struct {
 ### Decisions worth calling out
 
 - **`OccurredAt` vs `CreatedAt`**: owners can backfill, so when it happened is separate from when the row was written. The undo window uses `CreatedAt`.
+- **Only owners set `OccurredAt`.** `POST /trackers/{id}/entries` reads the time field only when the role is owner, interpreting it in the owner's stored zone. For a member it ignores any submitted time and uses the server's current time, so a hand-built request can't backfill. The note is accepted from both. Share-link posts never read a time.
+- **Personal household.** Signup creates the user, a `Household` named "My trackers", and an owner `HouseholdMember` row in one transaction.
+- **Phase 1 → phase 2 backfill.** Accounts created in phase 1 have no household. After `AutoMigrate`, `db.go` runs a one-time step in a transaction: every user with no `household_members` row gets a "My trackers" household with that user as owner. It is idempotent, so running it again changes nothing. Request handlers do not check for a missing household. Once every existing database has run the step (local development databases; production first launches with phase 2), the step is deleted.
+- **Ownership stays small.** Removing deletes a `member` row. The handler refuses to remove any owner, including the person asking. There is no demotion and no leave route. Account deletion (phase 5) handles sole-owner cases.
 - **Value columns on `Entry`** (`Number`, `DurationSec`) instead of a generic field system. Two nullable columns cover the planned tracker kinds with no joins. Fields and sub-trackers, if they are ever built, add a `Field` table, a `Value` table, and `ParentID` on `Tracker` and `Entry`.
 - **Email is stored lowercased** so `Sheldon@…` and `sheldon@…` can't become two accounts.
-- **Archive, not delete**, for trackers. `ArchivedAt` hides the tracker and kills its share link. Permanent delete is a separate confirmed action.
+- **Archive, not delete**, for trackers. Archiving sets `ArchivedAt` and clears `ShareToken`. Restoring clears `ArchivedAt` and leaves sharing off, so an old link can't come back. Entries are untouched either way. Permanent delete is a separate confirmed action in phase 5.
 - **Icon, accent, and log label** are optional strings. Empty means the default: the tally-mark icon, no accent, and the button text "+ Log". Writes accept only the built-in allow-lists (icon and accent) and a log label of at most 24 characters. A tracker icon that later leaves the picker falls back to the tally mark when rendered. A missing chrome icon is still a template error.
 - **`RecordedZero.Day`** is the local calendar date that page already calls "today" or a backfilled day: the viewer's stored zone, or the household first owner's zone on a share page. It is not a UTC timestamp, because the mark is about a day rather than an instant. Logging an entry whose local day matches `Day` deletes that row in the same request. A day with events cannot also have a recorded zero.
 
 ### Access checks
 
-Every tracker lookup goes through one of two small functions, so access rules live in one place:
+Every tracker lookup goes through one of three small functions, so access rules live in one place:
 
 ```go
 // trackerForUser returns the tracker and the user's role in its household,
@@ -231,6 +241,10 @@ func trackerForUser(db *gorm.DB, userID, trackerID uint) (Tracker, string, error
 
 // trackerForShareToken returns the tracker behind a share link, if it's still active.
 func trackerForShareToken(db *gorm.DB, token string) (Tracker, error)
+
+// archivedTrackerForOwner returns an archived tracker only if the user owns its household.
+// Only restore uses it; every other route sees archived trackers as missing.
+func archivedTrackerForOwner(db *gorm.DB, userID, trackerID uint) (Tracker, error)
 ```
 
 Handlers then check the role for owner-only actions. A tracker the user can't see is a 404, never a 403, so IDs don't leak. The test checks no row changed.
@@ -242,7 +256,7 @@ Track Anything is organized around calendar days, so "today" and the day an entr
 - Store timestamps in UTC.
 - Store the account's IANA time zone on `User.TimeZone` (for example `America/Los_Angeles`).
 - Detect it once, at signup, from `Intl.DateTimeFormat().resolvedOptions().timeZone` in a hidden field. Signup does not ask. Later requests do not replace it from the browser. Traveling must not move entries onto different days.
-- Use that stored zone for every calendar boundary: today, per-day counts, streaks, charts, history, and delayed comparisons.
+- Use that stored zone for every calendar boundary: today, per-day counts, charts, history, and overlays.
 - Share-link visitors have no zone, so "today" on a share page uses the household's first owner's zone. Everyone in a house sees the same "today".
 - Group by local date in Go. SQLite cannot convert to IANA zones itself, and grouping in Go stays correct across daylight-saving changes. The same per-day series feeds the charts.
 - Settings does not offer the raw IANA name as a text field. If the detected zone is wrong, a low-profile control lists friendly names, such as "Pacific Time (US & Canada)", and `POST /settings/timezone` stores the matching IANA name. Most people never need to touch it. The control's presentation is in `DESIGN.md`.
@@ -287,33 +301,36 @@ GET    /                          logged out: what the app is + log in / sign up
 GET    /signup, POST /signup
 GET    /login,  POST /login       password login
 POST   /login/link                email a magic link
-GET    /login/link/{token}        confirm page with a "Log in as ..." button (doesn't use the token)
+GET    /login/link/{token}        confirm page; the form posts itself (GET doesn't use the token)
 POST   /login/link/{token}        use the magic link
 POST   /logout
 GET    /settings                  password, low-profile time zone, (phase 5) plan, delete account
 POST   /settings/timezone         set the stored IANA zone from a friendly name
 POST   /settings/password         set or change; logs out other sessions
 
-GET    /households/{hid}                      members, invite link, trackers
+GET    /households/{hid}                      members, invite link, trackers; owners also see a collapsed archived list
 POST   /households/{hid}/invite               turn on or regenerate the invite link (owner)
 POST   /households/{hid}/invite/delete        turn invites off (owner)
-POST   /households/{hid}/members/{uid}/delete remove a member (owner)
-POST   /households/{hid}/members/{uid}/owner  make a member an owner (owner)
-GET    /join/{token}                          accept an invite (log in or sign up first)
+POST   /households/{hid}/members/{uid}/delete remove a member (owner; refused for any owner, including yourself)
+POST   /households/{hid}/members/{uid}/owner  make a member an owner (owner; no demotion route)
+GET    /join/{token}                          invitation page (log in or sign up first); does not join
+POST   /join/{token}                          join as a member
 
 GET    /trackers/new              new tracker form (pick household, icon, accent, log label)
+GET    /trackers/{id}/edit        edit form, share link controls, archive (owner)
 POST   /trackers                  create tracker
 GET    /trackers/{id}             tracker page: log control and today's entries first, then history; trend from phase 3
 POST   /trackers/{id}             rename, icon, accent, log label (owner)
-POST   /trackers/{id}/archive     archive or unarchive (owner)
-POST   /trackers/{id}/delete      permanently delete, with confirmation (owner)
+POST   /trackers/{id}/archive     archive; clears the share link (owner)
+POST   /trackers/{id}/restore     restore an archived tracker, sharing stays off (owner)
+POST   /trackers/{id}/delete      permanently delete, with confirmation (owner, phase 5)
 POST   /trackers/{id}/share       turn on or regenerate share link (owner)
 POST   /trackers/{id}/share/delete turn share link off (owner)
 
 POST   /trackers/{id}/quick       log "now" (the card's log button)
-POST   /trackers/{id}/entries     log with a time, note, or value
+POST   /trackers/{id}/entries     log now with an optional note; owners may set the time (backfill)
 POST   /trackers/{id}/repeat      log "now" with the last value (phase 4)
-POST   /trackers/{id}/zero        record none for a calendar day (default today)
+POST   /trackers/{id}/zero        record none for today (any member) or an earlier day (owner)
 POST   /entries/{eid}/undo        delete an entry created in the last 15 minutes (any member)
 POST   /entries/{eid}             edit time or note (owner)
 POST   /entries/{eid}/delete      delete any entry (owner)
@@ -326,7 +343,7 @@ POST   /s/{token}/zero            record none for today via the link
 POST   /s/{token}/entries/{eid}/undo  undo a recent entry via the link
 POST   /s/{token}/zeros/{zid}/undo    undo a recent recorded zero via the link
 
-GET    /charts                    overlay and delayed-comparison view (phase 3)
+GET    /charts                    overlay a related tracker's events on a historical chart (phase 3, after the per-tracker chart)
 
 GET    /billing                   upgrade page: loads Paddle.js and opens checkout (phase 5)
 POST   /billing/portal            redirect to Paddle's customer portal to manage or cancel (phase 5)
@@ -340,19 +357,20 @@ GET    /healthz
 
 The render helper checks `HX-Request` and returns either the full page or a partial. Ad and consent scripts live in `layout.html`, outside any element HTMX swaps, so they load once per page and are not re-run by partial updates.
 
-- **Log button**: `hx-post` swaps in the updated summary and **Undo**. A small `hx-on` handler updates the summary on tap before the response arrives.
-- **Undo** and **log with details** swap the same regions.
-- Owner deletes use `hx-confirm`.
+- **Forms post, then redirect.** Every form works as a plain `POST` that redirects back to its page. With HTMX, the form also has `hx-post`; HTMX follows the redirect, the page comes back as its content block, and `<main>` is swapped in place. Handlers have one code path either way.
+- **Log button**: a small delegated handler in `app.js` updates the summary on tap before the response arrives.
+- **Errors swap too.** The `htmx-config` meta tag swaps 4xx responses, so a validation message or "too late to undo" appears in place.
+- Owner deletes, member removal, promotion, and invite regeneration use `hx-confirm`.
 
 ## Authentication
 
 - Passwords hashed with bcrypt. Empty `PasswordHash` means magic links only.
-- `GET /login/link/{token}` does not consume the token. `POST` does, with a single conditional update so two clicks cannot both succeed.
+- `GET /login/link/{token}` does not consume the token. The confirm page submits its form when JavaScript runs, and the button still works without it. `POST` consumes the token, with a single conditional update so two submissions cannot both succeed.
 - Sessions last 30 days. Renewal happens on the next request after half the lifetime, not on every request.
 - Changing the password deletes other sessions.
 - Requesting a magic link returns the same page whether or not the account exists.
 
-Which relay sends production mail (Postmark, Amazon SES, Resend, or another SMTP provider) is still open.
+Which relay sends production mail (Postmark, Amazon SES, Resend, or another SMTP provider) is still open. The mailer stays provider-neutral SMTP, so phase 2 is built and tested with the console logger or MailHog. The relay must be chosen and delivering real magic links before the first public deploy.
 
 ## Icons
 
@@ -374,7 +392,9 @@ A tracker icon is not looked up the same way. `Icon` is either empty (render the
 
 ## Charts
 
-The server computes the per-day series in Go (the same time-zone grouping as counts) and embeds it as JSON in a `<script type="application/json">` tag. A small script hands it to Chart.js. The series includes a recorded zero as zero and omits a day with nothing logged. Chart.js is vendored and loads on the tracker page only once that page shows a trend (phase 3 for counts, phase 4 for numbers and durations) and on the comparison page. The log form is above that region and does not depend on the script. Phase 2 does not load Chart.js.
+Chart.js (`chart.umd.min.js`, vendored) is the chart library. The server computes series in Go, using the same time-zone grouping as counts, and embeds them as JSON in a `<script type="application/json">` tag. A small script passes that JSON to Chart.js. The primary series includes a recorded zero as zero and omits a day with nothing logged.
+
+Phase 3 has two steps. The tracker page loads Chart.js when it shows a historical chart (counts in phase 3; numbers and durations in phase 4). The overlay page loads it when a second tracker's events are placed on that series. How the mark is drawn is still open (`PLAN.md`); the handler supplies the second tracker's dates on the same axis. The log form does not depend on the script. Phase 2 does not load Chart.js. Event-relative alignment is a later idea in `PLAN.md` and is not computed here.
 
 ## Security
 
@@ -383,6 +403,7 @@ The server computes the per-day series in Go (the same time-zone grouping as cou
 - **Share links are bearer tokens.** Anyone holding the URL can log entries. Share pages send `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex` so the token doesn't leak to other sites or search engines. Link visitors can only undo entries from the last 15 minutes.
 - `html/template` escapes output.
 - Per-IP fixed-window rate limits on password login, magic-link requests, signup, and share-link posts. The client IP is `CF-Connecting-IP`, falling back to the first `X-Forwarded-For` hop. That is trusted only because the app is unreachable except through the proxy chain described under Deployment.
+- **Cloudflare Turnstile** on signup, login, and change password. Login covers both the password form and the magic-link request. Each of those forms includes Cloudflare's widget, loaded only on those pages. The handler posts the token to Cloudflare's siteverify endpoint and rejects the request when the token is missing or invalid. Rate limits stay. There is no Turnstile SDK; verification is an HTTP call, same as Paddle. Tests stub that call. Local development uses Cloudflare's always-pass test keys.
 - The Paddle webhook verifies `Paddle-Signature` (`ts=...;h1=...`, an HMAC-SHA256 of `ts:rawbody` with the notification secret, checked with `crypto/hmac`) and rejects old timestamps. It is safe to receive the same event twice. Events can arrive out of order, so each update compares the event's `occurred_at` with the last one applied. The user is found through `custom_data.user_id`, falling back to `PaddleSubscriptionID`.
 
 ## SQLite
@@ -441,7 +462,8 @@ trackanything container (Go binary, plain HTTP on $PORT)
 - **SQLite storage**: `dokku storage:mount` a host directory, e.g. `/var/lib/dokku/data/storage/trackanything:/data`, with `DB_PATH=/data/trackanything.db`. Exactly one instance.
 - **Host header must survive the chain**, for Dokku's routing and the CSRF origin check.
 - **`Secure` cookies still work**, because the browser sees HTTPS.
-- **Backups**: [Litestream](https://litestream.io) to S3-compatible storage, or a nightly `sqlite3 .backup` cron job on box to start. Live from the first deploy. Format and how long backups keep deleted data are still open; the privacy policy has to state the retention.
+- **Backups**: [Litestream](https://litestream.io) to S3-compatible storage, or a nightly `sqlite3 .backup` cron job on box to start. The choice can wait while phase 2 is built, but before the first public deploy a method and destination are chosen, configured, and tested by restoring a copy. Live from the first deploy, no exceptions. How long backups keep deleted data stays open until the phase 5 privacy policy.
+- **Before the first public deploy**: the production email relay sends a magic link end to end, and backups run and restore.
 
 ### Later: hosting directly on Fly.io
 
@@ -453,22 +475,24 @@ Standard library only: `testing` and `net/http/httptest`. Each test gets its own
 
 Three layers:
 
-1. **Pure logic**, table-driven, no HTTP: day boundaries in an IANA time zone including DST spring-forward and fall-back; streaks; per-day series and day-shifted series for delayed comparisons, with a recorded zero as zero and an unlogged day omitted; the undo window; which entry carries forward (a backfilled older entry must not win).
+1. **Pure logic**, table-driven, no HTTP: day boundaries in an IANA time zone including DST spring-forward and fall-back; per-day series for charts, with a recorded zero as zero and an unlogged day omitted; the undo window; which entry carries forward (a backfilled older entry must not win).
 2. **Handlers**: every route has a happy path and the failures that matter: bad input, CSRF rejection, logged-out redirect, expired session, a non-member, and a member attempting an owner-only action.
 3. **Flows** through the cookie jar, matching each phase's "done when" in `PLAN.md`.
 
 What the suite has to pin down:
 
-- **Accounts.** Signup, password login, wrong password, magic link (works once, fails when expired or reused, stored only as a hash), logout, session expiry, rate limits, email case-insensitivity.
-- **Households.** A new user gets a personal household as owner. Invite link joins as member; a regenerated or disabled link fails. Owners can remove members and promote owners; members can't.
+- **Accounts.** Signup, password login, wrong password, magic link (works once, fails when expired or reused, stored only as a hash), logout, session expiry, rate limits, email case-insensitivity. Signup, login, and change password reject a missing or failed Turnstile token.
+- **Households.** A new user gets a "My trackers" household as owner. The phase 1 backfill gives each user without a household a "My trackers" household as owner, and running it twice creates nothing new. Invite link joins as member; a regenerated or disabled link fails. Owners can remove members and promote members to owner; members can't. Removing an owner, including yourself, is refused and nothing changes. A household someone else created shows that person's email in its dashboard heading.
+- **Archive and restore.** Archiving hides the tracker from the dashboard, makes its tracker page and entry routes 404, and clears its share link. The owner's household page lists it under archived trackers; a member's doesn't. Restore brings it back with its entries and with sharing off. Members can't archive or restore.
 - **Permissions.** For every owner-only route, a member gets refused and nothing changes. Non-members get 404 for trackers, entries, and households.
-- **Share links.** Logging and undo work without a session. The share page shows only that tracker. Undo fails after 15 minutes. Regenerated, disabled, and archived-tracker links return 404. Owner-only actions are unreachable through a link.
-- **Logging.** The log button records now, backfill, notes, undo within the window, undo refused after it, owner delete, `RecordedByID` and `ViaLink` set correctly. An empty log label renders as "+ Log". A label longer than 24 characters is rejected.
+- **Share links.** Logging and undo work without a session. The share page shows only that tracker. Undo fails after 15 minutes. Regenerated, disabled, and archived-tracker links return 404, and so does the old link after a restore. Owner-only actions are unreachable through a link.
+- **Logging.** The log button records now, owner backfill, notes from members and owners, undo within the window, undo refused after it, owner delete, `RecordedByID` and `ViaLink` set correctly. A member who submits a time gets an entry at the current time, never the submitted one. The member's tracker page has no time field. An empty log label renders as "+ Log". A label longer than 24 characters is rejected.
 - **Icons and accents.** An empty icon renders as the tally mark and an empty accent adds none. A picker value is stored. A value outside the allow-list is rejected. The name is present wherever the icon is.
 - **Recorded zeros.** Marking today as none does not increment the count. An event that day deletes the mark. A day with neither is absent from the per-day series. A recorded zero is present as zero. A member or share link can undo a mark from the last 15 minutes. Clearing an older mark, or marking an earlier day, is owner-only, and a member's attempt changes nothing.
 - **Time.** "Today" and per-day grouping follow the viewer's stored time zone (or the household owner's on share pages), not the browser's current zone. DST changes don't double-count or skip a day.
-- **Charts.** The embedded series matches the per-day counts, omits unlogged days, includes a recorded zero as zero, and a 2-day shift lines up the right days. The tracker page's log form does not require Chart.js.
+- **Charts.** The embedded series matches the per-day counts, omits unlogged days, and includes a recorded zero as zero. Overlay data is the other tracker's event days on that same axis. The tracker page's log form does not require Chart.js. Event-relative alignment is not part of this suite until that later idea is built.
 - **Values (phase 4).** Number and duration entries, prefill from the last entry, **Log again**.
+- **Deletion (phase 5).** Permanent tracker delete removes the tracker and its entries, owner only, with confirmation.
 - **Ads and billing (phase 5).** No ad markup for ad-free users, users in the grace period, or on share/login/settings pages. The Paddle webhook rejects bad signatures and old timestamps, applies an event once even if delivered twice, ignores an older event arriving after a newer one, finds the user through `custom_data`, and sets and clears the plan. Tests build the `Paddle-Signature` header the way Paddle does, against a test secret, and the portal handler talks to a stub API URL.
 - **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes.
 
@@ -478,16 +502,20 @@ What the suite has to pin down:
 | --- | --- | --- |
 | Implementation | Go web app | One binary, standard library where it is enough |
 | Frontend | Go templates + HTMX + Pico.css | No SPA. Forms work without JavaScript |
-| Charts | Chart.js, vendored | JSON embedded by the server. Loaded with a trend or comparison, not in phase 2. Logging works without it. |
+| Charts | Chart.js, vendored | JSON embedded by the server. Historical chart, then overlay, both phase 3. Not loaded in phase 2. Logging works without it. No frontend framework. |
 | Tracker icon | Optional allow-listed string | Empty renders the tally mark. Emoji are text. A removed picker name falls back to the tally mark. |
 | Recorded zero | One row per tracker per local day | Not an entry. Cleared when an event is logged that day. |
+| Entry time | Server sets `OccurredAt` to now for members and share links | Only owners' submitted times are read |
+| Archive | `ArchivedAt` plus clearing `ShareToken` | Restore leaves sharing off. Permanent delete is phase 5 |
+| Phase 1 households | One-time idempotent backfill after `AutoMigrate` | No request-time fallback. Deleted once existing databases have run it |
 | Persistence | SQLite, one shared database | Database per user rejected: migrations, backups, and sharing all get worse |
 | Dependencies | GORM, pure-Go SQLite, `x/crypto` | No Paddle SDK. No background queue |
 | Time zone | UTC timestamps, stored IANA zone | Detected once at signup. Not revised from the browser. Grouped in Go |
 | Email | `net/smtp`, console logger in dev | Optional `.env`. Relay vendor still open |
+| Bot protection | Cloudflare Turnstile | Signup, login (password and magic link), and change password. Siteverify over HTTP, no SDK. Rate limits stay |
 | First public deploy | Dokku on the homelab, Fly.io as ingress only | App has no TLS and no host-specific code, so a later move to Fly.io is a redeploy |
 
 ## Open questions
 
-- **Email relay** for magic links: Postmark, Amazon SES, Resend, or another provider with SMTP?
-- **Backup and export**: format, and how long backups retain deleted rows. The privacy policy has to state the retention; that product question is also in `PLAN.md`.
+- **Email relay** for magic links: Postmark, Amazon SES, Resend, or another provider with SMTP? Doesn't block building phase 2; must be answered and working before the first public deploy.
+- **Backup and export**: method and destination (before the first public deploy), format, and how long backups retain deleted rows (with the phase 5 privacy policy). The privacy policy has to state the retention; that product question is also in `PLAN.md`.

@@ -30,7 +30,7 @@ If the answer is yes for dog meals, yes for recording a woods outing, and eventu
 - **Dogfood immediately.** The first version solves a real household problem from day one.
 - **Tracking must be faster than thinking.** Common events are recordable with one or very few taps.
 - **Generic underneath, concrete in the UI.** The data model supports many uses without making anyone understand a schema builder.
-- **History becomes more valuable over time.** Charts, overlays, and comparisons are the payoff for consistently recording simple data.
+- **History becomes more valuable over time.** A simple chart of what was tracked, then a related event drawn on that chart, is the payoff for recording. Richer summaries can wait. The person looking at the chart notices the pattern.
 - **Shared by default where it helps.** A tracker can be used by a whole household, or by anyone with its link, without everyone needing an account.
 - **Micro-product economics.** Operating cost and complexity stay low enough that a $5/year product is viable.
 - **Product is the point.** Use AI aggressively to deliver the product. Hand-building small tutorial projects is still valuable when learning Go is the goal, but Track Anything is about shipping.
@@ -38,7 +38,8 @@ If the answer is yes for dog meals, yes for recording a woods outing, and eventu
 ## Guardrails (non-goals)
 
 - Do not become a full fitness platform.
-- Do not become a medical diagnostic product or claim that correlations imply causes.
+- Do not become a medical diagnostic product, or an analytics product that computes causes. Charts are for looking. A pattern is not a diagnosis.
+- Do not add a frontend framework or an analytics stack in order to draw charts. Chart.js on the existing pages is enough (`ARCHITECTURE.md`).
 - Do not become a habit-coaching or gamification platform unless real users clearly demand it.
 - Do not sacrifice the one-tap tracking experience for generic configurability.
 - No native mobile apps. Home-screen install is a web app manifest, not a store app.
@@ -48,7 +49,7 @@ If the answer is yes for dog meals, yes for recording a woods outing, and eventu
 
 ## Reference use cases
 
-**Dog eating and GI trouble.** Log each time the dog eats. Some days it's four meals, some days zero, and low intake sometimes comes with GI symptoms. A second tracker records woods/off-leash outings. The useful view isn't just both series on the same dates: it's being able to see whether a woods outing is followed by less eating or GI trouble one, two, or three days later. Simple inputs, then relationships that become visible in the history.
+**Dog eating and GI trouble.** Log each time the dog eats. Some days she eats three or four times; occasionally she eats very little or not at all, and she may have stomach noises or diarrhea. Those days may follow off-leash time in the woods, where she could eat something she found. A second tracker records a woods outing. Marking that outing on the meals-per-day chart makes the one to three days afterward easy to inspect. The inputs stay simple. How the chart works is under Charts and overlays. The dog is the test case for overlays in general, not a separate feature.
 
 **Workout progression.** Movements, load, duration, or reps over time, to see progression in club, kettlebell, and related training (e.g. Mark Wildman's TOI program, McGill's Big 3) without turning Track Anything into a fitness app.
 
@@ -67,15 +68,15 @@ Start with the smallest useful tracker and add value shapes only when a real use
 - The card's logging button uses a short **log label**. The default is "+ Log". It can be changed to a few words such as "+ Ate". The tap still records the current time.
 - A count tracker can store one **recorded zero** for a calendar day: the count is deliberately none. That mark is not an event and does not increase the count. A day with no entries and no recorded zero is **nothing logged**. Logging an event for that day clears the recorded zero. Charts and per-day counts draw a recorded zero as zero and leave an unlogged day blank.
 - For number trackers, **the last value carries forward**: if you used a 5lb club last time, the form already says 5, and **Log again** records it with one tap. Backfilling an older entry does not change what carries forward. The note does not carry forward, and the time defaults to now. Changing the prefilled value (moving up to 6lb) and submitting is how a new value starts carrying forward.
-- Owners can backfill ("I forgot to log yesterday"). When it happened is separate from when the row was written. Undo uses when it was written. Marking an earlier day as none is the same kind of backfill: owner only.
-- **Archive, not delete**, for trackers. Archiving is reversible and hides the tracker. Permanently deleting a tracker and its entries is a separate, confirmed owner action.
+- Members log at the current time, with an optional note. Owners can also choose when an entry happened, which is how they backfill ("I forgot to log yesterday"). When it happened is separate from when the row was written. Undo uses when it was written. Marking an earlier day as none is the same kind of backfill: owner only.
+- **Archive, not delete**, for trackers. Archiving hides the tracker and is the normal way to say "I don't want this tracker anymore." It is reversible: the owner restores it from the household page. Permanently deleting a tracker and its entries is a separate, confirmed owner action that arrives in phase 5, with the other destructive privacy operations.
 - **Fields and sub-trackers** (one workout containing several exercises, each with weight, reps, and sets) are designed below but deferred. They get built only if number and duration trackers prove painful for workouts in real use.
 
 ## Sharing
 
 Trackers belong to a **household**, and a single tracker can also be shared by **link**.
 
-**Households.** Every user gets a personal household at signup. The owner can invite people with an **invite link** (copied and sent by hand; the app sends no invite email). Opening it asks you to log in or sign up, then adds you as a member. You can belong to several households; the dashboard shows trackers from all of them, grouped by household.
+**Households.** Every user gets a personal household at signup, named "My trackers", with that user as owner. The owner can invite people with an **invite link** (copied and sent by hand; the app sends no invite email). Opening it asks you to log in or sign up, then adds you as a member. You can belong to several households; the dashboard shows trackers from all of them, grouped by household. A household someone else created shows that person's email beside its name, so two households called "My trackers" stay distinct. Phase 2 has no screens for creating or renaming households.
 
 **Share links.** The owner can turn on a share link for one tracker. Anyone with the link can use that tracker **without logging in**. That covers a kitchen tablet, a dog sitter, or a relative who will never make an account.
 
@@ -84,18 +85,22 @@ Trackers belong to a **household**, and a single tracker can also be shared by *
 | Action | Owner | Household member | Anyone with the share link |
 | --- | --- | --- | --- |
 | See the tracker and its recent entries | Yes | Yes | Yes (that one tracker only) |
-| Log an entry | Yes | Yes | Yes |
+| Log an entry at the current time | Yes | Yes | Yes (log button only) |
+| Add an optional note when logging | Yes | Yes | No |
 | Undo a recent entry | Yes | Yes | Yes |
 | Mark today as none, or undo that mark within 15 minutes | Yes | Yes | Yes |
+| Choose when a new entry happened (backfill) | Yes | No | No |
 | Mark an earlier day as none, or clear an older mark | Yes | No | No |
 | Edit an entry's time or note, delete older entries | Yes | No | No |
-| Create, edit, or archive trackers | Yes | No | No |
+| Create, edit, archive, or restore trackers | Yes | No | No |
 | Turn on, regenerate, or turn off a share link | Yes | No | No |
-| Invite or remove household members, regenerate the invite link | Yes | No | No |
+| Invite members, remove members, promote a member to owner, regenerate the invite link | Yes | No | No |
 
 - **Recent** means an entry or recorded zero created in the last 15 minutes, by when it was saved, not when it happened. That covers "oops, I tapped twice" without letting a link holder wipe history. The window is a constant, easy to change.
-- A household can have more than one owner, so ownership can be shared or handed over.
-- **Regenerating** a share link or invite link makes the old one stop working immediately. Turning a share link off does the same. Archiving a tracker stops its share link too.
+- The server enforces the time rule: a member's entry always happens now, even if a request supplies a different time.
+- A household can have more than one owner, so ownership can be shared.
+- Ownership management stays small in phase 2. Removing applies to members only: an owner cannot remove themselves or another owner. There is no demotion and no "leave household". Phase 5 account deletion handles the sole-owner cases.
+- **Regenerating** a share link or invite link makes the old one stop working immediately. Turning a share link off does the same. Archiving a tracker turns its share link off, and restoring it leaves sharing off until the owner turns on a new link.
 - Members who want their own trackers make them in their personal household, where they are the owner.
 - Entries remember who logged them, or that they came in through a share link. The UI can show that where it helps without cluttering every view.
 - A tracker you can't see is indistinguishable from one that doesn't exist.
@@ -122,28 +127,41 @@ A calm, mobile-first tracking notebook. Logging is fast, review is easy, and the
 
 **Home.** Trackers stay grouped by household. Each one is a card with its name, icon, optional accent, a current summary, and one logging button. The dog card reads "Dog eating — 2 times today" with **+ Ate**. A count summary says "1 time today" or "2 times today", "None today" when a zero was recorded, or "Nothing logged today". The button records the current time in one tap, then offers **Undo**.
 
-**Tracker detail.** Today's logging control and today's entries come first. History and trends follow. Correcting a mistake sits on the entry. Anyone who can log can undo an entry or a recorded zero from the last 15 minutes. Only an owner can edit the time or note, delete an older entry, mark an earlier day as none, or clear an older recorded zero. On a phone the logging action stays first. On a wider screen, history and charts can sit beside that column. They never sit above it.
+**Tracker detail.** Today's logging control and today's entries come first. History and trends follow. Correcting a mistake sits on the entry. Anyone who can log can undo an entry or a recorded zero from the last 15 minutes. Only an owner can choose when a new entry happened, edit the time or note, delete an older entry, mark an earlier day as none, or clear an older recorded zero. On a phone the logging action stays first. On a wider screen, history and charts can sit beside that column. They never sit above it.
 
 **History.** Dated entries, with the time they happened. "None" (a recorded zero) and "Nothing logged" are different rows. That distinction matters for the dog: a day with no meals is data, and a day nobody wrote down is a gap.
 
-**Trends.** The chart matches the tracker. Counts are events per day, such as meals. Numbers are a value over time, such as workout weight. Durations are length over time. A recorded zero is a zero on the chart. A day with nothing logged is a gap. Comparing separate trackers, including the one to three days after one of them, stays the phase 3 charts view, not the first logging screen. On a phone that view puts its controls first; on a wider screen the chart can sit beside them. Dog eating against off-leash woods time is the test case.
+**Trends.** The chart matches the tracker: events per day, a value over time, or a duration over time. A recorded zero is a zero. A day with nothing logged is a gap. That historical chart is on this page. Overlaying another tracker's events is a later phase 3 view. See Charts and overlays.
 
-**First slice.** Phase 2 replaces paper tick marks: create a tracker, choose an icon, log an event with the current time, correct a mistake, and review recent history, including a recorded zero versus nothing logged. An accent and a custom log label can be set then too; both are optional. Richer workout inputs stay in phase 4. Per-tracker trends and cross-tracker charts stay in phase 3, which is already their priority.
+**First slice.** Phase 2 replaces paper tick marks: create a tracker, choose an icon, log an event with the current time, correct a mistake, and review recent history, including a recorded zero versus nothing logged. An accent and a custom log label can be set then too; both are optional. Richer workout inputs stay in phase 4. Phase 3 is a historical chart first, then overlays of related events. Event-relative summaries are a later idea.
 
-## Charts, overlays, and delayed comparisons
+## Charts and overlays
 
-The payoff for consistent tracking. Charts stay secondary to recording. The log control comes first, a trend never sits above it, and logging works if the chart does not load. Per-tracker trends live on the tracker page, below the log control or beside it on a wide screen. Comparing two trackers stays the phase 3 charts view: controls first on a phone, the chart beside them on a wide screen.
+Charts stay an extension of tracking. The sequence is:
 
-- **Per tracker**: counts per day, week, or month for count trackers (meals per day); values over time for number trackers (workout weight); duration over time for duration trackers. A recorded zero is drawn as zero. A day with nothing logged is left blank.
-- **Overlay**: pick two or more trackers you can see and draw them on a shared time axis. Each tracker in the picker shows its icon and its name.
-- **Delayed comparison**: shift one tracker by 1, 2, or 3 days, so a woods outing lines up with meals on the following days. Dog eating and off-leash woods time are the test case.
-- The page describes what you're seeing ("meals on the 2 days after each woods outing") and never claims a cause.
+1. Store simple observations and events.
+2. Show a straightforward historical chart of one tracker.
+3. Draw a related event on that chart.
+4. Let the person looking at it notice the pattern.
+5. Later, once there is enough history, summarize another tracker on the days before and after a repeated event.
+
+That last step is the event-relative view under Later ideas. It is not part of the first charts, and it is not a statistics or correlation feature.
+
+Chart.js draws the charts. It fits the server-rendered pages and HTMX, so visualization does not need a frontend framework. How it is loaded is in `ARCHITECTURE.md`. Layout is in `DESIGN.md`.
+
+Charts stay secondary to recording. The log control comes first, a trend never sits above it, and logging works if the chart does not load. The historical chart lives on the tracker page, below the log control or beside it on a wide screen. The overlay view comes only after that chart exists: controls first on a phone, the chart beside them on a wide screen.
+
+- **Historical chart.** One tracker over time. Counts are events per day, week, or month (meals per day). Numbers are a value over time (workout weight). Durations are length over time. A recorded zero is drawn as zero. A day with nothing logged is left blank. Count charts are phase 3. Number and duration charts are phase 4, in the same place.
+- **Overlay.** Events from another tracker you can see, drawn on that historical chart. A woods outing can appear as a marker, an annotation, or a shaded vertical region. Which treatment is still open. The picker shows the icon and the name. Dog eating and woods outings, in Reference use cases, are the test case: you look at the one to three days after an outing. The page describes what is on the chart and never claims a cause.
+- The overlay is general. The same chart could later mark a workout against later soreness or recovery, alcohol against sleep, coffee against anxiety or energy, a medication against symptom frequency, or a late bedtime against next-day energy.
 
 ## Summaries
 
-- **Count today** ("N times today", "1 time today", "None today", or "Nothing logged today"), **count per day** over the last 30 days (an unlogged day stays blank), and **current streak** (phase 2). The streak is unchanged: it is not a way to encode "nothing logged".
-- **Charts, overlays, delayed comparisons** (phase 3).
-- **Values and durations over time** (phase 4).
+- **Count today** ("N times today", "1 time today", "None today", or "Nothing logged today") and **count per day** over the last 30 days, where an unlogged day stays blank (phase 2).
+- **Historical charts** for counts (phase 3).
+- **Overlays** of a related tracker's events on that chart (phase 3, after the historical chart).
+- **Values and durations over time** (phase 4), on the same kind of chart. Overlays apply there too.
+- **Event-relative summaries** (later; see Later ideas).
 
 ## Installable web app
 
@@ -186,34 +204,35 @@ Signup, password login, magic-link login, logout, and settings for password and 
 
 ### Phase 2: The dog tracker, shared
 
-The first screen replaces paper tick marks: create a tracker, choose an icon, log now, correct a mistake, and read recent history. Trends, cross-tracker charts, and workout measurements are specified above and stay in phases 3 and 4.
+The first screen replaces paper tick marks: create a tracker, choose an icon, log now, correct a mistake, and read recent history. Two people in the house use it from their phones, see today's count, deliberately record zero meals, tell that apart from a day nobody logged, fix recent mistakes, and look back over recent days. Phase 2 is the smallest version that does that well. Historical charts and overlays are specified above and stay in phase 3. Workout measurements stay in phase 4.
 
-- Households, count trackers, and entries. A personal household is created at signup.
-- Create, rename, archive, and permanently delete trackers (owners). Create and edit also set the icon, accent, and log label. The icon defaults to the tally mark, the accent defaults to none, and the label defaults to "+ Log".
+- Households, count trackers, and entries. A personal household named "My trackers" is created at signup. Accounts from phase 1 get the same household when phase 2 ships. No household creation or renaming.
+- Create, edit, archive, and restore trackers (owners). Create and edit set the name, icon, accent, and log label. The icon defaults to the tally mark, the accent defaults to none, and the label defaults to "+ Log". Permanent deletion waits for phase 5.
 - Dashboard grouped by household. Each tracker is a card: name, icon, optional accent, today's summary ("3 times today", "None today", or "Nothing logged today"), and the log button. **Undo** shows immediately.
 - A recorded zero ("none") is separate from a day with nothing logged. Logging an event clears that day's recorded zero.
-- Tracker page: today's log control and today's entries first, then history. Entries show their time and can be undone while recent. Owners can backfill, edit, and delete. The last 30 days show each day's count, a recorded zero, or nothing logged. The current streak stays as already planned.
+- Tracker page: today's log control and today's entries first, then history. Anyone in the household can log now with an optional note, and undo while recent. Owners can also choose the time (backfill), edit an entry's time or note, and delete. The last 30 days show each day's count, a recorded zero, or nothing logged.
 - On a phone, the log control stays first. On a wider screen, history can sit beside it. There is no chart on this page yet.
-- Household page: invite link (create, regenerate, disable), join flow, remove members, promote to owner.
+- Household page: invite link (create, regenerate, disable), join flow, remove members, promote a member to owner. Owners can't remove themselves or other owners; there is no demotion and no leaving. A collapsed **Archived trackers** section restores archived trackers.
 - Share links: turn on, regenerate, turn off; share page with the same today's summary, log button, record-none for today, and undo; no login.
-- **First public deploy**, including backups from day one and a confirmed home-screen install on a phone. Hosting steps are in `ARCHITECTURE.md`.
+- **First public deploy**, with a confirmed home-screen install on a phone. Before it goes out, a production email relay is chosen and delivering magic links, and a backup method and destination are chosen, configured, and tested with a restore. Backups run from day one. Neither choice blocks building the rest of phase 2. Hosting steps are in `ARCHITECTURE.md`.
 
 **Done when:** both of you log the dog's meals from your own phones (or one of you through the share link) for a week instead of using paper, and the Dog ate card shows "3 times today" correctly in your time zone.
 
-### Phase 3: Charts, overlays, delayed comparisons
+### Phase 3: Historical charts, then overlays
 
-- Per-tracker chart of counts per day, week, or month, on the tracker page after today's logging (beside it on a wide screen). Unlogged days are gaps. Recorded zeros are zeros. Chart.js loads for that trend and is not required to log.
-- Overlay any trackers you can see on a shared time axis. The picker shows each tracker's icon and name.
-- Shift one tracker by 1–3 days for "what happened in the days after X?". Dog eating and off-leash woods time are the test case, including the following one to three days.
-- Neutral wording: patterns, not causes.
+Basic time series first. A related event on that chart only after the single-tracker chart exists. Event-relative summaries stay a later idea.
 
-**Done when:** you can put "Woods outing" and "Dog ate" on one chart, shift woods by 1–3 days, and see whether low-eating days follow outings.
+- Per-tracker Chart.js chart of counts per day, week, or month, on the tracker page after today's logging (beside it on a wide screen). Unlogged days are gaps. Recorded zeros are zeros. Chart.js loads for that trend and is not required to log.
+- Then, overlay events from another tracker you can see on that chart: a marker, annotation, or shaded region (treatment still open). The picker shows each tracker's icon and name. Dog meals and woods outings are the test case. The marks sit on the meals chart so you can look at the following one to three days. The page describes the pattern and does not claim a cause.
+- Not in this phase: lining up repeated events and summarizing another tracker on the days before and after.
+
+**Done when:** Dog ate has a meals-per-day chart, and a woods outing can be marked on it so you can see whether low-eating days follow.
 
 ### Phase 4: Number and duration trackers
 
 - Number (with a unit) or duration trackers, on the same cards, detail page, and history. Share links support them too.
 - Prefill from the last entry and **Log again**. That stays the one-tap path when the last value should carry forward.
-- Charts for values and durations over time (weight, or how long), in the same place on the tracker page as the count trend.
+- Charts for values and durations over time (weight, or how long), in the same place on the tracker page as the count trend. Overlays apply to these charts the same way.
 - CSV export per tracker.
 
 **Done when:** woods outings record how long they were, a movement like "Club mill" tracks weight over time, and re-logging last time's weight is one tap. Then decide, from real use, whether workouts need fields and sub-trackers.
@@ -224,6 +243,7 @@ After the app is live and has real content for AdSense review.
 
 - Privacy policy page and a real logged-out homepage.
 - Account deletion in settings: removes the user's data for real, not a soft delete. A sole owner of a household with other members must promote another owner or delete the household first. The privacy policy notes how long backups keep deleted data.
+- Permanent tracker deletion: an owner can delete a tracker and all its entries, with confirmation. Until then archive is the only way to remove a tracker.
 - AdSense with a Google-certified consent platform. No ads on share, login, or settings pages.
 - Terms of service and refund policy pages (Paddle requires them), and apply for Paddle approval early.
 - Paddle checkout (sandbox first), the plan follows payment, a customer portal link in settings, and the 2-day grace period. Ad-free users see no ads.
@@ -252,6 +272,7 @@ TOI                               #10 TOI            08:00
 
 ## Later ideas
 
+- **Event-relative view.** After historical charts and overlays have real history behind them, align repeated occurrences of an event and show another tracker's values on the surrounding days. For woods and meals, that is the average meal count at three days before, two days before, one day before, the woods day, and one, two, and three days after, across outings. A decline that shows up one or two days after woods is easier to see than on the calendar timeline. This is still a picture for a person to read. It is not a correlation study, and it is not designed further until charts and overlays are in use.
 - **Start without an account**: the logged-out homepage asks "What would you like to track?", and submitting it creates a temporary user and the tracker; saving the account later adds an email. Needs long-lived sessions, cleanup of abandoned temporary users, a rate limit, and a visible **Log in** link so returning users don't make duplicates. Share links already cover much of the "use it without signing up" need.
 - Tracker templates ("Start from: McGill Big 3", "Start from: TOI").
 - A user-uploaded icon per tracker. The first version uses the built-in picker only.
@@ -265,32 +286,35 @@ TOI                               #10 TOI            08:00
 | --- | --- | --- |
 | Price | $5/year, may change | $1/month superseded. The price lives in Paddle; the app stores only `PADDLE_PRICE_ID` |
 | Payments | Paddle Billing | Merchant of record handles sales tax and VAT; ~15% fees at $5 accepted for that |
-| Sharing | Households plus per-tracker share links | Share links work without logging in; non-owners can log, mark today as none, and undo recent entries |
+| Sharing | Households plus per-tracker share links | Share links work without logging in; non-owners can log now, mark today as none, and undo recent entries. Only owners choose an entry's time |
+| Households in phase 2 | Personal "My trackers" household, invites only | No household creation or renaming. Owners invite, remove members, and promote; no self-removal, demotion, or leaving |
+| Tracker removal | Archive and restore; permanent delete in phase 5 | Restore lives in a collapsed section on the household page |
+| Streaks | Not planned | No clear definition, and gamification is a non-goal. Reconsider only for a concrete use case |
 | Invites | Copyable links | The app doesn't send invite email |
 | Login | Email first; password optional | Magic link is the primary path. Password is secondary. See `DESIGN.md` |
 | Time zone | Detect once at signup, then keep it | Calendar days do not follow the browser after signup. Friendly name in settings if it needs changing. Mechanism in `ARCHITECTURE.md` |
 | First use case | Dog meals | Replaces paper tick marks |
-| Second use case | Woods outings and workout progression | Validates number and duration tracking |
+| Second use case | Woods outings and workout progression | A woods outing is the phase 3 overlay test, and a count is enough for that. Duration, and workout weight, arrive in phase 4. |
 | Tracker kinds | Count first, then number and duration | Fields and sub-trackers deferred until real use demands them |
 | Interface | Calm mobile-first notebook | Cards with name, icon, optional accent, summary, and a one-tap log. Recognizable icons and soft cards, with less on screen than a family calendar. |
 | Tracker icon | Optional, in phase 2 | Built-in picker of clear icons or emoji. Default is the tally mark. Name stays visible. Uploads stay a later idea. Moved out of later ideas so the first tracker is recognizable on its card. |
 | Accent | Optional, small built-in set | Recognition on the card and icon only. Pico remains the only UI palette. Default is none. |
 | Log button | Short label, still one tap | Default "+ Log". The dog card can say "+ Ate". Same quick-log and 15-minute undo as the earlier "+1" label. |
 | Zero vs unlogged | Different states | A recorded zero is deliberate. No entries and no recorded zero means nothing logged. Charts leave that day blank. |
-| Analysis | Overlays + delayed comparisons | Woods outings vs eating on the following 1–3 days is the test case. Patterns, not causes. Per-tracker trends sit on the tracker page, secondary to logging. |
+| Analysis | Historical chart, then overlay | Chart.js time series first (phase 3), then one tracker's events marked on another's chart. Looking at the 1–3 days after a woods outing is the test case. Event-relative summaries are a later idea, not a statistics feature. Patterns, not causes. |
 | Ads | AdSense with a certified consent platform, after launch | No home-made consent banner. No ads on share, login, or settings |
 | Start without account | Later idea | Share links cover most of the need for now |
 | Install | Manifest + icons, no service worker | Verified on a phone at first deploy. Not a store app |
-| First public deploy | End of phase 2 | Backups live from the start |
+| First public deploy | End of phase 2 | Backups live from the start. Email relay and backup method are picked before deploy, not before building |
 
 ## Open questions
 
-- **Share page contents**: today's summary, the log button, and today's entries only (current plan), or the recent history and streak too?
+- **Share page contents**: today's summary, the log button, and today's entries only (current plan), or the recent history too?
 - **Undo window**: 15 minutes is the starting value. Right length?
 - **Workouts**: is one number per tracker (e.g. weight for "Club mill") enough, or do weight and reps need to be recorded together? That's the trigger for fields. Relatedly, for TOI: one entry per exercise with a sets count, or one entry per set?
 - **Units**: fixed per tracker (current plan), or chosen per entry?
 - **Free tier**: ad-supported, limited by tracker count or history, or simply generous so $5/year is mostly a convenience purchase?
 - **Does ad-free include anything else?**
 - **Consent platform**: Google's "Privacy & messaging", or a third-party certified one?
-- **Lag analysis**: how far beyond visual overlays should it go?
+- **Overlay mark**: a marker, an annotation, or a shaded vertical region? Decide when overlays are built.
 - **Deleted data in backups**: how long the privacy policy says backups keep it. The backup mechanism is in `ARCHITECTURE.md`.
