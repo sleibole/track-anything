@@ -17,10 +17,18 @@ document.querySelectorAll("form[data-autosubmit]").forEach((form) => {
 });
 
 // The log button updates the summary on tap. The server's page replaces it moments later.
+// If the request fails, the previous line is put back and an inline note says it was not saved.
 document.addEventListener("submit", (event) => {
   const form = event.target.closest("form[data-quick]");
-  const summary = form?.closest("[data-tracker]")?.querySelector("[data-summary]");
+  const tracker = form?.closest("[data-tracker]");
+  const summary = tracker?.querySelector("[data-summary]");
   if (!summary) return;
+  tracker.querySelector("[data-save-error]")?.remove();
+  if (!summary.dataset.optimistic) {
+    summary.dataset.prevText = summary.textContent;
+    summary.dataset.prevCount = summary.dataset.count ?? "";
+    summary.dataset.optimistic = "1";
+  }
   const mode = summary.dataset.summaryDisplay || "times";
   if (mode === "done") {
     summary.textContent = "Done today";
@@ -34,6 +42,31 @@ document.addEventListener("submit", (event) => {
   summary.dataset.count = count;
   summary.textContent = count === 1 ? "1 time today" : `${count} times today`;
 });
+
+function restoreUnsavedLog(event) {
+  const el = event.detail?.elt || event.target;
+  const form = el?.closest?.("form[data-quick]");
+  const tracker = form?.closest("[data-tracker]");
+  const summary = tracker?.querySelector("[data-summary]");
+  if (!summary?.dataset.optimistic) return;
+  summary.textContent = summary.dataset.prevText;
+  summary.dataset.count = summary.dataset.prevCount;
+  delete summary.dataset.optimistic;
+  delete summary.dataset.prevText;
+  delete summary.dataset.prevCount;
+  let note = tracker.querySelector("[data-save-error]");
+  if (!note) {
+    note = document.createElement("p");
+    note.className = "error";
+    note.setAttribute("role", "alert");
+    note.dataset.saveError = "";
+    summary.after(note);
+  }
+  note.textContent = "That wasn't saved. Check your connection and try again.";
+}
+
+document.addEventListener("htmx:responseError", restoreUnsavedLog);
+document.addEventListener("htmx:sendError", restoreUnsavedLog);
 
 // clockInZone matches Go's "3:04 PM": hour without a leading zero, and a normal space before AM/PM.
 function clockInZone(date, timeZone) {
@@ -54,10 +87,21 @@ document.addEventListener("focusin", (event) => {
 
 // A closed password field must not be submitted with the email-only form.
 document.querySelectorAll(".auth-password-toggle").forEach((toggle) => {
-  const input = toggle.form?.querySelector("[data-auth-password]");
-  if (!input) return;
+  const form = toggle.form;
+  const input = form?.querySelector("[data-auth-password]");
+  if (!form || !input) return;
+  const linkButton = form.querySelector(".auth-link-submit");
+  const passwordButton = form.querySelector(".auth-password-submit");
   const sync = () => {
-    input.disabled = !toggle.checked;
+    const passwordMode = toggle.checked;
+    input.disabled = !passwordMode;
+    // Enter and the mobile keyboard submit the first submit button.
+    // Password mode has to be that button, or the press sends a magic link.
+    if (linkButton && passwordButton) {
+      form.action = passwordMode ? "/login" : "/login/link";
+      if (passwordMode) linkButton.before(passwordButton);
+      else passwordButton.before(linkButton);
+    }
   };
   toggle.addEventListener("change", () => {
     if (!toggle.checked) input.value = "";

@@ -79,6 +79,6 @@ func (a *app) renderBlock(w http.ResponseWriter, r *http.Request, status int, pa
 }
 
 func (a *app) serverError(w http.ResponseWriter, r *http.Request, err error) {
-	a.logger.Error("server error", "method", r.Method, "path", r.URL.Path, "err", err)
+	a.logger.Error("server error", "method", r.Method, "path", logPath(r.URL.Path), "err", err)
 	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 }

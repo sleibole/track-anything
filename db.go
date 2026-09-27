@@ -29,6 +29,14 @@ func openDB(path string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
+	// One connection keeps writes in order. A pool of deferred transactions can
+	// hit SQLITE_BUSY when one connection reads and another writes. This app is
+	// a single process and does not need concurrent SQLite writers.
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("sql db: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
 
 	if err := migrate(db); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)

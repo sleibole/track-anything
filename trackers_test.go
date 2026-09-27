@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -444,6 +445,50 @@ func TestRecordedZero(t *testing.T) {
 	}
 	if r := member.post(base+"/zero", nil); r.status != http.StatusUnprocessableEntity || len(ts.zeros(t, tr.ID)) != 0 {
 		t.Fatalf("zero on a day with entries: %d", r.status)
+	}
+}
+
+func TestRecordedZeroDoesNotShareADayWithEntries(t *testing.T) {
+	ts, owner, _, h := sharedHouse(t)
+	tr := owner.createTracker(h, "Dog ate", nil)
+	u := ts.user(t, "owner@example.com")
+	loc := location(u.TimeZone)
+	day := localDay(ts.clock.now(), loc)
+
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			now := ts.app.now()
+			e := Entry{TrackerID: tr.ID, OccurredAt: now.UTC(), RecordedByID: &u.ID, CreatedAt: now}
+			if err := ts.app.logEntry(&e, loc); err != nil {
+				t.Errorf("log: %v", err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			now := ts.app.now()
+			if _, err := ts.app.recordZero(tr, day, loc, RecordedZero{RecordedByID: &u.ID, CreatedAt: now}); err != nil {
+				t.Errorf("zero: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	entries := len(ts.entries(t, tr.ID))
+	zeros := len(ts.zeros(t, tr.ID))
+	if entries > 0 && zeros > 0 {
+		t.Fatalf("day has %d entries and %d recorded zeros", entries, zeros)
+	}
+	if _, err := ts.app.recordZero(tr, day, loc, RecordedZero{RecordedByID: &u.ID, CreatedAt: ts.app.now()}); err != nil {
+		t.Fatal(err)
+	}
+	if entries == 0 && len(ts.zeros(t, tr.ID)) != 1 {
+		t.Fatal("a second none on an empty day failed")
+	}
+	if entries > 0 && len(ts.zeros(t, tr.ID)) != 0 {
+		t.Fatal("recording none beside entries left a zero")
 	}
 }
 

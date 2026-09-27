@@ -9,21 +9,11 @@
     <input type="hidden" name="timezone" data-browser-timezone>
     <label class="auth-email">
       {{icon "mail"}} Email
-      <input type="email" name="email" value="{{.Email}}" required autocomplete="email" {{if not .ShowPassword}}autofocus{{end}}>
-    </label>
-    <label class="auth-password">
-      {{icon "lock"}} Password
-      <input type="password" name="password" data-auth-password autocomplete="new-password" minlength="8" maxlength="72" {{if .ShowPassword}}autofocus{{end}}>
+      <input type="email" name="email" value="{{.Email}}" required autocomplete="email" autofocus>
     </label>
     <button type="submit">Continue</button>
-    <div class="auth-switch">
-      <input type="checkbox" id="signup-password" class="auth-password-toggle" {{if .ShowPassword}}checked{{end}}>
-      <label for="signup-password">
-        <span class="when-closed">Sign up with a password instead</span>
-        <span class="when-open">Continue without a password</span>
-      </label>
-    </div>
   </form>
+  <p class="auth-foot">You can add a password in Settings after you confirm your email.</p>
   <p class="auth-foot">Already have an account? <a href="/login{{if .Next}}?next={{.Next | urlquery}}{{end}}">Log in</a></p>
 </article>
 {{end}}

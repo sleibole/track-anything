@@ -40,7 +40,7 @@ func (a *app) sharedTracker(w http.ResponseWriter, r *http.Request) (t Tracker, 
 
 // sharePost is sharedTracker plus the rate limit on posts through a link.
 func (a *app) sharePost(w http.ResponseWriter, r *http.Request) (Tracker, *time.Location, bool) {
-	if !a.shareLimiter.allow(clientIP(r)) {
+	if !a.shareLimiter.allow(a.clientIP(r)) {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		a.message(w, r, http.StatusTooManyRequests, "Slow down", "Too many changes from this network. Try again in a minute.")
 		return Tracker{}, nil, false

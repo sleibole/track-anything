@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -57,6 +58,13 @@ func (a *app) handleSettingsPassword(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	password := r.PostFormValue("password")
 
+	if u.EmailVerifiedAt == nil {
+		page := a.settingsPageFor(r)
+		page.PasswordError = "Confirm your email before setting a password."
+		a.render(w, r, http.StatusUnprocessableEntity, "settings.html", page)
+		return
+	}
+
 	msg := validatePassword(password)
 	if msg == "" && password != r.PostFormValue("confirm") {
 		msg = "The two passwords don't match."
@@ -99,7 +107,13 @@ func (a *app) handleSettingsVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.sendVerificationEmail(u); err != nil {
-		a.logger.Error("server error", "method", r.Method, "path", r.URL.Path, "err", err)
+		if errors.Is(err, errMailThrottled) {
+			page := a.settingsPageFor(r)
+			page.VerifyError = "Too many verification emails. Try again in a few minutes."
+			a.render(w, r, http.StatusTooManyRequests, "settings.html", page)
+			return
+		}
+		a.logger.Error("server error", "method", r.Method, "path", logPath(r.URL.Path), "err", err)
 		page := a.settingsPageFor(r)
 		page.VerifyError = "We couldn't send the verification email. Please try again in a moment."
 		a.render(w, r, http.StatusInternalServerError, "settings.html", page)

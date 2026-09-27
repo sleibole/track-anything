@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"log/slog"
 	"net/http"
@@ -111,6 +112,98 @@ func TestStaticFiles(t *testing.T) {
 		if code, _ := get(t, h, path, nil); code != http.StatusOK {
 			t.Errorf("%s: status %d", path, code)
 		}
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	h := newTestApp(t).routes()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Errorf("nosniff: %q", rec.Header().Get("X-Content-Type-Options"))
+	}
+	if rec.Header().Get("Content-Security-Policy") != "frame-ancestors 'none'" {
+		t.Errorf("csp: %q", rec.Header().Get("Content-Security-Policy"))
+	}
+	if rec.Header().Get("Referrer-Policy") != "same-origin" {
+		t.Errorf("referrer: %q", rec.Header().Get("Referrer-Policy"))
+	}
+}
+
+func TestRequestLogsHideBearerTokens(t *testing.T) {
+	var buf bytes.Buffer
+	a := newTestApp(t)
+	a.logger = slog.New(slog.NewTextHandler(&buf, nil))
+	h := a.routes()
+	const token = "super-secret-token-value"
+	for _, path := range []string{
+		"/login/link/" + token,
+		"/verify/" + token,
+		"/verify/done",
+		"/s/" + token,
+		"/s/" + token + "/quick",
+		"/join/" + token,
+	} {
+		buf.Reset()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		h.ServeHTTP(httptest.NewRecorder(), req)
+		logged := buf.String()
+		if strings.Contains(logged, token) {
+			t.Errorf("%s logged the token: %s", path, logged)
+		}
+	}
+	buf.Reset()
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/login/link/"+token, nil))
+	if !strings.Contains(buf.String(), "/login/link/{token}") {
+		t.Fatalf("log: %s", buf.String())
+	}
+	buf.Reset()
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/verify/done", nil))
+	if strings.Contains(buf.String(), "/verify/{token}") || !strings.Contains(buf.String(), "/verify/done") {
+		t.Fatalf("verify done log: %s", buf.String())
+	}
+}
+
+func TestValidateConfig(t *testing.T) {
+	ok := config{Env: "dev", BaseURL: "http://localhost:8080"}
+	if err := ok.validate(); err != nil {
+		t.Fatal(err)
+	}
+	prod := config{Env: "prod", BaseURL: "https://trackanything.io", baseURLSet: true, TrustedIPHeader: "CF-Connecting-IP"}
+	if err := prod.validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, cfg := range []config{
+		{Env: "production", BaseURL: "https://trackanything.io", baseURLSet: true},
+		{Env: "prod", BaseURL: "http://localhost:8080"},
+		{Env: "prod", BaseURL: "https://trackanything.io"},
+		{Env: "prod", BaseURL: "http://trackanything.io", baseURLSet: true},
+		{Env: "prod", BaseURL: "https://", baseURLSet: true},
+		{Env: "dev", TrustedIPHeader: "X-Real-IP"},
+	} {
+		if err := cfg.validate(); err == nil {
+			t.Errorf("accepted %+v", cfg)
+		}
+	}
+}
+
+func TestLoadConfigReadsTrustedProxyHeader(t *testing.T) {
+	t.Setenv("ENV", "dev")
+	t.Setenv("BASE_URL", "")
+	t.Setenv("TRUSTED_IP_HEADER", "CF-Connecting-IP")
+	cfg := loadConfig()
+	if cfg.TrustedIPHeader != "CF-Connecting-IP" || cfg.baseURLSet {
+		t.Fatalf("%+v", cfg)
+	}
+	if err := cfg.validate(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ENV", "prod")
+	t.Setenv("BASE_URL", "https://trackanything.io")
+	cfg = loadConfig()
+	if err := cfg.validate(); err != nil {
+		t.Fatal(err)
 	}
 }
 

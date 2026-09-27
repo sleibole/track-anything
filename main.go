@@ -4,9 +4,11 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"fmt"
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -27,33 +29,66 @@ func init() {
 }
 
 type config struct {
-	Addr     string
-	DBPath   string
-	Env      string // "dev" or "prod"
-	BaseURL  string // used to build links in emails, e.g. "https://trackanything.io"
-	SMTPHost string // empty = log emails to the console instead of sending
-	SMTPPort string
-	SMTPUser string
-	SMTPPass string
-	MailFrom string // e.g. "Track Anything <hello@trackanything.io>"
+	Addr            string
+	DBPath          string
+	Env             string // "dev" or "prod"
+	BaseURL         string // used to build links in emails, e.g. "https://trackanything.io"
+	SMTPHost        string // empty = log emails to the console instead of sending
+	SMTPPort        string
+	SMTPUser        string
+	SMTPPass        string
+	MailFrom        string // e.g. "Track Anything <hello@trackanything.io>"
+	TrustedIPHeader string // empty uses RemoteAddr; otherwise only this header, set by the trusted proxy
+	baseURLSet      bool   // true when BASE_URL was set in the environment
 }
 
 func loadConfig() config {
+	rawBase := strings.TrimSpace(os.Getenv("BASE_URL"))
+	base := "http://localhost:8080"
+	if rawBase != "" {
+		base = strings.TrimSuffix(rawBase, "/")
+	}
 	cfg := config{
-		Addr:     getenv("ADDR", ":8080"),
-		DBPath:   getenv("DB_PATH", "data/trackanything.db"),
-		Env:      getenv("ENV", "dev"),
-		BaseURL:  strings.TrimSuffix(getenv("BASE_URL", "http://localhost:8080"), "/"),
-		SMTPHost: os.Getenv("SMTP_HOST"),
-		SMTPPort: getenv("SMTP_PORT", "587"),
-		SMTPUser: os.Getenv("SMTP_USER"),
-		SMTPPass: os.Getenv("SMTP_PASS"),
-		MailFrom: getenv("MAIL_FROM", "Track Anything <hello@trackanything.io>"),
+		Addr:            getenv("ADDR", ":8080"),
+		DBPath:          getenv("DB_PATH", "data/trackanything.db"),
+		Env:             getenv("ENV", "dev"),
+		BaseURL:         base,
+		baseURLSet:      rawBase != "",
+		SMTPHost:        os.Getenv("SMTP_HOST"),
+		SMTPPort:        getenv("SMTP_PORT", "587"),
+		SMTPUser:        os.Getenv("SMTP_USER"),
+		SMTPPass:        os.Getenv("SMTP_PASS"),
+		MailFrom:        getenv("MAIL_FROM", "Track Anything <hello@trackanything.io>"),
+		TrustedIPHeader: strings.TrimSpace(os.Getenv("TRUSTED_IP_HEADER")),
 	}
 	if port := os.Getenv("PORT"); port != "" && os.Getenv("ADDR") == "" {
 		cfg.Addr = ":" + port
 	}
 	return cfg
+}
+
+func (c config) validate() error {
+	switch c.Env {
+	case "dev", "prod":
+	default:
+		return fmt.Errorf("ENV must be dev or prod, got %q", c.Env)
+	}
+	switch c.TrustedIPHeader {
+	case "", "CF-Connecting-IP", "X-Forwarded-For":
+	default:
+		return fmt.Errorf("TRUSTED_IP_HEADER must be empty, CF-Connecting-IP, or X-Forwarded-For, got %q", c.TrustedIPHeader)
+	}
+	if c.Env != "prod" {
+		return nil
+	}
+	if !c.baseURLSet {
+		return errors.New("production requires BASE_URL")
+	}
+	u, err := url.Parse(c.BaseURL)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
+		return fmt.Errorf("production BASE_URL must be an https URL, got %q", c.BaseURL)
+	}
+	return nil
 }
 
 func getenv(key, fallback string) string {
@@ -71,11 +106,12 @@ type app struct {
 	mailer mailer
 	now    func() time.Time // replaced in tests to move the clock
 
-	loginLimiter  *rateLimiter
-	linkLimiter   *rateLimiter
-	verifyLimiter *rateLimiter
-	signupLimiter *rateLimiter
-	shareLimiter  *rateLimiter
+	loginLimiter    *rateLimiter
+	linkLimiter     *rateLimiter
+	verifyLimiter   *rateLimiter
+	signupLimiter   *rateLimiter
+	shareLimiter    *rateLimiter
+	mailAddrLimiter *rateLimiter
 }
 
 func newApp(cfg config, db *gorm.DB, v *views, logger *slog.Logger, m mailer) *app {
@@ -86,6 +122,7 @@ func newApp(cfg config, db *gorm.DB, v *views, logger *slog.Logger, m mailer) *a
 	a.verifyLimiter = newRateLimiter(5, 15*time.Minute, clock)
 	a.signupLimiter = newRateLimiter(10, time.Hour, clock)
 	a.shareLimiter = newRateLimiter(30, time.Minute, clock)
+	a.mailAddrLimiter = newRateLimiter(3, 15*time.Minute, clock)
 	return a
 }
 
@@ -104,6 +141,10 @@ func main() {
 }
 
 func run(cfg config, logger *slog.Logger) error {
+	if err := cfg.validate(); err != nil {
+		return err
+	}
+
 	db, err := openDB(cfg.DBPath)
 	if err != nil {
 		return err
@@ -134,7 +175,15 @@ func run(cfg config, logger *slog.Logger) error {
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		a.cleanupAuth(ctx)
+	}()
+	defer func() {
+		stop()
+		<-stopped
+	}()
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -223,5 +272,36 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /s/{token}/zeros/{zid}/undo", a.handleShareUndoZero)
 
 	csrf := http.NewCrossOriginProtection()
-	return a.recoverPanic(a.logRequests(csrf.Handler(a.loadUser(mux))))
+	return a.recoverPanic(a.logRequests(securityHeaders(csrf.Handler(a.loadUser(mux)))))
+}
+
+const authCleanupInterval = time.Hour
+
+// cleanupAuth deletes expired sessions and used or expired login and verification
+// tokens. It runs in this process and returns when ctx is cancelled.
+func (a *app) cleanupAuth(ctx context.Context) {
+	a.deleteExpiredAuth()
+	ticker := time.NewTicker(authCleanupInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			a.deleteExpiredAuth()
+		}
+	}
+}
+
+func (a *app) deleteExpiredAuth() {
+	now := a.now()
+	if err := a.db.Where("expires_at <= ?", now).Delete(&Session{}).Error; err != nil {
+		a.logger.Error("cleanup sessions", "err", err)
+	}
+	if err := a.db.Where("used_at IS NOT NULL OR expires_at <= ?", now).Delete(&LoginToken{}).Error; err != nil {
+		a.logger.Error("cleanup login tokens", "err", err)
+	}
+	if err := a.db.Where("used_at IS NOT NULL OR expires_at <= ?", now).Delete(&VerificationToken{}).Error; err != nil {
+		a.logger.Error("cleanup verification tokens", "err", err)
+	}
 }

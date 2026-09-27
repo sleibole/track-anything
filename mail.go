@@ -39,13 +39,18 @@ func (m consoleMailer) Send(to, subject, body string) error {
 // to TLS with STARTTLS when the server offers it, which PlainAuth requires.
 // Each attempt has a deadline. A transient failure is retried once.
 type smtpMailer struct {
-	addr       string // host:port
-	username   string
-	password   string
-	from       *mail.Address
-	timeout    time.Duration
-	retryAfter time.Duration
+	addr        string // host:port
+	username    string
+	password    string
+	from        *mail.Address
+	timeout     time.Duration
+	retryAfter  time.Duration
+	requireTLS  bool // prod: do not send login links on a connection that never became TLS
+	implicitTLS bool // port 465: TLS from the first byte, not STARTTLS
 }
+
+// errSMTPCleartext is returned when production mail would otherwise go out unencrypted.
+var errSMTPCleartext = errors.New("smtp: refusing to send without TLS")
 
 func (m smtpMailer) Send(to, subject, body string) error {
 	host, _, err := net.SplitHostPort(m.addr)
@@ -80,7 +85,14 @@ func (m smtpMailer) Send(to, subject, body string) error {
 // every later read and write on that connection.
 func (m smtpMailer) sendOnce(host, to string, msg []byte) error {
 	deadline := time.Now().Add(m.timeout)
-	conn, err := (&net.Dialer{Deadline: deadline}).Dial("tcp", m.addr)
+	dialer := &net.Dialer{Deadline: deadline}
+	var conn net.Conn
+	var err error
+	if m.implicitTLS {
+		conn, err = tls.DialWithDialer(dialer, "tcp", m.addr, &tls.Config{ServerName: host})
+	} else {
+		conn, err = dialer.Dial("tcp", m.addr)
+	}
 	if err != nil {
 		return err
 	}
@@ -100,10 +112,17 @@ func (m smtpMailer) sendOnce(host, to string, msg []byte) error {
 	if err := c.Hello("localhost"); err != nil {
 		return err
 	}
-	if ok, _ := c.Extension("STARTTLS"); ok {
-		if err := c.StartTLS(&tls.Config{ServerName: host}); err != nil {
-			return err
+	tlsOn := m.implicitTLS
+	if !m.implicitTLS {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			if err := c.StartTLS(&tls.Config{ServerName: host}); err != nil {
+				return err
+			}
+			tlsOn = true
 		}
+	}
+	if m.requireTLS && !tlsOn {
+		return errSMTPCleartext
 	}
 	var auth smtp.Auth
 	if m.username != "" {
@@ -140,6 +159,9 @@ func (m smtpMailer) sendOnce(host, to string, msg []byte) error {
 // A 5xx reply means the server rejected the message. Anything else — a 4xx
 // reply, a timeout, or a broken connection — is tried once more.
 func transientSMTPError(err error) bool {
+	if errors.Is(err, errSMTPCleartext) {
+		return false
+	}
 	var reply *textproto.Error
 	if errors.As(err, &reply) {
 		return reply.Code >= 400 && reply.Code < 500
@@ -156,11 +178,13 @@ func newMailer(cfg config, logger *slog.Logger) (mailer, error) {
 		return nil, fmt.Errorf("MAIL_FROM: %w", err)
 	}
 	return smtpMailer{
-		addr:       net.JoinHostPort(cfg.SMTPHost, cfg.SMTPPort),
-		username:   cfg.SMTPUser,
-		password:   cfg.SMTPPass,
-		from:       from,
-		timeout:    smtpSendTimeout,
-		retryAfter: smtpRetryAfter,
+		addr:        net.JoinHostPort(cfg.SMTPHost, cfg.SMTPPort),
+		username:    cfg.SMTPUser,
+		password:    cfg.SMTPPass,
+		from:        from,
+		timeout:     smtpSendTimeout,
+		retryAfter:  smtpRetryAfter,
+		requireTLS:  cfg.Env == "prod",
+		implicitTLS: cfg.SMTPPort == "465",
 	}, nil
 }

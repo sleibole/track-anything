@@ -119,6 +119,35 @@ func TestShareLinkCantReachOtherTrackers(t *testing.T) {
 	}
 }
 
+func TestSharePageKeepsStricterReferrerPolicy(t *testing.T) {
+	ts, _, _, link := shareLink(t)
+	resp, err := ts.srv.Client().Get(ts.srv.URL + link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.Header.Get("Referrer-Policy") != "no-referrer" {
+		t.Fatalf("referrer: %q", resp.Header.Get("Referrer-Policy"))
+	}
+	if resp.Header.Get("X-Robots-Tag") != "noindex" {
+		t.Fatalf("robots: %q", resp.Header.Get("X-Robots-Tag"))
+	}
+	if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("share page lost nosniff")
+	}
+}
+
+func TestShareRegenerateAsksForConfirmation(t *testing.T) {
+	_, owner, tr, _ := shareLink(t)
+	body := owner.get(fmt.Sprintf("/trackers/%d/edit", tr.ID)).body
+	if !strings.Contains(body, `hx-confirm="Make a new link? The current one will stop working."`) {
+		t.Fatal("regenerating a share link has no confirmation")
+	}
+	if strings.Contains(body, `Turn on a share link`) {
+		t.Fatal("confirmation test ran before a link existed")
+	}
+}
+
 func TestShareLinkRegenerateAndTurnOff(t *testing.T) {
 	ts, owner, tr, oldLink := shareLink(t)
 	sitter := ts.browser(t)

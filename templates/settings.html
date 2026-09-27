@@ -44,6 +44,9 @@
   <h2>Password</h2>
   {{if eq .Saved "password"}}<p role="status" class="saved">Password saved. Other devices have been logged out.</p>{{end}}
   {{if .PasswordError}}<p role="alert" class="error">{{.PasswordError}}</p>{{end}}
+  {{if not .EmailVerified}}
+  <p>Confirm your email before setting a password.</p>
+  {{else}}
   <p>{{if .HasPassword}}Change your password. Other devices will be logged out.{{else}}You log in with email links. Set a password if you'd like to use one too.{{end}}</p>
   <form method="post" action="/settings/password">
     <label>
@@ -56,6 +59,7 @@
     </label>
     <button type="submit">{{if .HasPassword}}Change password{{else}}Set password{{end}}</button>
   </form>
+  {{end}}
 </article>
 </div>
 {{end}}

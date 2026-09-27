@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -27,22 +28,53 @@ func (a *app) logEntry(e *Entry, loc *time.Location) error {
 }
 
 // recordZero marks a day as none unless it already has events. It returns false when
-// the day has events.
+// the day has events. The count and the write share one transaction so a log that
+// lands at the same time cannot leave both entries and a recorded zero.
 func (a *app) recordZero(t Tracker, day string, loc *time.Location, z RecordedZero) (bool, error) {
 	start, end, err := dayBounds(day, loc)
 	if err != nil {
 		return false, err
 	}
-	var n int64
-	if err := a.db.Model(&Entry{}).Where("tracker_id = ? AND occurred_at >= ? AND occurred_at < ?", t.ID, start, end).Count(&n).Error; err != nil {
-		return false, err
-	}
-	if n > 0 {
-		return false, nil
-	}
-	z.TrackerID, z.Day = t.ID, day
-	err = a.db.Where(RecordedZero{TrackerID: t.ID, Day: day}).Attrs(z).FirstOrCreate(&RecordedZero{}).Error
-	return err == nil, err
+	recorded := false
+	err = a.db.Transaction(func(tx *gorm.DB) error {
+		countEntries := func() (int64, error) {
+			var n int64
+			err := tx.Model(&Entry{}).
+				Where("tracker_id = ? AND occurred_at >= ? AND occurred_at < ?", t.ID, start, end).
+				Count(&n).Error
+			return n, err
+		}
+		n, err := countEntries()
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			return tx.Where("tracker_id = ? AND day = ?", t.ID, day).Delete(&RecordedZero{}).Error
+		}
+		z.TrackerID, z.Day = t.ID, day
+		err = tx.Create(&z).Error
+		if isUniqueConstraint(err) {
+			n, err = countEntries()
+			if err != nil {
+				return err
+			}
+			if n > 0 {
+				return tx.Where("tracker_id = ? AND day = ?", t.ID, day).Delete(&RecordedZero{}).Error
+			}
+			recorded = true
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		recorded = true
+		return nil
+	})
+	return recorded, err
+}
+
+func isUniqueConstraint(err error) bool {
+	return err != nil && (errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "UNIQUE constraint failed"))
 }
 
 func (a *app) tooLateToUndo(w http.ResponseWriter, r *http.Request) {

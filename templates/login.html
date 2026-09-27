@@ -4,7 +4,7 @@
 <article class="auth-card">
   <h1>Log in</h1>
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
-  <form method="post" action="/login/link" class="auth-form">
+  <form method="post" action="{{if .ShowPassword}}/login{{else}}/login/link{{end}}" class="auth-form">
     <input type="hidden" name="next" value="{{.Next}}">
     <label class="auth-email">
       {{icon "mail"}} Email
@@ -14,8 +14,13 @@
       {{icon "lock"}} Password
       <input type="password" name="password" data-auth-password autocomplete="current-password" minlength="8" maxlength="72" {{if .ShowPassword}}autofocus{{end}}>
     </label>
-    <button type="submit" class="auth-link-submit">Continue</button>
+    {{if .ShowPassword}}
     <button type="submit" class="auth-password-submit" formaction="/login">Log in</button>
+    <button type="submit" class="auth-link-submit" formaction="/login/link">Continue</button>
+    {{else}}
+    <button type="submit" class="auth-link-submit" formaction="/login/link">Continue</button>
+    <button type="submit" class="auth-password-submit" formaction="/login">Log in</button>
+    {{end}}
     <div class="auth-switch">
       <input type="checkbox" id="login-password" class="auth-password-toggle" {{if .ShowPassword}}checked{{end}}>
       <label for="login-password">

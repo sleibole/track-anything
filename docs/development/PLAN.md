@@ -114,10 +114,10 @@ Trackers belong to a **household**, and a single tracker can also be shared by *
 Two ways in, same account. The screens lead with email. A password is optional and secondary. See `DESIGN.md` for how that is presented.
 
 - **Magic link.** Enter your email, get a one-time link valid for 15 minutes. Opening it shows a **Log in as you@example.com** button, and pressing that logs you in. The extra press is deliberate: email security scanners open links before the person does, and a link that logged in on open would be used up by the scanner. The same mechanism handles "forgot password": log in with a link, then set a new password in settings. Changing the password logs out every other session.
-- **Email and password.** Password is optional; set it from the secondary signup or login path, or later in settings.
-- Requesting a link shows the same "check your email" page whether or not the account exists, so the form can't be used to find out who has an account.
+- **Email and password.** Password is optional. It is set in settings after the email is confirmed, not at signup. Password login does not work before that confirmation.
+- Requesting a link shows the same "check your email" page whether or not the account exists, so the form can't be used to find out who has an account. The same page is shown when that address has been sent too many of these emails.
 
-Signing up needs only an email. Magic links double as email verification.
+Signing up needs only an email and starts a session in that browser. It does not store a password. A confirmation link is emailed. The first time the mailbox is proven, by that link or by a magic link, any earlier session is signed out and any password set before the confirmation is removed. The confirmation email tells the recipient to open the link even if they did not sign up. Magic links for an address that is not confirmed yet do the same. How this is stored is in `ARCHITECTURE.md`.
 
 Sessions last 30 days. Once a session is past half its lifetime, the next request renews it for another 30 days, so active users stay logged in.
 
@@ -269,6 +269,7 @@ The first screen replaces paper tick marks: create a tracker, choose an icon, lo
 - Household page: invite link (create, regenerate, disable), join flow, remove members, promote a member to owner. Owners can't remove themselves or other owners; there is no demotion and no leaving. A collapsed **Archived trackers** section restores archived trackers.
 - Share links: turn on, regenerate, turn off; share page with the same summary line as the card, log button, record-none for today, and undo; no login. In phase 2 that line is the Times today wording.
 - **First public deploy**, with a confirmed home-screen install on a phone. Before it goes out, a production email relay is chosen and delivering magic links, and a backup method and destination are chosen, configured, and tested with a restore. Backups run from day one. Neither choice blocks building the rest of phase 2. Hosting steps are in `ARCHITECTURE.md`.
+- **Still to build before that deploy: Cloudflare Turnstile** on signup, login (password and magic link), and change password. It is not in the app. Rate limits are. Turnstile does not replace them. Local development would use Cloudflare's always-pass test keys. There is no Turnstile SDK; verification would be an HTTP call to siteverify.
 
 **Done when:** both of you log the dog's meals from your own phones (or one of you through the share link) for a week instead of using paper, and the Dog ate card shows "3 times today" correctly in your time zone. That wording is Times today, the default. The other two summary displays are not part of this done-when.
 
@@ -428,7 +429,7 @@ The product stays a small, flexible way to record arbitrary events and measureme
 | Streaks | Not planned | No clear definition, and gamification is a non-goal. Reconsider only for a concrete use case. A later schedule does not add them |
 | Schedules and reminders | Later direction, outside phases 0–5 | Optional metadata on an ordinary tracker: no schedule, a frequency, or selected days or an interval, plus an optional conditional reminder. Not a new kind. Not a calendar, a todo list, or a habit platform. Storage, delivery, and exact wording stay open until the core tracker is dogfooded. See Later ideas |
 | Invites | Copyable links | The app doesn't send invite email |
-| Login | Email first; password optional | Magic link is the primary path. Password is secondary. See `DESIGN.md` |
+| Login | Email first; password optional | Magic link is the primary path. A password is set in settings after the email is confirmed. See `DESIGN.md` |
 | Time zone | Detect once at signup, then keep it | Calendar days do not follow the browser after signup. Friendly name in settings if it needs changing. Mechanism in `ARCHITECTURE.md` |
 | First use case | Dog meals | Replaces paper tick marks |
 | Second use case | Woods outings and workout progression | A woods outing is the phase 3 overlay test, and a count is enough for that. Duration, and workout weight, arrive in phase 4. |
@@ -445,7 +446,7 @@ The product stays a small, flexible way to record arbitrary events and measureme
 | Install | Manifest + icons; no service worker through phase 5 | Verified on a phone at first deploy. Not a store app. A small worker arrives with later offline logging |
 | Offline logging | Later, primary log action only | Outside phases 0–5. Previously loaded trackers, one tap, local queue, automatic idempotent sync. The tap time is when it happened. See Later ideas |
 | First public deploy | End of phase 2 | Backups live from the start. Email relay and backup method are picked before deploy, not before building |
-| Server metrics | Prometheus | Scrape of the process for requests, latency, errors, and database health. Not product analytics. See `ARCHITECTURE.md` |
+| Server metrics | Not built | A Prometheus scrape is a later idea, not part of the current app and not required for the first deploy. The intended shape is in `ARCHITECTURE.md` under Metrics |
 
 ## Open questions
 

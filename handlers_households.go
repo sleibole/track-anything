@@ -92,7 +92,12 @@ func (a *app) handleInviteOn(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := a.db.Model(&h).Update("invite_token", newToken()).Error; err != nil {
+	token, err := newToken()
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if err := a.db.Model(&h).Update("invite_token", token).Error; err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -134,7 +139,21 @@ func (a *app) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := a.db.Where("household_id = ? AND user_id = ? AND role = ?", m.HouseholdID, m.UserID, roleMember).Delete(&HouseholdMember{}).Error; err != nil {
+	err := a.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("household_id = ? AND user_id = ? AND role = ?", m.HouseholdID, m.UserID, roleMember).Delete(&HouseholdMember{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 || h.InviteToken == nil {
+			return nil
+		}
+		token, err := newToken()
+		if err != nil {
+			return err
+		}
+		return tx.Model(&Household{}).Where("id = ?", h.ID).Update("invite_token", token).Error
+	})
+	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}

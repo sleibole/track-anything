@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -11,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // fakeClock lets a test move time forward, e.g. past a session's expiry. It starts at the
@@ -104,6 +108,24 @@ func (b *browser) post(path string, form url.Values) response {
 	return b.do(req)
 }
 
+// confirmAndSetPassword signs up, confirms the mailbox from that browser, and sets a password.
+func (ts *testServer) confirmAndSetPassword(t *testing.T, email, password string) *browser {
+	t.Helper()
+	b := ts.browser(t)
+	b.signup(email, "")
+	if r := b.post(ts.lastVerifyLink(t), nil); r.url.Path != "/verify/done" {
+		t.Fatalf("verify: %d at %s", r.status, r.url)
+	}
+	if !b.loggedInAs(email) {
+		t.Fatal("confirming from the signup browser logged it out")
+	}
+	r := b.post("/settings/password", url.Values{"password": {password}, "confirm": {password}})
+	if !strings.Contains(r.body, "Password saved") {
+		t.Fatalf("set password: %d", r.status)
+	}
+	return b
+}
+
 func (b *browser) signup(email, password string) response {
 	b.t.Helper()
 	return b.post("/signup", url.Values{"email": {email}, "password": {password}, "timezone": {"America/Los_Angeles"}})
@@ -167,13 +189,13 @@ func TestAuthPagesLeadWithEmail(t *testing.T) {
 	b := ts.browser(t)
 
 	signup := b.get("/signup")
-	for _, want := range []string{"<h1>Sign up</h1>", ">Continue</button>", "Sign up with a password instead", "Already have an account?"} {
+	for _, want := range []string{"<h1>Sign up</h1>", ">Continue</button>", "after you confirm your email", "Already have an account?"} {
 		if !strings.Contains(signup.body, want) {
 			t.Errorf("signup missing %q", want)
 		}
 	}
-	if strings.Contains(signup.body, `auth-password-toggle" checked`) {
-		t.Error("signup opens the password field by default")
+	if strings.Contains(signup.body, "auth-password") {
+		t.Error("signup still offers a password before the email is confirmed")
 	}
 
 	login := b.get("/login")
@@ -205,8 +227,8 @@ func TestSignupLogsIn(t *testing.T) {
 	if u.TimeZone != "America/Los_Angeles" {
 		t.Errorf("time zone %q", u.TimeZone)
 	}
-	if u.PasswordHash == "" || u.PasswordHash == "correct horse" {
-		t.Errorf("password not hashed: %q", u.PasswordHash)
+	if u.HasPassword() {
+		t.Error("signup stored a password before the email was verified")
 	}
 }
 
@@ -230,8 +252,6 @@ func TestSignupValidation(t *testing.T) {
 		{"empty email", "", "", "valid email"},
 		{"blank email", "   ", "", "valid email"},
 		{"display name", "Dog <dog@example.com>", "", "valid email"},
-		{"short password", "a@example.com", "short", "at least 8"},
-		{"long password", "b@example.com", strings.Repeat("x", 73), "at most 72"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := ts.browser(t).signup(tc.email, tc.password)
@@ -282,8 +302,7 @@ func TestSignupAndLoginPagesRedirectWhenLoggedIn(t *testing.T) {
 
 func TestLogoutThenPasswordLogin(t *testing.T) {
 	ts := newTestServer(t)
-	b := ts.browser(t)
-	b.signup("dog@example.com", "correct horse")
+	b := ts.confirmAndSetPassword(t, "dog@example.com", "correct horse")
 
 	b.post("/logout", nil)
 	if b.loggedInAs("dog@example.com") {
@@ -325,7 +344,7 @@ func TestPasswordLoginFailsForUnknownAndPasswordlessAccounts(t *testing.T) {
 
 func TestLoginRedirectsBackToNext(t *testing.T) {
 	ts := newTestServer(t)
-	ts.browser(t).signup("dog@example.com", "correct horse")
+	ts.confirmAndSetPassword(t, "dog@example.com", "correct horse").post("/logout", nil)
 
 	b := ts.browser(t)
 	r := b.get("/settings")
@@ -340,17 +359,27 @@ func TestLoginRedirectsBackToNext(t *testing.T) {
 }
 
 func TestSafeNext(t *testing.T) {
-	for in, want := range map[string]string{
-		"":                "/",
-		"/settings":       "/settings",
-		"/trackers/1?x=2": "/trackers/1?x=2",
-		"https://evil.io": "/",
-		"//evil.io":       "/",
-		"/\\evil.io":      "/",
-		"settings":        "/",
+	for _, tc := range []struct{ in, want string }{
+		{"", "/"},
+		{"/settings", "/settings"},
+		{"/trackers/1?x=2", "/trackers/1?x=2"},
+		{"https://evil.io", "/"},
+		{"http://evil.io/path", "/"},
+		{"//evil.io", "/"},
+		{"///evil.io", "/"},
+		{"/\\evil.io", "/"},
+		{"/foo\\bar", "/"},
+		{"\\\\evil.io", "/"},
+		{"settings", "/"},
+		{"javascript:alert(1)", "/"},
+		{"/\t/evil.io", "/"},
+		{"/\n/evil.io", "/"},
+		{"/\r/evil.io", "/"},
+		{"/foo\tbar", "/"},
+		{"/ok\x7fpath", "/"},
 	} {
-		if got := safeNext(in); got != want {
-			t.Errorf("safeNext(%q) = %q, want %q", in, got, want)
+		if got := safeNext(tc.in); got != tc.want {
+			t.Errorf("safeNext(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }
@@ -516,9 +545,9 @@ func TestSessionCookieFlags(t *testing.T) {
 	for env, wantSecure := range map[string]bool{"dev": false, "prod": true} {
 		a.cfg.Env = env
 		rec := httptest.NewRecorder()
-		a.setSessionCookie(rec, Session{ID: "x", ExpiresAt: time.Now().Add(time.Hour)})
+		a.setSessionCookie(rec, "raw-token", time.Now().Add(time.Hour))
 		c := rec.Result().Cookies()[0]
-		if !c.HttpOnly || c.SameSite != http.SameSiteLaxMode || c.Secure != wantSecure || c.Path != "/" {
+		if c.Value != "raw-token" || !c.HttpOnly || c.SameSite != http.SameSiteLaxMode || c.Secure != wantSecure || c.Path != "/" {
 			t.Errorf("%s: cookie %+v", env, c)
 		}
 	}
@@ -559,8 +588,9 @@ func TestMagicLinkRateLimit(t *testing.T) {
 			n++
 		}
 	}
-	if n != 5 {
-		t.Fatalf("%d login emails sent, want 5", n)
+	// Signup already sent one verification email, and the recipient cap is 3.
+	if n != 2 {
+		t.Fatalf("%d login emails sent, want 2", n)
 	}
 }
 
@@ -592,18 +622,24 @@ func TestRateLimiterWindowsAndKeys(t *testing.T) {
 func TestClientIP(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
+		trust   string
 		headers map[string]string
 		want    string
 	}{
-		{"remote addr", nil, "192.0.2.1"},
-		{"cloudflare", map[string]string{"CF-Connecting-IP": "203.0.113.5", "X-Forwarded-For": "198.51.100.1"}, "203.0.113.5"},
-		{"forwarded for", map[string]string{"X-Forwarded-For": "198.51.100.1, 10.0.0.1"}, "198.51.100.1"},
+		{"remote addr", "", nil, "192.0.2.1"},
+		{"spoofed cloudflare ignored", "", map[string]string{"CF-Connecting-IP": "203.0.113.5", "X-Forwarded-For": "198.51.100.1"}, "192.0.2.1"},
+		{"spoofed forwarded-for ignored", "", map[string]string{"X-Forwarded-For": "198.51.100.1, 10.0.0.1"}, "192.0.2.1"},
+		{"cloudflare when configured", "CF-Connecting-IP", map[string]string{"CF-Connecting-IP": "203.0.113.5", "X-Forwarded-For": "198.51.100.1"}, "203.0.113.5"},
+		{"forwarded-for ignored unless it is the trusted header", "CF-Connecting-IP", map[string]string{"X-Forwarded-For": "198.51.100.1"}, "192.0.2.1"},
+		{"forwarded-for when configured", "X-Forwarded-For", map[string]string{"X-Forwarded-For": "198.51.100.1, 10.0.0.1", "CF-Connecting-IP": "203.0.113.5"}, "198.51.100.1"},
+		{"invalid trusted value falls back", "CF-Connecting-IP", map[string]string{"CF-Connecting-IP": "not-an-ip"}, "192.0.2.1"},
+		{"embedded control characters in a trusted header fall back", "CF-Connecting-IP", map[string]string{"CF-Connecting-IP": "203.0.113.5\r\nX-Evil: 1"}, "192.0.2.1"},
 	} {
 		r := httptest.NewRequest(http.MethodGet, "/", nil) // RemoteAddr 192.0.2.1:1234
 		for k, v := range tc.headers {
 			r.Header.Set(k, v)
 		}
-		if got := clientIP(r); got != tc.want {
+		if got := clientIP(r, tc.trust); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
 	}
@@ -703,6 +739,17 @@ func TestSettingsSetPasswordForPasswordlessAccount(t *testing.T) {
 	b := ts.browser(t)
 	b.signup("nopass@example.com", "")
 
+	if r := b.post("/settings/password", url.Values{"password": {"new password"}, "confirm": {"new password"}}); r.status != http.StatusUnprocessableEntity || !strings.Contains(r.body, "Confirm your email") {
+		t.Fatalf("password before verification: %d", r.status)
+	}
+	if ts.user(t, "nopass@example.com").HasPassword() {
+		t.Fatal("unverified account stored a password")
+	}
+
+	if r := b.post(ts.lastVerifyLink(t), nil); r.url.Path != "/verify/done" {
+		t.Fatalf("verify: %s", r.url)
+	}
+
 	if r := b.post("/settings/password", url.Values{"password": {"new password"}, "confirm": {"different"}}); r.status != http.StatusUnprocessableEntity {
 		t.Fatalf("mismatch: %d", r.status)
 	}
@@ -723,8 +770,8 @@ func TestSettingsSetPasswordForPasswordlessAccount(t *testing.T) {
 
 func TestChangingPasswordLogsOutOtherDevices(t *testing.T) {
 	ts := newTestServer(t)
-	phone, laptop := ts.browser(t), ts.browser(t)
-	phone.signup("dog@example.com", "old password")
+	phone := ts.confirmAndSetPassword(t, "dog@example.com", "old password")
+	laptop := ts.browser(t)
 	laptop.login("dog@example.com", "old password")
 
 	r := phone.post("/settings/password", url.Values{"password": {"new password"}, "confirm": {"new password"}})
@@ -746,5 +793,308 @@ func TestChangingPasswordLogsOutOtherDevices(t *testing.T) {
 	b.login("dog@example.com", "new password")
 	if !b.loggedInAs("dog@example.com") {
 		t.Error("new password doesn't work")
+	}
+}
+
+func TestUnverifiedSignupCannotPreHijack(t *testing.T) {
+	ts := newTestServer(t)
+	attacker := ts.browser(t)
+	attacker.signup("victim@example.com", "attacker-password")
+	if !attacker.loggedInAs("victim@example.com") {
+		t.Fatal("signup session missing")
+	}
+	if ts.user(t, "victim@example.com").HasPassword() {
+		t.Fatal("signup stored a password for an unverified address")
+	}
+	msgs := ts.mailer.messages()
+	if len(msgs) != 1 || strings.Contains(strings.ToLower(msgs[0].Body), "ignore") {
+		t.Fatalf("verification email should not tell the recipient to ignore it: %+v", msgs)
+	}
+	if !strings.Contains(msgs[0].Body, "open the link anyway") {
+		t.Fatal("verification email does not tell the mailbox owner to open the link")
+	}
+
+	// A password planted before confirmation must not survive it, and must not log in.
+	hash, err := bcrypt.GenerateFromPassword([]byte("attacker-password"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.app.db.Model(&User{}).Where("email = ?", "victim@example.com").Update("password_hash", string(hash)).Error; err != nil {
+		t.Fatal(err)
+	}
+	if r := ts.browser(t).login("victim@example.com", "attacker-password"); r.status != http.StatusUnauthorized {
+		t.Fatalf("unverified password login: %d", r.status)
+	}
+
+	victim := ts.browser(t)
+	if r := victim.post(ts.lastVerifyLink(t), nil); r.url.Path != "/verify/done" {
+		t.Fatalf("verify: %s", r.url)
+	}
+	if victim.loggedInAs("victim@example.com") {
+		t.Fatal("verification from another browser took over the session")
+	}
+	if attacker.loggedInAs("victim@example.com") {
+		t.Fatal("attacker session survived proof of the mailbox")
+	}
+	u := ts.user(t, "victim@example.com")
+	if u.EmailVerifiedAt == nil || u.HasPassword() {
+		t.Fatalf("after verify: verified=%v password=%v", u.EmailVerifiedAt != nil, u.HasPassword())
+	}
+	if r := ts.browser(t).login("victim@example.com", "attacker-password"); r.status != http.StatusUnauthorized {
+		t.Fatalf("old password still works: %d", r.status)
+	}
+
+	victim.post("/login/link", url.Values{"email": {"victim@example.com"}})
+	if r := victim.post(ts.lastLoginLink(t), nil); !victim.loggedInAs("victim@example.com") {
+		t.Fatalf("mailbox owner could not log in: %d", r.status)
+	}
+	if attacker.loggedInAs("victim@example.com") {
+		t.Fatal("attacker regained the account")
+	}
+}
+
+func TestLoginLinkClaimsAnUnverifiedAccount(t *testing.T) {
+	ts := newTestServer(t)
+	attacker := ts.browser(t)
+	attacker.signup("victim@example.com", "attacker-password")
+	hash, err := bcrypt.GenerateFromPassword([]byte("attacker-password"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.app.db.Model(&User{}).Where("email = ?", "victim@example.com").Update("password_hash", string(hash)).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	owner := ts.browser(t)
+	owner.post("/login/link", url.Values{"email": {"victim@example.com"}})
+	body := ts.mailer.messages()[len(ts.mailer.messages())-1].Body
+	if strings.Contains(strings.ToLower(body), "ignore") || !strings.Contains(body, "open the link anyway") {
+		t.Fatalf("unverified login email: %s", body)
+	}
+	if r := owner.post(ts.lastLoginLink(t), nil); !owner.loggedInAs("victim@example.com") {
+		t.Fatalf("login link: %d", r.status)
+	}
+	if attacker.loggedInAs("victim@example.com") {
+		t.Fatal("pre-confirmation session survived the login link")
+	}
+	u := ts.user(t, "victim@example.com")
+	if u.EmailVerifiedAt == nil || u.HasPassword() {
+		t.Fatal("login link left the pre-confirmation password in place")
+	}
+
+	// A later login link for an already-confirmed account does not clear the password.
+	owner.post("/settings/password", url.Values{"password": {"correct horse"}, "confirm": {"correct horse"}})
+	other := ts.browser(t)
+	other.post("/login/link", url.Values{"email": {"victim@example.com"}})
+	later := ts.mailer.messages()[len(ts.mailer.messages())-1].Body
+	if !strings.Contains(later, "you can ignore this email") {
+		t.Fatal("verified login email lost the ignore wording")
+	}
+	other.post(ts.lastLoginLink(t), nil)
+	if !ts.user(t, "victim@example.com").HasPassword() {
+		t.Fatal("login link cleared a password set after confirmation")
+	}
+	if !owner.loggedInAs("victim@example.com") || !other.loggedInAs("victim@example.com") {
+		t.Fatal("confirming an already-verified address signed someone out")
+	}
+}
+
+func TestSessionIDIsStoredHashed(t *testing.T) {
+	ts := newTestServer(t)
+	b := ts.browser(t)
+	b.signup("dog@example.com", "")
+
+	u, err := url.Parse(ts.srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw string
+	for _, c := range b.c.Jar.Cookies(u) {
+		if c.Name == sessionCookie {
+			raw = c.Value
+		}
+	}
+	if raw == "" {
+		t.Fatal("no session cookie")
+	}
+	var s Session
+	if err := ts.app.db.Take(&s).Error; err != nil {
+		t.Fatal(err)
+	}
+	if s.ID == raw || s.ID != hashToken(raw) || strings.Contains(s.ID, raw) {
+		t.Fatalf("stored %q for cookie %q", s.ID, raw)
+	}
+	if !b.loggedInAs("dog@example.com") {
+		t.Fatal("hashed session did not authenticate")
+	}
+}
+
+func TestNewTokenFailsClosed(t *testing.T) {
+	orig := randRead
+	randRead = func([]byte) (int, error) { return 0, errors.New("no entropy") }
+	t.Cleanup(func() { randRead = orig })
+
+	token, err := newToken()
+	if err == nil || token != "" {
+		t.Fatalf("newToken() = %q, %v", token, err)
+	}
+}
+
+func TestRateLimiterCapsKeys(t *testing.T) {
+	clock := &fakeClock{t: time.Now()}
+	l := newRateLimiter(2, time.Minute, clock.now)
+	l.maxKeys = 2
+	l.sweepEvery = 1000
+	if !l.allow("a") || !l.allow("b") {
+		t.Fatal("keys under the cap should be allowed")
+	}
+	if l.allow("c") {
+		t.Fatal("new key admitted past the cap")
+	}
+	if !l.allow("a") {
+		t.Fatal("an existing key should still count inside the window")
+	}
+	if l.allow("a") {
+		t.Fatal("existing key exceeded its limit")
+	}
+	clock.advance(time.Minute)
+	l.sweepEvery = 1
+	l.calls = 0
+	if !l.allow("c") {
+		t.Fatal("expired keys were not dropped, so a new key stayed refused")
+	}
+}
+
+func TestSpoofedForwardingHeadersDoNotResetLoginLimits(t *testing.T) {
+	ts := newTestServer(t)
+	for i := range 10 {
+		req, err := http.NewRequest(http.MethodPost, ts.srv.URL+"/login", strings.NewReader("email=dog@example.com&password=guess"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("CF-Connecting-IP", "203.0.113."+string(rune('1'+i)))
+		req.Header.Set("X-Forwarded-For", "198.51.100."+string(rune('1'+i)))
+		resp, err := ts.srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: %d", i+1, resp.StatusCode)
+		}
+	}
+	req, err := http.NewRequest(http.MethodPost, ts.srv.URL+"/login", strings.NewReader("email=dog@example.com&password=guess"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("CF-Connecting-IP", "203.0.113.200")
+	req.Header.Set("X-Forwarded-For", "198.51.100.200")
+	resp, err := ts.srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("spoofed headers reset the limit: %d", resp.StatusCode)
+	}
+}
+
+func TestRecipientMailLimitHidesWhetherTheAccountExists(t *testing.T) {
+	ts := newTestServer(t)
+	ts.browser(t).signup("dog@example.com", "")
+	ts.app.linkLimiter = newRateLimiter(100, 15*time.Minute, func() time.Time { return ts.app.now() })
+	b := ts.browser(t)
+	var last response
+	for range 5 {
+		last = b.post("/login/link", url.Values{"email": {"dog@example.com"}})
+	}
+	if last.status != http.StatusOK || !strings.Contains(last.body, "Check your email") {
+		t.Fatalf("throttled known address: %d", last.status)
+	}
+	n := 0
+	for _, msg := range ts.mailer.messages() {
+		if strings.Contains(msg.Body, "/login/link/") {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Fatalf("%d login emails, want 2 after the signup verification", n)
+	}
+	unknown := b.post("/login/link", url.Values{"email": {"nobody@example.com"}})
+	if unknown.status != http.StatusOK || !strings.Contains(unknown.body, "Check your email") {
+		t.Fatalf("unknown address: %d", unknown.status)
+	}
+}
+
+func TestExpiredAuthRecordsAreDeleted(t *testing.T) {
+	ts := newTestServer(t)
+	b := ts.browser(t)
+	b.signup("dog@example.com", "")
+	b.post("/login/link", url.Values{"email": {"dog@example.com"}})
+	b.post(ts.lastLoginLink(t), nil)
+
+	ts.app.deleteExpiredAuth()
+	var loginTokens int64
+	ts.app.db.Model(&LoginToken{}).Count(&loginTokens)
+	if loginTokens != 0 {
+		t.Fatal("used login token was kept")
+	}
+	var sessions int64
+	ts.app.db.Model(&Session{}).Count(&sessions)
+	if sessions == 0 {
+		t.Fatal("live session was deleted")
+	}
+
+	ts.clock.advance(sessionLifetime + time.Hour)
+	ts.app.deleteExpiredAuth()
+	ts.app.db.Model(&Session{}).Count(&sessions)
+	var verifyTokens int64
+	ts.app.db.Model(&VerificationToken{}).Count(&verifyTokens)
+	if sessions != 0 || verifyTokens != 0 {
+		t.Fatalf("sessions %d verification tokens %d", sessions, verifyTokens)
+	}
+}
+
+func TestCleanupAuthStopsWhenCancelled(t *testing.T) {
+	ts := newTestServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		ts.app.cleanupAuth(ctx)
+		close(done)
+	}()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cleanup did not stop")
+	}
+}
+
+func TestPasswordLoginButtonSubmitsThePasswordForm(t *testing.T) {
+	ts := newTestServer(t)
+	page := ts.browser(t).get("/login").body
+	link := strings.Index(page, `class="auth-link-submit"`)
+	password := strings.Index(page, `class="auth-password-submit"`)
+	if link < 0 || password < 0 || password < link {
+		t.Fatal("email mode should submit the magic-link button first")
+	}
+	bad := ts.browser(t).post("/login", url.Values{"email": {"nobody@example.com"}, "password": {"longenough"}}).body
+	if !strings.Contains(bad, `action="/login"`) {
+		t.Fatal("password mode form does not post to /login")
+	}
+	link = strings.Index(bad, `class="auth-link-submit"`)
+	password = strings.Index(bad, `class="auth-password-submit"`)
+	if link < 0 || password < 0 || password > link {
+		t.Fatal("password mode should submit the password button first")
+	}
+	script := ts.browser(t).get("/static/app.js").body
+	if !strings.Contains(script, `form.action = passwordMode ? "/login" : "/login/link"`) {
+		t.Fatal("app.js does not switch the login form action with the password toggle")
+	}
+	if !strings.Contains(script, "htmx:responseError") || !strings.Contains(script, "That wasn't saved") {
+		t.Fatal("app.js does not restore a failed optimistic log")
 	}
 }

@@ -1,18 +1,20 @@
 # Track Anything — Architecture
 
-How Track Anything is built. What the product is is `PLAN.md`. How it should look and behave is `DESIGN.md`. User help, when it exists, belongs in `docs/help/`.
+How Track Anything is built today. What the product is, and what is still planned, is `PLAN.md`. How it should look and behave is `DESIGN.md`. User help, when it exists, belongs in `docs/help/`.
+
+Headings marked **Not built** are decisions for later. They are not in the code.
 
 If `PLAN.md` or this document describes a current behavior, `make test` covers it. Later enhancements (offline logging, event-relative summaries) are specified here and join the suite when they are built. Recurring, scheduled, and goal-based trackers are a later product direction in `PLAN.md`. They are not specified here: no schema, no notification channel, and no routes until that direction is ready to build.
 
 ## Constraints
 
 - **Boring technology.** Standard Go, server-rendered HTML, SQLite, straightforward code.
-- **One process, one database.** No microservices, distributed databases, server-side queues, or background workers. Mail is sent in the request. The rate limiter is in memory. Do not add a job runner without a demonstrated need. The later offline queue lives in the browser. See Offline logging.
+- **One process, one database.** No microservices, distributed databases, server-side queues, or a separate worker. Mail is sent in the request. The rate limiter is in memory. Expired sessions and login and verification tokens are deleted by a goroutine in this process, and that goroutine stops on shutdown. Do not add a job runner without a demonstrated need. The later offline queue lives in the browser. See Offline logging.
 - **No schema language or plugin system** before a concrete tracker type requires one.
 - **Do not optimize for hypothetical scale** before the product has users. Exactly one instance, because of SQLite.
-- **Direct Go dependencies:** GORM, `github.com/glebarez/sqlite`, `golang.org/x/crypto`, and `github.com/prometheus/client_golang` for metrics. Everything else is the standard library, vendored static files, or HTTP calls.
+- **Direct Go dependencies:** GORM, `github.com/glebarez/sqlite`, and `golang.org/x/crypto`. Everything else is the standard library, vendored static files, or HTTP calls. Prometheus is not a dependency. See Metrics.
 - **No public API, and no offline mode through phase 5.** Basic offline logging is a later enhancement: a small cache and a browser queue around the existing log action. The app stays server-rendered. See Offline logging.
-- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js is the only focused client-side library, and the only chart library. It loads only where a historical chart or an overlay is shown, from phase 3 on, and the log control works without it. Phase 2 does not load it. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password are the exception: those forms require Cloudflare Turnstile, described under Security. The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
+- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js is the planned chart library for phase 3. It is not vendored, and phase 2 does not load it. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password do not use Cloudflare Turnstile. That check is remaining work before the first public deploy (`PLAN.md`). The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
 
 ## Stack
 
@@ -23,19 +25,19 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 | Templates | `html/template` | Auto-escaping, layouts via `{{block}}` / `{{template}}` |
 | Static files and templates | `embed` | Ship a single binary |
 | Logging | `log/slog` | Structured logs to stdout |
-| Metrics | Prometheus | The process exposes metrics for a scraper. See Metrics |
+| Metrics | Not built | A Prometheus scrape is a later idea. The process does not expose `/metrics`. See Metrics |
 | ORM | GORM (`gorm.io/gorm`) | `AutoMigrate` for schema |
 | Database | SQLite, one shared app database | A database per user was considered and rejected: it complicates migrations, backups, and especially sharing |
 | SQLite driver | `github.com/glebarez/sqlite` | Pure-Go GORM driver, so no CGO and easy cross-compiling |
 | Password hashing | `golang.org/x/crypto/bcrypt` | |
 | Email (magic links) | `net/smtp` to a transactional email relay | In development, links are logged to the console instead of sent |
 | Frontend | HTMX (vendored `htmx.min.js`) | Served from `/static`, no CDN |
-| Charts | Chart.js (vendored `chart.umd.min.js`) | Fits server-rendered HTML and HTMX. Only where a historical chart or overlay is shown (phase 3+). Logging does not depend on it. Not loaded in phase 2. |
+| Charts | Not built | Chart.js is the planned library for phase 3. It is not vendored. Logging does not depend on it. |
 | CSS | Pico.css (vendored `pico.min.css`) | Classless-first, minimal custom CSS. Visual rules are in `DESIGN.md` |
 | Icons | Tabler, individual SVGs vendored and embedded | MIT. Inlined so `stroke="currentColor"` follows Pico, including dark mode. A tracker's own icon is an allow-listed Tabler name or emoji. |
-| Payments | Paddle Billing via `net/http` | No Paddle SDK. Paddle is the merchant of record |
-| Ads | Google AdSense with a certified consent platform | Phase 5, after the app is live |
-| Bot protection | Cloudflare Turnstile | Signup, login, and change password. Verified with an HTTP call; no SDK |
+| Payments | Not built | Paddle is the planned merchant of record for phase 5. There is no billing code |
+| Ads | Not built | AdSense is phase 5, after the app is live |
+| Bot protection | Not built | Cloudflare Turnstile on signup, login, and change password is remaining work before the first public deploy. See `PLAN.md` |
 
 ## Project layout
 
@@ -52,21 +54,19 @@ track-anything/
 ├── models.go           # structs below
 ├── days.go             # day boundaries, per-day counts, undo window, summaries
 ├── access.go           # trackerForUser, trackerForShareToken, archivedTrackerForOwner, household lookups
-├── auth.go             # signup, login, logout, magic links, session middleware
+├── auth.go             # signup, login, logout, magic links, email verification, sessions
 ├── mail.go             # net/smtp sender, console sender for development
 ├── env.go              # load .env at startup; existing environment variables win
 ├── .env.example        # local MailHog settings; copy to .env (gitignored)
-├── settings.go         # time zone and password settings
-├── ratelimit.go        # per-IP fixed-window limiter, client IP behind the proxies
+├── settings.go         # time zone, password, resend verification
+├── ratelimit.go        # in-memory fixed-window limiter and trusted client IP
 ├── handlers.go         # health check, dashboard, shared handler helpers
 ├── handlers_trackers.go # create, edit, archive, restore, share link, tracker page
 ├── handlers_entries.go  # log, undo, owner corrections, recorded zeros
 ├── handlers_households.go # members, invite link, join, archived trackers
 ├── handlers_share.go   # share-link pages, no login
-├── handlers_charts.go
-├── handlers_billing.go # upgrade page, Paddle webhook, customer portal link (phase 5)
 ├── render.go           # template loading + render helper (full page vs HTMX partial)
-├── middleware.go       # logging, recover, auth, CSRF check
+├── middleware.go       # request logging, panic recovery, security headers
 ├── templates/
 │   ├── layout.html     # ad and consent scripts live here, outside any HTMX swap target
 │   ├── dashboard.html
@@ -75,13 +75,12 @@ track-anything/
 │   ├── share.html      # what a share-link visitor sees
 │   ├── household.html
 │   ├── join.html       # invitation confirm page
+│   ├── verify.html     # email confirmation; GET does not consume the token
 │   ├── message.html    # 404, 403, and other one-line answers
-│   ├── charts.html
 │   └── partials/       # fragments shared by pages: card, log control, entry
 ├── icons/              # Tabler SVGs we use, inlined by the icon template func
 ├── static/
 │   ├── htmx.min.js
-│   ├── chart.umd.min.js
 │   ├── pico.min.css
 │   ├── app.css
 │   ├── manifest.webmanifest
@@ -114,29 +113,33 @@ The process environment is the source of truth. On startup, `main` loads a gitig
 
 Local MailHog, when used, is `SMTP_HOST=127.0.0.1` and `SMTP_PORT=1025` (web inbox on port 8025). With `SMTP_HOST` unset, the mailer logs the link to the console.
 
-Production sets the same names with `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`, `BASE_URL`, `ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`. Phase 5 adds `PADDLE_ENV` (`sandbox` or `production`), `PADDLE_API_KEY`, `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_ID`.
+Production sets the same names with `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`, `BASE_URL`, `ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, and, behind the proxy described under Deployment, `TRUSTED_IP_HEADER`. The app does not read Turnstile or Paddle settings. Those features are not built.
 
-`ENV=dev` turns off the `Secure` cookie flag so browsers work on `http://localhost`.
+`ENV` is `dev` or `prod`. Any other value refuses to start. `ENV=dev` turns off the `Secure` cookie flag so browsers work on `http://localhost`.
+
+In production, `BASE_URL` must be set and must be an `https` URL with a host. The process exits otherwise, so a missing public URL is not discovered when the first login email goes out.
+
+`TRUSTED_IP_HEADER` is empty unless this process sits behind a proxy that strips client-supplied forwarding headers and sets that one header itself. The only accepted values are empty, `CF-Connecting-IP`, and `X-Forwarded-For`. Empty means the client address is `RemoteAddr`. The app does not fall back from one header to another.
+
+In production, a configured SMTP server must negotiate TLS. The mailer uses implicit TLS on port 465 and STARTTLS otherwise, and it refuses to send if neither happens. Development can use MailHog without TLS.
 
 ## Data model
 
-Tokens (`InviteToken`, `ShareToken`, session IDs, login tokens) are 32 random bytes from `crypto/rand`, base64url-encoded. Login tokens are stored only as a sha256 hash.
+Tokens are 32 random bytes from `crypto/rand`, base64url-encoded. A failure from that source returns an error and does not produce a token. Login tokens, verification tokens, and session IDs are stored only as a sha256 hash, so a database copy cannot be replayed as a cookie or a link. The raw session token exists only in the cookie. Share and invite tokens stay readable because the app shows those URLs again.
 
 ```go
 type User struct {
-    ID           uint
-    Email        string `gorm:"uniqueIndex;not null"` // stored lowercased
-    PasswordHash string // empty if they only use magic links
-    TimeZone     string `gorm:"not null;default:UTC"` // IANA name, e.g. "America/Los_Angeles"
-    Plan         string `gorm:"not null;default:free"` // "free" or "adfree" (phase 5)
-    PaddleCustomerID     string // "ctm_..."
-    PaddleSubscriptionID string // "sub_..."
-    SubscriptionEndsAt   *time.Time
-    CreatedAt    time.Time
+    ID              uint
+    Email           string     `gorm:"uniqueIndex;not null"` // stored lowercased
+    PasswordHash    string     // empty until the address is verified and a password is set in settings
+    EmailVerifiedAt *time.Time // nil until they confirm the address, or log in with a magic link
+    TimeZone        string     `gorm:"not null;default:UTC"` // IANA name, e.g. "America/Los_Angeles"
+    CreatedAt       time.Time
+    UpdatedAt       time.Time
 }
 
 type Session struct {
-    ID        string `gorm:"primaryKey"` // random 32-byte token, base64url
+    ID        string `gorm:"primaryKey"` // sha256 hex of the cookie value
     UserID    uint   `gorm:"index;not null"`
     ExpiresAt time.Time
     CreatedAt time.Time
@@ -148,6 +151,16 @@ type LoginToken struct {
     UserID    uint   `gorm:"index;not null"`
     TokenHash string `gorm:"uniqueIndex;not null"` // sha256 of the token in the emailed link
     ExpiresAt time.Time // 15 minutes after creation
+    UsedAt    *time.Time
+}
+
+// A one-time email confirmation link. Its own table, so it cannot be presented as a login link.
+// Only the hash is stored.
+type VerificationToken struct {
+    ID        uint
+    UserID    uint   `gorm:"index;not null"`
+    TokenHash string `gorm:"uniqueIndex;not null"`
+    ExpiresAt time.Time // 24 hours after creation
     UsedAt    *time.Time
 }
 
@@ -214,13 +227,13 @@ type RecordedZero struct {
 - **Only owners set `OccurredAt` on an ordinary post.** `POST /trackers/{id}/entries` reads the time field only when the role is owner, interpreting it in the owner's stored zone. For a member it ignores any submitted time and uses the server's current time, so a hand-built request can't backfill. The note is accepted from both. Share-link posts never read a time. The later offline sync is the exception, and only for a new client id. See Offline logging.
 - **Personal household.** Signup creates the user, a `Household` named "My trackers", and an owner `HouseholdMember` row in one transaction.
 - **Phase 1 → phase 2 backfill.** Accounts created in phase 1 have no household. After `AutoMigrate`, `db.go` runs a one-time step in a transaction: every user with no `household_members` row gets a "My trackers" household with that user as owner. It is idempotent, so running it again changes nothing. Request handlers do not check for a missing household. Once every existing database has run the step (local development databases; production first launches with phase 2), the step is deleted.
-- **Ownership stays small.** Removing deletes a `member` row. The handler refuses to remove any owner, including the person asking. There is no demotion and no leave route. Account deletion (phase 5) handles sole-owner cases.
+- **Ownership stays small.** Removing deletes a `member` row. If invites are on, the same transaction replaces the invite token, so the old link cannot be used to rejoin. The handler refuses to remove any owner, including the person asking. There is no demotion and no leave route. Account deletion (phase 5) handles sole-owner cases.
 - **Value columns on `Entry`** (`Number`, `DurationSec`) instead of a generic field system. Two nullable columns cover the planned tracker kinds with no joins. Fields and sub-trackers, if they are ever built, add a `Field` table, a `Value` table, and `ParentID` on `Tracker` and `Entry`.
 - **Email is stored lowercased** so `Sheldon@…` and `sheldon@…` can't become two accounts.
 - **Archive, not delete**, for trackers. Archiving sets `ArchivedAt` and clears `ShareToken`. Restoring clears `ArchivedAt` and leaves sharing off, so an old link can't come back. Entries are untouched either way. Permanent delete is a separate confirmed action in phase 5.
 - **Icon, accent, and log label** are optional strings. Empty means the default: the tally-mark icon, no accent, and the button text "+ Log". Writes accept only the built-in allow-lists (icon and accent) and a log label of at most 24 characters. A tracker icon that later leaves the picker falls back to the tally mark when rendered. A missing chrome icon is still a template error.
 - **Summary display** is `times`, `done`, or `last` on `Tracker`. Empty means `times`. The column default is `times`, so existing rows keep the phase 2 wording with no entry backfill. It does not change `Kind` or `Entry`. Done today does not enforce one entry per day. Last occurrence is the entry with the latest `OccurredAt`, rendered in the page's zone, and it does not clear at midnight. No entries at all read "Never logged". A recorded zero is not an entry, so those two modes ignore it. The wording is in `PLAN.md`. Create and edit gain the field in the follow-on after phase 2; phase 2 forms do not send it.
-- **`RecordedZero.Day`** is the local calendar date that page already calls "today" or a backfilled day: the viewer's stored zone, or the household first owner's zone on a share page. It is not a UTC timestamp, because the mark is about a day rather than an instant. Logging an entry whose local day matches `Day` deletes that row in the same request. A day with events cannot also have a recorded zero.
+- **`RecordedZero.Day`** is the local calendar date that page already calls "today" or a backfilled day: the viewer's stored zone, or the household first owner's zone on a share page. It is not a UTC timestamp, because the mark is about a day rather than an instant. Logging an entry whose local day matches `Day` deletes that row in the same transaction as the insert. Recording none counts that day's entries and inserts the mark in one transaction, so the two cannot land together. A unique conflict on the day is treated as "already none" unless entries exist, in which case the mark is removed. Plan and Paddle columns are not on `User`. They arrive with billing, which is not built.
 
 ### Access checks
 
@@ -305,11 +318,15 @@ GET    /signup, POST /signup
 GET    /login,  POST /login       password login
 POST   /login/link                email a magic link
 GET    /login/link/{token}        confirm page; the form posts itself (GET doesn't use the token)
-POST   /login/link/{token}        use the magic link
+POST   /login/link/{token}        use the magic link; the first use also confirms the address
+GET    /verify/{token}            confirm page; GET does not consume the token
+POST   /verify/{token}            confirm the address
+GET    /verify/done               confirmation result
 POST   /logout
-GET    /settings                  password, low-profile time zone, (phase 5) plan, delete account
+GET    /settings                  password, low-profile time zone, resend verification
 POST   /settings/timezone         set the stored IANA zone from a friendly name
-POST   /settings/password         set or change; logs out other sessions
+POST   /settings/password         set or change, only after the email is verified; logs out other sessions
+POST   /settings/verify           resend the confirmation email
 
 GET    /households/{hid}                      members, invite link, trackers; owners also see a collapsed archived list
 POST   /households/{hid}/invite               turn on or regenerate the invite link (owner)
@@ -326,7 +343,7 @@ GET    /trackers/{id}             tracker page: log control and today's entries 
 POST   /trackers/{id}             rename, icon, accent, log label; summary display after phase 2 (owner)
 POST   /trackers/{id}/archive     archive; clears the share link (owner)
 POST   /trackers/{id}/restore     restore an archived tracker, sharing stays off (owner)
-POST   /trackers/{id}/delete      permanently delete, with confirmation (owner, phase 5)
+POST   /trackers/{id}/delete      permanently delete, with confirmation (owner, phase 5, not built)
 POST   /trackers/{id}/share       turn on or regenerate share link (owner)
 POST   /trackers/{id}/share/delete turn share link off (owner)
 
@@ -346,15 +363,12 @@ POST   /s/{token}/zero            record none for today via the link
 POST   /s/{token}/entries/{eid}/undo  undo a recent entry via the link
 POST   /s/{token}/zeros/{zid}/undo    undo a recent recorded zero via the link
 
-GET    /charts                    overlay a related tracker's events on a historical chart (phase 3, after the per-tracker chart)
+GET    /charts                    not registered; overlay is phase 3
 
-GET    /billing                   upgrade page: loads Paddle.js and opens checkout (phase 5)
-POST   /billing/portal            redirect to Paddle's customer portal to manage or cancel (phase 5)
-POST   /billing/webhook           Paddle webhook, verified by signature (phase 5)
+GET    /billing                   not registered; upgrade, portal, and webhook are phase 5
 
 GET    /static/...                embedded files
-GET    /metrics                   Prometheus text format, no session
-GET    /healthz
+GET    /healthz                   database ping; there is no `/metrics` route
 ```
 
 Later offline sync reuses `POST /trackers/{id}/quick`, `POST /s/{token}/quick`, and, once it exists, `POST /trackers/{id}/repeat`. Those requests add a client id and the tap time. Without them, the posts behave as they do now. See Offline logging.
@@ -364,17 +378,21 @@ Later offline sync reuses `POST /trackers/{id}/quick`, `POST /s/{token}/quick`, 
 The render helper checks `HX-Request` and returns either the full page or a partial. Ad and consent scripts live in `layout.html`, outside any element HTMX swaps, so they load once per page and are not re-run by partial updates.
 
 - **Forms post, then redirect.** Every form works as a plain `POST` that redirects back to its page. With HTMX, the form also has `hx-post`; HTMX follows the redirect, the page comes back as its content block, and `<main>` is swapped in place. Handlers have one code path either way.
-- **Log button**: a small delegated handler in `app.js` updates the summary on tap before the response arrives. The optimistic line follows the tracker's summary display: the next Times today count, "Done today", or "Last" at the current time. The server response replaces it. The Done today attribute value is `done`. The later offline path keeps this update when the POST cannot reach the server. The server reply still replaces the line once sync succeeds. See Offline logging.
+- **Log button**: a small delegated handler in `app.js` updates the summary on tap before the response arrives. The optimistic line follows the tracker's summary display: the next Times today count, "Done today", or "Last" at the current time. The server response replaces it. If the request fails or never reaches the server, the previous line is restored and a short inline message says it was not saved. Nothing is queued. The Done today attribute value is `done`. The later offline path is separate. See Offline logging.
 - **Errors swap too.** The `htmx-config` meta tag swaps 4xx responses, so a validation message or "too late to undo" appears in place.
 - Owner deletes, member removal, promotion, and invite regeneration use `hx-confirm`.
 
 ## Authentication
 
-- Passwords hashed with bcrypt. Empty `PasswordHash` means magic links only.
-- `GET /login/link/{token}` does not consume the token. The confirm page submits its form when JavaScript runs, and the button still works without it. `POST` consumes the token, with a single conditional update so two submissions cannot both succeed.
-- Sessions last 30 days. Renewal happens on the next request after half the lifetime, not on every request.
+- Signup stores an email and starts a session. It does not store a password. The person can use the app in that browser before the mailbox is confirmed.
+- A password is set in Settings, and only after `EmailVerifiedAt` is set. Password login also requires that timestamp. An unverified address therefore has no password credential.
+- The first proof of the mailbox, either the verification link or a magic link, runs in one transaction: clear `PasswordHash`, delete every session for that user, and set `EmailVerifiedAt`. A magic link then starts a new session for the person who opened it. A verification link started from the signup browser replaces that session so they stay signed in. Opening the link from anywhere else signs the previous browser out and does not log the new one in. An already-verified account is left alone: a later magic link does not clear the password or other sessions.
+- Signup and resend send a confirmation link. The message tells the recipient to open it even if they did not sign up, because leaving it unused can leave someone else signed in on that address. A magic link for an address that is not confirmed yet says the same. A magic link for an address that is already confirmed still says an unexpected message can be ignored.
+- `GET /login/link/{token}` and `GET /verify/{token}` do not consume the token. The confirm page submits its form when JavaScript runs, and the button still works without it. `POST` consumes the token, with a single conditional update so two submissions cannot both succeed.
+- Sessions last 30 days. Renewal happens on the next request after half the lifetime, not on every request. The cookie holds the raw token. The `sessions` row holds its sha256 hash.
 - Changing the password deletes other sessions.
-- Requesting a magic link returns the same page whether or not the account exists.
+- Requesting a magic link returns the same page whether or not the account exists. The same page is shown when the address has been sent too many authentication emails. Login and verification mail are also limited per normalized recipient address, 3 every 15 minutes, in addition to the per-IP limits.
+- Passwords are hashed with bcrypt. Empty `PasswordHash` means magic links only.
 
 Which relay sends production mail (Postmark, Amazon SES, Resend, or another SMTP provider) is still open. The mailer stays provider-neutral SMTP, so phase 2 is built and tested with the console logger or MailHog. The relay must be chosen and delivering real magic links before the first public deploy.
 
@@ -398,19 +416,23 @@ A tracker icon is not looked up the same way. `Icon` is either empty (render the
 
 ## Charts
 
-Chart.js (`chart.umd.min.js`, vendored) is the chart library. The server computes series in Go, using the same time-zone grouping as counts, and embeds them as JSON in a `<script type="application/json">` tag. A small script passes that JSON to Chart.js. The primary series includes a recorded zero as zero and omits a day with nothing logged.
+**Not built.** Phase 3. Chart.js (`chart.umd.min.js`) is the planned library. It is not vendored. The server computes series in Go, using the same time-zone grouping as counts, and embeds them as JSON in a `<script type="application/json">` tag. A small script passes that JSON to Chart.js. The primary series includes a recorded zero as zero and omits a day with nothing logged.
 
 Phase 3 has two steps. The tracker page loads Chart.js when it shows a historical chart (counts in phase 3; numbers and durations in phase 4). The overlay page loads it when a second tracker's events are placed on that series. How the mark is drawn is still open (`PLAN.md`); the handler supplies the second tracker's dates on the same axis. The log form does not depend on the script. Phase 2 does not load Chart.js. Event-relative alignment is a later idea in `PLAN.md` and is not computed here.
 
 ## Security
 
-- Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`, stored in `sessions` with an expiry. `ENV=dev` turns off `Secure`.
+- Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`. The database stores the sha256 of the cookie value, with an expiry. `ENV=dev` turns off `Secure`.
 - CSRF: `http.CrossOriginProtection` on all non-GET requests, including share-link posts.
-- **Share links are bearer tokens.** Anyone holding the URL can log entries. Share pages send `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex` so the token doesn't leak to other sites or search engines. Link visitors can only undo entries from the last 15 minutes.
+- Response headers on every page: `X-Content-Type-Options: nosniff`, `Content-Security-Policy: frame-ancestors 'none'`, and `Referrer-Policy: same-origin`. Share pages replace the referrer policy with `no-referrer` and add `X-Robots-Tag: noindex`. There is no broader content-security policy.
+- **Share links are bearer tokens.** Anyone holding the URL can log entries. Link visitors can only undo entries from the last 15 minutes.
 - `html/template` escapes output.
-- Per-IP fixed-window rate limits on password login, magic-link requests, signup, and share-link posts. The client IP is `CF-Connecting-IP`, falling back to the first `X-Forwarded-For` hop. That is trusted only because the app is unreachable except through the proxy chain described under Deployment.
-- **Cloudflare Turnstile** on signup, login, and change password. Login covers both the password form and the magic-link request. Each of those forms includes Cloudflare's widget, loaded only on those pages. The handler posts the token to Cloudflare's siteverify endpoint and rejects the request when the token is missing or invalid. Rate limits stay. There is no Turnstile SDK; verification is an HTTP call, same as Paddle. Tests stub that call. Local development uses Cloudflare's always-pass test keys.
-- The Paddle webhook verifies `Paddle-Signature` (`ts=...;h1=...`, an HMAC-SHA256 of `ts:rawbody` with the notification secret, checked with `crypto/hmac`) and rejects old timestamps. It is safe to receive the same event twice. Events can arrive out of order, so each update compares the event's `occurred_at` with the last one applied. The user is found through `custom_data.user_id`, falling back to `PaddleSubscriptionID`.
+- Request logs record the route pattern for login links, verification links, share links, and invite links (`/login/link/{token}`, `/verify/{token}`, `/s/{token}`, `/join/{token}`). The raw token is not written.
+- Redirects after login use `safeNext`. It parses the value with `net/url` and allows only a local path. Absolute URLs, scheme-relative URLs, backslashes, and control characters fall back to `/`.
+- Per-IP fixed-window rate limits on password login, magic-link requests, signup, and share-link posts. The client address is `RemoteAddr` unless `TRUSTED_IP_HEADER` names `CF-Connecting-IP` or `X-Forwarded-For`. Nothing else is consulted, and there is no fallback from one header to the other. The in-memory map stops admitting new keys at 10,000. See Deployment for what the proxy must do before that header is set.
+- Authentication and verification mail is also limited to 3 messages per recipient address every 15 minutes. When that limit is hit, the response is the same as a successful send.
+- **Cloudflare Turnstile is not built.** Signup, login, and change password do not check a Turnstile token. It is remaining work before the first public deploy, listed in `PLAN.md`.
+- The Paddle webhook is not built. Signature checking for it belongs with billing, in phase 5.
 
 ## SQLite
 
@@ -420,6 +442,8 @@ Set on connect:
 - `PRAGMA foreign_keys=ON;`
 - `PRAGMA busy_timeout=5000;`
 - `PRAGMA synchronous=NORMAL;`
+
+`database/sql` uses `SetMaxOpenConns(1)`. One connection avoids competing writers on a single-process SQLite database. Ordinary requests still issue the small queries they need. That is intentional.
 
 `DB_PATH` defaults to `data/trackanything.db` locally and `/data/trackanything.db` in production. The `data/` directory is created if needed.
 
@@ -454,6 +478,8 @@ The cases to pin down are under Testing. They wait until this enhancement is bui
 
 ## Billing (phase 5)
 
+**Not built.**
+
 - Checkout: `/billing` loads Paddle.js from Paddle's CDN, only on that page, and opens overlay checkout for `PADDLE_PRICE_ID` with the user's email and `customData: {"user_id": ...}`.
 - `PADDLE_ENV=sandbox` points the API at `sandbox-api.paddle.com` and tells Paddle.js to use sandbox.
 - Webhook events `subscription.created`, `subscription.updated`, and `subscription.canceled` set `Plan`, `PaddleCustomerID`, `PaddleSubscriptionID`, and `SubscriptionEndsAt` from the current billing period end.
@@ -464,11 +490,13 @@ The cases to pin down are under Testing. They wait until this enhancement is bui
 
 ## Metrics
 
-Server metrics are collected in Prometheus. The process exposes them on `GET /metrics` in the Prometheus text format. A scraper pulls that endpoint. The app does not run Prometheus, and it does not push metrics.
+**Not built.** There is no `/metrics` route and no Prometheus client in the module. What follows is the intended shape if it is added later. It is not required for the first public deploy.
 
-What is collected is operational: request counts, latency, and errors, and whether the database check behind `/healthz` succeeds. Nothing about a person, a household, or a tracker is included. Logs stay `log/slog` to stdout. Product charts stay Chart.js, as in `PLAN.md`. Prometheus is not that analytics, and it is not a second charting stack.
+Server metrics would be collected in Prometheus. The process would expose them on `GET /metrics` in the Prometheus text format. A scraper would pull that endpoint. The app would not run Prometheus, and it would not push metrics.
 
-`github.com/prometheus/client_golang` is the exposition library. On the homelab, Prometheus scrapes the Dokku app over the private network. The public ingress does not need to publish `/metrics`.
+What would be collected is operational: request counts, latency, and errors, and whether the database check behind `/healthz` succeeds. Nothing about a person, a household, or a tracker would be included. Logs stay `log/slog` to stdout. Product charts stay Chart.js, as in `PLAN.md`. Prometheus is not that analytics, and it is not a second charting stack.
+
+`github.com/prometheus/client_golang` would be the exposition library. On the homelab, Prometheus would scrape the Dokku app over the private network. The public ingress would not need to publish `/metrics`.
 
 ## Deployment
 
@@ -498,6 +526,7 @@ trackanything container (Go binary, plain HTTP on $PORT)
 - **SQLite storage**: `dokku storage:mount` a host directory, e.g. `/var/lib/dokku/data/storage/trackanything:/data`, with `DB_PATH=/data/trackanything.db`. Exactly one instance.
 - **Host header must survive the chain**, for Dokku's routing and the CSRF origin check.
 - **`Secure` cookies still work**, because the browser sees HTTPS.
+- **Client IP.** Leave `TRUSTED_IP_HEADER` empty until the origin cannot be reached except through the proxy that sets the header. For this chain, set `TRUSTED_IP_HEADER=CF-Connecting-IP` only after the Fly ingress accepts connections from Cloudflare and rejects the rest (Cloudflare's published IP ranges, or Authenticated Origin Pulls). The proxy must strip any client-supplied `CF-Connecting-IP` and `X-Forwarded-For` and set the trusted header itself. Cloudflare appends to `X-Forwarded-For`, so that header is not the client address unless a proxy replaces it and `TRUSTED_IP_HEADER` is set to `X-Forwarded-For` on purpose. The app does not assume either header is present.
 - **Backups**: [Litestream](https://litestream.io) to S3-compatible storage, or a nightly `sqlite3 .backup` cron job on box to start. The choice can wait while phase 2 is built, but before the first public deploy a method and destination are chosen, configured, and tested by restoring a copy. Live from the first deploy, no exceptions. How long backups keep deleted data stays open until the phase 5 privacy policy.
 - **Before the first public deploy**: the production email relay sends a magic link end to end, and backups run and restore.
 
@@ -517,7 +546,7 @@ Three layers:
 
 What the suite has to pin down:
 
-- **Accounts.** Signup, password login, wrong password, magic link (works once, fails when expired or reused, stored only as a hash), logout, session expiry, rate limits, email case-insensitivity. Signup, login, and change password reject a missing or failed Turnstile token.
+- **Accounts.** Signup does not store a password. Password login works after the email is confirmed and a password is set in settings. A password or session created before that confirmation does not survive the verification link or the first magic link. Magic link (works once, fails when expired or reused, stored only as a hash), logout, session expiry, session IDs stored only as a hash, rate limits, email case-insensitivity. Turnstile is not part of this suite until it is built.
 - **Households.** A new user gets a "My trackers" household as owner. The phase 1 backfill gives each user without a household a "My trackers" household as owner, and running it twice creates nothing new. Invite link joins as member; a regenerated or disabled link fails. Owners can remove members and promote members to owner; members can't. Removing an owner, including yourself, is refused and nothing changes. A household someone else created shows that person's email in its dashboard heading.
 - **Archive and restore.** Archiving hides the tracker from the dashboard, makes its tracker page and entry routes 404, and clears its share link. The owner's household page lists it under archived trackers; a member's doesn't. Restore brings it back with its entries and with sharing off. Members can't archive or restore.
 - **Permissions.** For every owner-only route, a member gets refused and nothing changes. Non-members get 404 for trackers, entries, and households.
@@ -533,7 +562,7 @@ What the suite has to pin down:
 - **Ads and billing (phase 5).** No ad markup for ad-free users, users in the grace period, or on share/login/settings pages. The Paddle webhook rejects bad signatures and old timestamps, applies an event once even if delivered twice, ignores an older event arriving after a newer one, finds the user through `custom_data`, and sets and clears the plan. Tests build the `Paddle-Signature` header the way Paddle does, against a test secret, and the portal handler talks to a stub API URL.
 - **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes.
 - **Offline logging (later).** A repeated sync with the same client id inserts one entry and returns it again on retry. `OccurredAt` is the tap time sent with that id. `CreatedAt` is the sync, and the undo window uses it. A member or share-link log that omits the client id still stores the server's current time. The cached snapshot is enough to show the tracker name, icon, and log button. History and charts are not required for the log tap.
-- **Metrics.** `GET /metrics` needs no session, is Prometheus text, and contains no account, household, or tracker data.
+- **Metrics.** Not built. No test requests `/metrics`.
 
 ## Decision log
 
@@ -550,11 +579,11 @@ What the suite has to pin down:
 | Archive | `ArchivedAt` plus clearing `ShareToken` | Restore leaves sharing off. Permanent delete is phase 5 |
 | Phase 1 households | One-time idempotent backfill after `AutoMigrate` | No request-time fallback. Deleted once existing databases have run it |
 | Persistence | SQLite, one shared database | Database per user rejected: migrations, backups, and sharing all get worse |
-| Dependencies | GORM, pure-Go SQLite, `x/crypto`, Prometheus client | No Paddle SDK. No server-side queue. The client is only for exposing metrics |
-| Metrics | Prometheus scrape | `GET /metrics`. Operational only: requests, latency, errors, database health. Not product analytics |
+| Dependencies | GORM, pure-Go SQLite, `x/crypto` | No Paddle SDK. No Prometheus client. No server-side queue |
+| Metrics | Not built | A Prometheus scrape is a later idea, not part of the running app |
 | Time zone | UTC timestamps, stored IANA zone | Detected once at signup. Not revised from the browser. Grouped in Go |
 | Email | `net/smtp`, console logger in dev | Optional `.env`. Relay vendor still open |
-| Bot protection | Cloudflare Turnstile | Signup, login (password and magic link), and change password. Siteverify over HTTP, no SDK. Rate limits stay |
+| Bot protection | Not built | Turnstile on signup, login, and change password is remaining work before the first public deploy. See `PLAN.md` |
 | First public deploy | Dokku on the homelab, Fly.io as ingress only | App has no TLS and no host-specific code, so a later move to Fly.io is a redeploy |
 | Offline logging | Later, around the existing log POST | Browser cache and IndexedDB queue. Client id for idempotent retry. `OccurredAt` is the tap; `CreatedAt` is the sync. No server queue and no client framework |
 

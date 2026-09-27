@@ -543,7 +543,12 @@ func (a *app) handleShareOn(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := a.db.Model(&t).Update("share_token", newToken()).Error; err != nil {
+	token, err := newToken()
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if err := a.db.Model(&t).Update("share_token", token).Error; err != nil {
 		a.serverError(w, r, err)
 		return
 	}

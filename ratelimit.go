@@ -8,14 +8,25 @@ import (
 	"time"
 )
 
+const (
+	rateLimitMaxKeys    = 10_000
+	rateLimitSweepEvery = 64
+)
+
 // rateLimiter allows up to limit events per key in each fixed window. In memory, so it
 // resets on restart, which is fine for slowing down password guessing and email spam.
+// The map has a hard cap so new keys cannot grow it without bound. Past the cap, a
+// new key is refused. Expired windows are dropped every sweepEvery allows, not on
+// every call.
 type rateLimiter struct {
-	mu     sync.Mutex
-	limit  int
-	window time.Duration
-	now    func() time.Time
-	hits   map[string]*windowCount
+	mu         sync.Mutex
+	limit      int
+	window     time.Duration
+	now        func() time.Time
+	hits       map[string]*windowCount
+	maxKeys    int
+	sweepEvery int
+	calls      int
 }
 
 type windowCount struct {
@@ -24,7 +35,14 @@ type windowCount struct {
 }
 
 func newRateLimiter(limit int, window time.Duration, now func() time.Time) *rateLimiter {
-	return &rateLimiter{limit: limit, window: window, now: now, hits: map[string]*windowCount{}}
+	return &rateLimiter{
+		limit:      limit,
+		window:     window,
+		now:        now,
+		hits:       map[string]*windowCount{},
+		maxKeys:    rateLimitMaxKeys,
+		sweepEvery: rateLimitSweepEvery,
+	}
 }
 
 func (l *rateLimiter) allow(key string) bool {
@@ -32,16 +50,16 @@ func (l *rateLimiter) allow(key string) bool {
 	defer l.mu.Unlock()
 
 	t := l.now()
-	if len(l.hits) > 10_000 {
-		for k, w := range l.hits {
-			if t.Sub(w.start) >= l.window {
-				delete(l.hits, k)
-			}
-		}
+	l.calls++
+	if l.sweepEvery > 0 && l.calls%l.sweepEvery == 0 {
+		l.sweep(t)
 	}
 
 	w, ok := l.hits[key]
 	if !ok || t.Sub(w.start) >= l.window {
+		if !ok && len(l.hits) >= l.maxKeys {
+			return false
+		}
 		l.hits[key] = &windowCount{start: t, count: 1}
 		return true
 	}
@@ -52,16 +70,26 @@ func (l *rateLimiter) allow(key string) bool {
 	return true
 }
 
-// clientIP trusts the proxy headers because in production the app is only reachable
-// through Cloudflare and the Fly.io ingress (see docs/development/ARCHITECTURE.md, Deployment).
-func clientIP(r *http.Request) string {
-	if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); ip != "" {
-		return ip
+func (l *rateLimiter) sweep(t time.Time) {
+	for k, w := range l.hits {
+		if t.Sub(w.start) >= l.window {
+			delete(l.hits, k)
+		}
 	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		first, _, _ := strings.Cut(xff, ",")
-		if ip := strings.TrimSpace(first); ip != "" {
-			return ip
+}
+
+// clientIP returns the address used for rate limits. trustedHeader is empty unless
+// this process is behind a proxy that strips client-supplied forwarding headers and
+// sets that one header itself. Any other header, including X-Forwarded-For, is ignored.
+func clientIP(r *http.Request, trustedHeader string) string {
+	if trustedHeader != "" {
+		raw := strings.TrimSpace(r.Header.Get(trustedHeader))
+		if trustedHeader == "X-Forwarded-For" {
+			raw, _, _ = strings.Cut(raw, ",")
+			raw = strings.TrimSpace(raw)
+		}
+		if ip := net.ParseIP(raw); ip != nil {
+			return ip.String()
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -69,4 +97,8 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+func (a *app) clientIP(r *http.Request) string {
+	return clientIP(r, a.cfg.TrustedIPHeader)
 }

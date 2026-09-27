@@ -124,6 +124,49 @@ func TestSMTPSendDoesNotRetryAPermanentFailure(t *testing.T) {
 	}
 }
 
+func TestProdMailerRefusesCleartext(t *testing.T) {
+	addr, attempts := startSMTP(t, func(_ int, conn net.Conn) {
+		speakSMTP(conn, "", nil)
+	})
+	m := testSMTPMailer(t, addr, time.Second, time.Second)
+	m.requireTLS = true
+	err := m.Send("person@example.com", "subject", "body")
+	if !errors.Is(err, errSMTPCleartext) {
+		t.Fatalf("got %v", err)
+	}
+	if attempts.Load() != 1 {
+		t.Fatalf("attempts %d", attempts.Load())
+	}
+}
+
+func TestProdMailerRequiresTLS(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	from := "Track Anything <hello@trackanything.io>"
+	m, err := newMailer(config{Env: "prod", SMTPHost: "smtp.example.com", SMTPPort: "587", MailFrom: from}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sm := m.(smtpMailer)
+	if !sm.requireTLS || sm.implicitTLS {
+		t.Fatalf("587: requireTLS %v implicit %v", sm.requireTLS, sm.implicitTLS)
+	}
+	m, err = newMailer(config{Env: "prod", SMTPHost: "smtp.example.com", SMTPPort: "465", MailFrom: from}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sm = m.(smtpMailer)
+	if !sm.requireTLS || !sm.implicitTLS {
+		t.Fatalf("465: requireTLS %v implicit %v", sm.requireTLS, sm.implicitTLS)
+	}
+	m, err = newMailer(config{Env: "dev", SMTPHost: "127.0.0.1", SMTPPort: "1025", MailFrom: from}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.(smtpMailer).requireTLS {
+		t.Fatal("development mail requires TLS")
+	}
+}
+
 func TestSMTPSendTimesOut(t *testing.T) {
 	addr, attempts := startSMTP(t, func(_ int, conn net.Conn) {
 		defer conn.Close()

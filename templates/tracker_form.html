@@ -63,7 +63,7 @@
   {{with $.Data.ShareURL}}
   <p>Anyone with this link can log, record none for today, and undo recent entries, without an account.</p>
   <input type="text" readonly value="{{.}}" aria-label="Share link" data-select-on-focus>
-  <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/share">
+  <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/share" hx-post="/trackers/{{$.Data.Tracker.ID}}/share" hx-confirm="Make a new link? The current one will stop working.">
     <button type="submit" class="secondary outline">Make a new link</button>
   </form>
   <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/share/delete">

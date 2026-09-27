@@ -17,7 +17,7 @@ func (u User) HasPassword() bool {
 }
 
 type Session struct {
-	ID        string `gorm:"primaryKey"` // random 32-byte token, base64url; also the cookie value
+	ID        string `gorm:"primaryKey"` // sha256 hex of the cookie value; the raw token is only in the cookie
 	UserID    uint   `gorm:"index;not null"`
 	ExpiresAt time.Time
 	CreatedAt time.Time

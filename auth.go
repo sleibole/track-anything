@@ -28,11 +28,17 @@ const (
 	maxPasswordLen     = 72 // bcrypt ignores bytes past 72
 )
 
+// randRead is the cryptographic random source for tokens. Tests replace it to
+// force a failure. A failure must not become a token.
+var randRead = rand.Read
+
 // newToken returns 32 random bytes, base64url-encoded, for session IDs and emailed links.
-func newToken() string {
+func newToken() (string, error) {
 	b := make([]byte, 32)
-	rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
+	if _, err := randRead(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func hashToken(token string) string {
@@ -77,9 +83,20 @@ func validTimeZone(name string) bool {
 	return err == nil
 }
 
-// safeNext keeps post-login redirects on this site.
+// safeNext keeps post-login redirects on this site. Only a local path is allowed.
+// url.Parse rejects malformed values and control characters; the extra checks
+// reject scheme-relative URLs and backslash forms a browser can treat as a host.
 func safeNext(next string) string {
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") {
+	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
+		return "/"
+	}
+	for i := 0; i < len(next); i++ {
+		if next[i] < 0x20 || next[i] == 0x7f || next[i] == '\\' {
+			return "/"
+		}
+	}
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil {
 		return "/"
 	}
 	return next
@@ -104,12 +121,12 @@ func currentSessionID(r *http.Request) string {
 	return id
 }
 
-func (a *app) setSessionCookie(w http.ResponseWriter, s Session) {
+func (a *app) setSessionCookie(w http.ResponseWriter, raw string, expires time.Time) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
-		Value:    s.ID,
+		Value:    raw,
 		Path:     "/",
-		Expires:  s.ExpiresAt,
+		Expires:  expires,
 		HttpOnly: true,
 		Secure:   a.cfg.Env != "dev",
 		SameSite: http.SameSiteLaxMode,
@@ -129,11 +146,16 @@ func (a *app) clearSessionCookie(w http.ResponseWriter) {
 }
 
 func (a *app) startSession(w http.ResponseWriter, userID uint) error {
-	s := Session{ID: newToken(), UserID: userID, ExpiresAt: a.now().Add(sessionLifetime)}
+	raw, err := newToken()
+	if err != nil {
+		return err
+	}
+	expires := a.now().Add(sessionLifetime)
+	s := Session{ID: hashToken(raw), UserID: userID, ExpiresAt: expires}
 	if err := a.db.Create(&s).Error; err != nil {
 		return err
 	}
-	a.setSessionCookie(w, s)
+	a.setSessionCookie(w, raw, expires)
 	return nil
 }
 
@@ -148,7 +170,7 @@ func (a *app) loadUser(next http.Handler) http.Handler {
 		}
 
 		var s Session
-		err = a.db.Take(&s, "id = ?", c.Value).Error
+		err = a.db.Take(&s, "id = ?", hashToken(c.Value)).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			a.clearSessionCookie(w)
 			next.ServeHTTP(w, r)
@@ -179,7 +201,7 @@ func (a *app) loadUser(next http.Handler) http.Handler {
 				a.serverError(w, r, err)
 				return
 			}
-			a.setSessionCookie(w, s)
+			a.setSessionCookie(w, c.Value, s.ExpiresAt)
 		}
 
 		ctx := context.WithValue(r.Context(), userKey, &u)
@@ -201,10 +223,9 @@ func (a *app) requireUser(next http.HandlerFunc) http.HandlerFunc {
 // Signup
 
 type signupForm struct {
-	Email        string
-	Next         string
-	Error        string
-	ShowPassword bool
+	Email string
+	Next  string
+	Error string
 }
 
 func (a *app) handleSignupForm(w http.ResponseWriter, r *http.Request) {
@@ -216,37 +237,22 @@ func (a *app) handleSignupForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
-	password := r.PostFormValue("password")
 	form := signupForm{
-		Email:        normalizeEmail(r.PostFormValue("email")),
-		Next:         r.PostFormValue("next"),
-		ShowPassword: password != "",
+		Email: normalizeEmail(r.PostFormValue("email")),
+		Next:  r.PostFormValue("next"),
 	}
 	fail := func(status int, msg string) {
 		form.Error = msg
 		a.render(w, r, status, "signup.html", form)
 	}
 
-	if !a.signupLimiter.allow(clientIP(r)) {
+	if !a.signupLimiter.allow(a.clientIP(r)) {
 		fail(http.StatusTooManyRequests, "Too many signups from this network. Try again later.")
 		return
 	}
 	if !validEmail(form.Email) {
 		fail(http.StatusUnprocessableEntity, "Enter a valid email address.")
 		return
-	}
-
-	var hash []byte
-	if password != "" {
-		if msg := validatePassword(password); msg != "" {
-			fail(http.StatusUnprocessableEntity, msg)
-			return
-		}
-		var err error
-		if hash, err = bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost); err != nil {
-			a.serverError(w, r, err)
-			return
-		}
 	}
 
 	tz := r.PostFormValue("timezone")
@@ -264,7 +270,9 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u := User{Email: form.Email, PasswordHash: string(hash), TimeZone: tz}
+	// No password yet. A password typed before the mailbox is confirmed would
+	// belong to whoever filled in the form, who may not own the address.
+	u := User{Email: form.Email, TimeZone: tz}
 	err := a.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&u).Error; err != nil {
 			return err
@@ -280,8 +288,8 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Verification is best-effort. The account and session stand either way.
-	if err := a.sendVerificationEmail(&u); err != nil {
-		a.logger.Error("server error", "method", r.Method, "path", r.URL.Path, "err", err)
+	if err := a.sendVerificationEmail(&u); err != nil && !errors.Is(err, errMailThrottled) {
+		a.logger.Error("server error", "method", r.Method, "path", logPath(r.URL.Path), "err", err)
 	}
 	http.Redirect(w, r, safeNext(form.Next), http.StatusSeeOther)
 }
@@ -314,7 +322,7 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		a.render(w, r, status, "login.html", form)
 	}
 
-	if !a.loginLimiter.allow(clientIP(r)) {
+	if !a.loginLimiter.allow(a.clientIP(r)) {
 		fail(http.StatusTooManyRequests, "Too many login attempts. Wait a minute and try again.")
 		return
 	}
@@ -331,7 +339,9 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		hash = []byte(u.PasswordHash)
 	}
 	passwordOK := bcrypt.CompareHashAndPassword(hash, []byte(r.PostFormValue("password"))) == nil
-	if err != nil || !u.HasPassword() || !passwordOK {
+	// An unverified address has no password credential, even if a hash was stored
+	// before this rule. Proving the mailbox is what establishes the account.
+	if err != nil || !u.HasPassword() || u.EmailVerifiedAt == nil || !passwordOK {
 		fail(http.StatusUnauthorized, "Email or password is incorrect. No password yet? Use an email link instead.")
 		return
 	}
@@ -356,7 +366,7 @@ func (a *app) handleLoginLinkRequest(w http.ResponseWriter, r *http.Request) {
 		Next:  r.PostFormValue("next"),
 	}
 
-	if !a.linkLimiter.allow(clientIP(r)) {
+	if !a.linkLimiter.allow(a.clientIP(r)) {
 		form.Error = "Too many email links requested. Try again in a few minutes."
 		a.render(w, r, http.StatusTooManyRequests, "login.html", form)
 		return
@@ -377,8 +387,8 @@ func (a *app) handleLoginLinkRequest(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	default:
-		if err := a.sendLoginLink(u, safeNext(form.Next)); err != nil {
-			a.logger.Error("server error", "method", r.Method, "path", r.URL.Path, "err", err)
+		if err := a.sendLoginLink(u, safeNext(form.Next)); err != nil && !errors.Is(err, errMailThrottled) {
+			a.logger.Error("server error", "method", r.Method, "path", logPath(r.URL.Path), "err", err)
 			back := "/login"
 			if next := safeNext(form.Next); next != "/" {
 				back = "/login?next=" + url.QueryEscape(next)
@@ -395,7 +405,13 @@ func (a *app) handleLoginLinkRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) sendLoginLink(u User, next string) error {
-	token := newToken()
+	if !a.mailAddrLimiter.allow(normalizeEmail(u.Email)) {
+		return errMailThrottled
+	}
+	token, err := newToken()
+	if err != nil {
+		return err
+	}
 	lt := LoginToken{UserID: u.ID, TokenHash: hashToken(token), ExpiresAt: a.now().Add(loginLinkLifetime)}
 	if err := a.db.Create(&lt).Error; err != nil {
 		return err
@@ -405,8 +421,15 @@ func (a *app) sendLoginLink(u User, next string) error {
 	if next != "/" {
 		link += "?next=" + url.QueryEscape(next)
 	}
-	body := "Use this link to log in to Track Anything:\n\n" + link +
-		"\n\nIt works once and expires in 15 minutes. If you didn't ask for it, you can ignore this email.\n"
+	var body string
+	if u.EmailVerifiedAt == nil {
+		body = "Use this link to log in to Track Anything:\n\n" + link +
+			"\n\nIt works once and expires in 15 minutes. This address is not confirmed yet, so opening the link also confirms it, signs out anyone who was using the account before then, and removes any password set before the address was confirmed.\n\n" +
+			"If you did not ask to sign up or log in, open the link anyway. Leaving it unused can leave someone else signed in on an account for this address.\n"
+	} else {
+		body = "Use this link to log in to Track Anything:\n\n" + link +
+			"\n\nIt works once and expires in 15 minutes. If you didn't ask for it, you can ignore this email.\n"
+	}
 	return a.mailer.Send(u.Email, "Your Track Anything login link", body)
 }
 
@@ -473,8 +496,9 @@ func (a *app) handleLoginLinkUse(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	// The link was delivered to the mailbox, so this login also confirms the address.
-	if err := a.markEmailVerified(lt.UserID); err != nil {
+	// The link was delivered to the mailbox. The first time that happens, end
+	// every session and any password that existed before the address was proven.
+	if _, err := a.claimUnverifiedEmail(lt.UserID); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
@@ -487,21 +511,57 @@ func (a *app) handleLoginLinkUse(w http.ResponseWriter, r *http.Request) {
 
 // Email verification
 
-func (a *app) markEmailVerified(userID uint) error {
-	return a.db.Model(&User{}).
-		Where("id = ? AND email_verified_at IS NULL", userID).
-		Update("email_verified_at", a.now()).Error
+// errMailThrottled means this address was sent too many auth emails recently.
+// Callers show the same page they would after a successful send.
+var errMailThrottled = errors.New("auth email throttled")
+
+// claimUnverifiedEmail runs when someone proves they own the mailbox.
+// If the address was not yet verified, it clears any password and deletes every
+// session, then marks the address verified. An already-verified account is left
+// as it is. claimed reports whether this call was that first confirmation.
+func (a *app) claimUnverifiedEmail(userID uint) (bool, error) {
+	claimed := false
+	err := a.db.Transaction(func(tx *gorm.DB) error {
+		var u User
+		if err := tx.Take(&u, userID).Error; err != nil {
+			return err
+		}
+		if u.EmailVerifiedAt != nil {
+			return nil
+		}
+		now := a.now()
+		err := tx.Model(&User{}).Where("id = ?", userID).Updates(map[string]any{
+			"email_verified_at": now,
+			"password_hash":     "",
+		}).Error
+		if err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", userID).Delete(&Session{}).Error; err != nil {
+			return err
+		}
+		claimed = true
+		return nil
+	})
+	return claimed, err
 }
 
 func (a *app) sendVerificationEmail(u *User) error {
-	token := newToken()
+	if !a.mailAddrLimiter.allow(normalizeEmail(u.Email)) {
+		return errMailThrottled
+	}
+	token, err := newToken()
+	if err != nil {
+		return err
+	}
 	vt := VerificationToken{UserID: u.ID, TokenHash: hashToken(token), ExpiresAt: a.now().Add(verifyLinkLifetime)}
 	if err := a.db.Create(&vt).Error; err != nil {
 		return err
 	}
 	link := a.cfg.BaseURL + "/verify/" + token
 	body := "Confirm your email for Track Anything:\n\n" + link +
-		"\n\nIt works once and expires in 24 hours. If you didn't sign up, you can ignore this email.\n"
+		"\n\nThe link works once and expires in 24 hours. Opening it confirms this address, signs out anyone who was using the account before then, and removes any password set before the address was confirmed.\n\n" +
+		"If you did not sign up, open the link anyway. Leaving it unused can leave someone else signed in on an account for this address.\n"
 	return a.mailer.Send(u.Email, "Confirm your Track Anything email", body)
 }
 
@@ -561,15 +621,27 @@ func (a *app) handleVerifyUse(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	if err := a.markEmailVerified(vt.UserID); err != nil {
+	// Keep the signup browser signed in with a new session. A different browser
+	// proving the mailbox does not inherit the old session.
+	keep := currentUser(r) != nil && currentUser(r).ID == vt.UserID
+	claimed, err := a.claimUnverifiedEmail(vt.UserID)
+	if err != nil {
 		a.serverError(w, r, err)
 		return
+	}
+	if claimed && keep {
+		if err := a.startSession(w, vt.UserID); err != nil {
+			a.serverError(w, r, err)
+			return
+		}
 	}
 	http.Redirect(w, r, "/verify/done", http.StatusSeeOther)
 }
 
 func (a *app) handleVerifyDone(w http.ResponseWriter, r *http.Request) {
-	a.messageTo(w, r, http.StatusOK, "Email verified", "Thanks. This address is confirmed.", "Back to Track Anything", "/")
+	a.messageTo(w, r, http.StatusOK, "Email verified",
+		"This address is confirmed. Any session or password created before this confirmation has been removed.",
+		"Back to Track Anything", "/")
 }
 
 func (a *app) handleLogout(w http.ResponseWriter, r *http.Request) {

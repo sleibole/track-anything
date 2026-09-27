@@ -117,7 +117,7 @@ Inside a focused form:
 Authentication should have almost no cognitive overhead.
 
 - Passwordless email is the primary path. Signup and login open on an email field and a **Continue** button.
-- A password is a secondary step ("Sign up with a password instead", "Log in with a password instead"), revealed only after the person asks for it. Do not show both methods at once.
+- A password is optional and is set in Settings after the email is confirmed. Signup does not ask for one. On the login page it is a secondary step ("Log in with a password instead"), revealed only after the person asks for it. Do not show both login methods at once.
 - Do not add Google, Apple, or other social login unless a later product decision says to.
 - Keep the normal site header. Do not use a split-screen marketing layout; there is not enough branding to justify one.
 - The "check your email" and "log in as …" screens use the same centered card.

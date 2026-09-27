@@ -241,6 +241,35 @@ func TestOwnerRemovesAndPromotesMembers(t *testing.T) {
 	}
 }
 
+func TestRemovingAMemberRotatesTheInviteLink(t *testing.T) {
+	ts, owner, _, h := sharedHouse(t)
+	old := *h.InviteToken
+	gone := ts.browser(t)
+	gone.signup("gone@example.com", "")
+	gone.post("/join/"+old, nil)
+
+	owner.post(fmt.Sprintf("/households/%d/members/%d/delete", h.ID, ts.user(t, "gone@example.com").ID), nil)
+	h = ts.household(t, h.ID)
+	if h.InviteToken == nil || *h.InviteToken == old {
+		t.Fatal("invite token was not rotated")
+	}
+	again := ts.browser(t)
+	again.signup("again@example.com", "")
+	if r := again.post("/join/"+old, nil); r.status != http.StatusNotFound || ts.role(t, h, "again@example.com") != "" {
+		t.Fatalf("old invite still works: %d", r.status)
+	}
+	if r := again.post("/join/"+*h.InviteToken, nil); ts.role(t, h, "again@example.com") != roleMember {
+		t.Fatalf("new invite: %d at %s", r.status, r.url)
+	}
+
+	// Invites that are off stay off. Removing a member must not turn them back on.
+	owner.post(fmt.Sprintf("/households/%d/invite/delete", h.ID), nil)
+	owner.post(fmt.Sprintf("/households/%d/members/%d/delete", h.ID, ts.user(t, "again@example.com").ID), nil)
+	if ts.household(t, h.ID).InviteToken != nil {
+		t.Fatal("removing a member turned invites back on")
+	}
+}
+
 func TestNonMembersGet404ForHouseholds(t *testing.T) {
 	ts, _, _, h := sharedHouse(t)
 	stranger := ts.browser(t)
