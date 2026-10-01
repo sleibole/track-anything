@@ -73,9 +73,48 @@ func get(t *testing.T, h http.Handler, path string, headers map[string]string) (
 
 func TestHealthz(t *testing.T) {
 	h := newTestApp(t).routes()
-	code, body := get(t, h, "/healthz", nil)
-	if code != http.StatusOK || body != "ok\n" {
-		t.Fatalf("got %d %q", code, body)
+	for _, headers := range []map[string]string{nil, {"Cookie": "session=not-a-session"}} {
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || rec.Body.String() != "ok\n" {
+			t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+			t.Fatalf("content-type %q", ct)
+		}
+	}
+}
+
+func TestHealthzDBFailure(t *testing.T) {
+	var buf bytes.Buffer
+	a := newTestApp(t)
+	a.logger = slog.New(slog.NewTextHandler(&buf, nil))
+	sqlDB, err := a.db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	h := a.routes()
+	for _, headers := range []map[string]string{nil, {"Cookie": "session=not-a-session"}} {
+		buf.Reset()
+		code, body := get(t, h, "/healthz", headers)
+		if code != http.StatusServiceUnavailable || body != "unavailable\n" {
+			t.Fatalf("got %d %q", code, body)
+		}
+		logged := buf.String()
+		if !strings.Contains(logged, "healthz: database check failed") || !strings.Contains(logged, "database is closed") {
+			t.Fatalf("log: %s", logged)
+		}
+		if strings.Contains(body, "database is closed") || strings.Contains(body, "sqlite") {
+			t.Fatalf("response leaked details: %q", body)
+		}
 	}
 }
 

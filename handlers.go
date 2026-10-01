@@ -11,11 +11,12 @@ import (
 func (a *app) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	sqlDB, err := a.db.DB()
 	if err == nil {
-		err = sqlDB.PingContext(r.Context())
+		var one int
+		err = sqlDB.QueryRowContext(r.Context(), "SELECT 1").Scan(&one)
 	}
 	if err != nil {
-		a.logger.Error("healthz: db ping failed", "err", err)
-		http.Error(w, "db unavailable", http.StatusServiceUnavailable)
+		a.logger.Error("healthz: database check failed", "err", err)
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")

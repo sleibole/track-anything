@@ -368,7 +368,7 @@ GET    /charts                    not registered; overlay is phase 3
 GET    /billing                   not registered; upgrade, portal, and webhook are phase 5
 
 GET    /static/...                embedded files
-GET    /healthz                   database ping; there is no `/metrics` route
+GET    /healthz                   no session; 200 `ok` when `SELECT 1` succeeds, otherwise 503 with no error text. There is no `/metrics` route
 ```
 
 Later offline sync reuses `POST /trackers/{id}/quick`, `POST /s/{token}/quick`, and, once it exists, `POST /trackers/{id}/repeat`. Those requests add a client id and the tap time. Without them, the posts behave as they do now. See Offline logging.
@@ -521,6 +521,7 @@ trackanything container (Go binary, plain HTTP on $PORT)
 ```
 
 - **No TLS in the Go server.** It listens on plain HTTP (`ADDR`, or Dokku's `$PORT`).
+- **Health check**: `GET /healthz` needs no session. `200` and a body of `ok` means the process is up and SQLite answered `SELECT 1`. A failed database check is `503` with a generic body; the error is written to the process log. Dokku or the ingress can probe this path.
 - **Build**: a multi-stage `Dockerfile` (`CGO_ENABLED=0`, then a minimal image with the binary). Templates, static files, and time zone data are embedded.
 - **Deploy**: `git push dokku main`.
 - **SQLite storage**: `dokku storage:mount` a host directory, e.g. `/var/lib/dokku/data/storage/trackanything:/data`, with `DB_PATH=/data/trackanything.db`. Exactly one instance.
@@ -562,6 +563,7 @@ What the suite has to pin down:
 - **Ads and billing (phase 5).** No ad markup for ad-free users, users in the grace period, or on share/login/settings pages. The Paddle webhook rejects bad signatures and old timestamps, applies an event once even if delivered twice, ignores an older event arriving after a newer one, finds the user through `custom_data`, and sets and clears the plan. Tests build the `Paddle-Signature` header the way Paddle does, against a test secret, and the portal handler talks to a stub API URL.
 - **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes.
 - **Offline logging (later).** A repeated sync with the same client id inserts one entry and returns it again on retry. `OccurredAt` is the tap time sent with that id. `CreatedAt` is the sync, and the undo window uses it. A member or share-link log that omits the client id still stores the server's current time. The cached snapshot is enough to show the tracker name, icon, and log button. History and charts are not required for the log tap.
+- **Health.** `GET /healthz` needs no session. It returns 200 `ok` when `SELECT 1` succeeds, and 503 with no database error text when that query fails. The failure is logged.
 - **Metrics.** Not built. No test requests `/metrics`.
 
 ## Decision log

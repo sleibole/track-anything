@@ -161,10 +161,12 @@ func (a *app) startSession(w http.ResponseWriter, userID uint) error {
 
 // loadUser puts the logged-in user, if any, into the request context. Sessions renew
 // once they're past half their lifetime, so active users stay logged in.
+// /static and /healthz skip the lookup. The health check answers from its own query,
+// including when a session cookie is present and the database is down.
 func (a *app) loadUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(sessionCookie)
-		if err != nil || strings.HasPrefix(r.URL.Path, "/static/") {
+		if err != nil || strings.HasPrefix(r.URL.Path, "/static/") || r.URL.Path == "/healthz" {
 			next.ServeHTTP(w, r)
 			return
 		}
