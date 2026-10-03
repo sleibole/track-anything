@@ -252,6 +252,10 @@ func (a *app) handleSignup(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusTooManyRequests, "Too many signups from this network. Try again later.")
 		return
 	}
+	if a.turnstileFailed(r) {
+		fail(http.StatusForbidden, turnstileRejectedMessage)
+		return
+	}
 	if !validEmail(form.Email) {
 		fail(http.StatusUnprocessableEntity, "Enter a valid email address.")
 		return
@@ -328,6 +332,10 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusTooManyRequests, "Too many login attempts. Wait a minute and try again.")
 		return
 	}
+	if a.turnstileFailed(r) {
+		fail(http.StatusForbidden, turnstileRejectedMessage)
+		return
+	}
 
 	var u User
 	err := a.db.Take(&u, "email = ?", form.Email).Error
@@ -371,6 +379,11 @@ func (a *app) handleLoginLinkRequest(w http.ResponseWriter, r *http.Request) {
 	if !a.linkLimiter.allow(a.clientIP(r)) {
 		form.Error = "Too many email links requested. Try again in a few minutes."
 		a.render(w, r, http.StatusTooManyRequests, "login.html", form)
+		return
+	}
+	if a.turnstileFailed(r) {
+		form.Error = turnstileRejectedMessage
+		a.render(w, r, http.StatusForbidden, "login.html", form)
 		return
 	}
 	if !validEmail(form.Email) {

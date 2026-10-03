@@ -109,3 +109,25 @@ document.querySelectorAll(".auth-password-toggle").forEach((toggle) => {
   });
   sync();
 });
+
+// Turnstile tokens are single-use. A failed submit that stays on the form, including
+// an HTMX swap of the same form, needs a new widget before the next attempt.
+// The API script is deferred, so it calls onTurnstileLoad instead of turnstile.ready.
+function renderTurnstile(root) {
+  if (!window.turnstile || !root || !root.querySelectorAll) return;
+  root.querySelectorAll(".cf-turnstile").forEach((el) => {
+    if (el.dataset.turnstileMounted === "1") return;
+    const sitekey = el.getAttribute("data-sitekey");
+    if (!sitekey) return;
+    el.dataset.turnstileMounted = "1";
+    window.turnstile.render(el, { sitekey: sitekey, theme: "auto" });
+  });
+}
+
+window.onTurnstileLoad = function () {
+  renderTurnstile(document);
+};
+
+document.addEventListener("htmx:afterSettle", (event) => {
+  renderTurnstile(event.detail?.target || document);
+});

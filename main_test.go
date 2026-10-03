@@ -57,7 +57,9 @@ func newTestApp(t *testing.T) *app {
 		t.Fatal(err)
 	}
 	cfg := config{Env: "dev", BaseURL: "http://example.test"}
-	return newApp(cfg, db, v, slog.New(slog.NewTextHandler(io.Discard, nil)), &memMailer{})
+	a := newApp(cfg, db, v, slog.New(slog.NewTextHandler(io.Discard, nil)), &memMailer{})
+	installTestTurnstile(a)
+	return a
 }
 
 func get(t *testing.T, h http.Handler, path string, headers map[string]string) (int, string) {
@@ -209,11 +211,11 @@ func TestValidateConfig(t *testing.T) {
 	if err := ok.validate(); err != nil {
 		t.Fatal(err)
 	}
-	prod := config{Env: "prod", BaseURL: "https://trackanything.io", baseURLSet: true, TrustedIPHeader: "CF-Connecting-IP"}
+	prod := config{Env: "prod", BaseURL: "https://trackanything.io", baseURLSet: true, TrustedIPHeader: "CF-Connecting-IP", TurnstileSiteKey: "site-key", TurnstileSecretKey: "secret-key"}
 	if err := prod.validate(); err != nil {
 		t.Fatal(err)
 	}
-	fly := config{Env: "prod", BaseURL: "https://trackanything.io", baseURLSet: true, TrustedIPHeader: "Fly-Client-IP"}
+	fly := config{Env: "prod", BaseURL: "https://trackanything.io", baseURLSet: true, TrustedIPHeader: "Fly-Client-IP", TurnstileSiteKey: "site-key", TurnstileSecretKey: "secret-key"}
 	if err := fly.validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -235,6 +237,8 @@ func TestLoadConfigReadsTrustedProxyHeader(t *testing.T) {
 	t.Setenv("ENV", "dev")
 	t.Setenv("BASE_URL", "")
 	t.Setenv("TRUSTED_IP_HEADER", "CF-Connecting-IP")
+	t.Setenv("TURNSTILE_SITE_KEY", "")
+	t.Setenv("TURNSTILE_SECRET_KEY", "")
 	cfg := loadConfig()
 	if cfg.TrustedIPHeader != "CF-Connecting-IP" || cfg.baseURLSet {
 		t.Fatalf("%+v", cfg)
@@ -244,6 +248,8 @@ func TestLoadConfigReadsTrustedProxyHeader(t *testing.T) {
 	}
 	t.Setenv("ENV", "prod")
 	t.Setenv("BASE_URL", "https://trackanything.io")
+	t.Setenv("TURNSTILE_SITE_KEY", "site-key")
+	t.Setenv("TURNSTILE_SECRET_KEY", "secret-key")
 	cfg = loadConfig()
 	if err := cfg.validate(); err != nil {
 		t.Fatal(err)

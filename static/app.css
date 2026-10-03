@@ -139,6 +139,11 @@ main:has(.auth-card) {
   margin-bottom: 0;
 }
 
+.cf-turnstile {
+  margin: 0;
+  align-self: flex-start;
+}
+
 .auth-form label,
 .auth-form button {
   margin-bottom: 0;

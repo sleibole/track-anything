@@ -98,8 +98,33 @@ func (b *browser) get(path string) response {
 	return b.do(req)
 }
 
+func turnstileProtected(path string) bool {
+	path, _, _ = strings.Cut(path, "?")
+	switch path {
+	case "/signup", "/login", "/login/link", "/settings/password":
+		return true
+	default:
+		return false
+	}
+}
+
 func (b *browser) post(path string, form url.Values) response {
 	b.t.Helper()
+	// Existing flows submit a token the test double accepts. A test that sets
+	// the field, including to empty, keeps that value.
+	if turnstileProtected(path) {
+		if form == nil {
+			form = url.Values{}
+		}
+		if _, ok := form[turnstileField]; !ok {
+			cloned := make(url.Values, len(form)+1)
+			for k, vs := range form {
+				cloned[k] = append([]string(nil), vs...)
+			}
+			cloned.Set(turnstileField, "test-token")
+			form = cloned
+		}
+	}
 	req, err := http.NewRequest(http.MethodPost, b.ts.srv.URL+path, strings.NewReader(form.Encode()))
 	if err != nil {
 		b.t.Fatal(err)
@@ -975,7 +1000,7 @@ func TestRateLimiterCapsKeys(t *testing.T) {
 func TestSpoofedForwardingHeadersDoNotResetLoginLimits(t *testing.T) {
 	ts := newTestServer(t)
 	for i := range 10 {
-		req, err := http.NewRequest(http.MethodPost, ts.srv.URL+"/login", strings.NewReader("email=dog@example.com&password=guess"))
+		req, err := http.NewRequest(http.MethodPost, ts.srv.URL+"/login", strings.NewReader("email=dog@example.com&password=guess&"+turnstileField+"=test-token"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -991,7 +1016,7 @@ func TestSpoofedForwardingHeadersDoNotResetLoginLimits(t *testing.T) {
 			t.Fatalf("attempt %d: %d", i+1, resp.StatusCode)
 		}
 	}
-	req, err := http.NewRequest(http.MethodPost, ts.srv.URL+"/login", strings.NewReader("email=dog@example.com&password=guess"))
+	req, err := http.NewRequest(http.MethodPost, ts.srv.URL+"/login", strings.NewReader("email=dog@example.com&password=guess&"+turnstileField+"=test-token"))
 	if err != nil {
 		t.Fatal(err)
 	}

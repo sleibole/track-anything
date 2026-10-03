@@ -49,6 +49,8 @@ The SQLite file is created at `data/trackanything.db`.
 | `SMTP_PASS` | empty | SMTP password. |
 | `MAIL_FROM` | `Track Anything <hello@trackanything.io>` | From address. |
 | `TRUSTED_IP_HEADER` | empty | Client IP header set by a trusted proxy: `Fly-Client-IP`, `CF-Connecting-IP`, or `X-Forwarded-For`. Empty uses the connection address. Production sets `Fly-Client-IP`. |
+| `TURNSTILE_SITE_KEY` | test key in development | Public Turnstile widget key. Required in production. |
+| `TURNSTILE_SECRET_KEY` | test key in development | Turnstile secret used for server-side verification. Required in production. Never log it. |
 
 ## Tests
 

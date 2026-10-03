@@ -56,6 +56,12 @@ func (a *app) handleSettingsTimeZone(w http.ResponseWriter, r *http.Request) {
 // Every other session is logged out, so a changed password locks out anyone else.
 func (a *app) handleSettingsPassword(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
+	if a.turnstileFailed(r) {
+		page := a.settingsPageFor(r)
+		page.PasswordError = turnstileRejectedMessage
+		a.render(w, r, http.StatusForbidden, "settings.html", page)
+		return
+	}
 	password := r.PostFormValue("password")
 
 	if u.EmailVerifiedAt == nil {

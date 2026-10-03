@@ -14,7 +14,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 - **Do not optimize for hypothetical scale** before the product has users. Exactly one instance, because of SQLite.
 - **Direct Go dependencies:** GORM, `github.com/glebarez/sqlite`, and `golang.org/x/crypto`. Everything else is the standard library, vendored static files, or HTTP calls. Prometheus is not a dependency. See Metrics.
 - **No public API, and no offline mode through phase 5.** Basic offline logging is a later enhancement: a small cache and a browser queue around the existing log action. The app stays server-rendered. See Offline logging.
-- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js is the planned chart library for phase 3. It is not vendored, and phase 2 does not load it. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password do not use Cloudflare Turnstile. That check is remaining work before the first public deploy (`PLAN.md`). The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
+- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js is the planned chart library for phase 3. It is not vendored, and phase 2 does not load it. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password include a Cloudflare Turnstile widget. The form is still a normal POST. The server rejects the action when the token does not verify. The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
 
 ## Stack
 
@@ -37,7 +37,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 | Icons | Tabler, individual SVGs vendored and embedded | MIT. Inlined so `stroke="currentColor"` follows Pico, including dark mode. A tracker's own icon is an allow-listed Tabler name or emoji. |
 | Payments | Not built | Paddle is the planned merchant of record for phase 5. There is no billing code |
 | Ads | Not built | AdSense is phase 5, after the app is live |
-| Bot protection | Not built | Cloudflare Turnstile on signup, login, and change password is remaining work before the first public deploy. See `PLAN.md` |
+| Bot protection | Cloudflare Turnstile | Managed mode on signup, login (password and magic link), and change password. The server calls Siteverify. This does not replace CSRF or rate limits |
 
 ## Project layout
 
@@ -55,6 +55,7 @@ track-anything/
 ├── days.go             # day boundaries, per-day counts, undo window, summaries
 ├── access.go           # trackerForUser, trackerForShareToken, archivedTrackerForOwner, household lookups
 ├── auth.go             # signup, login, logout, magic links, email verification, sessions
+├── turnstile.go        # Siteverify check for signup, login, and change password
 ├── mail.go             # net/smtp sender, console sender for development
 ├── env.go              # load .env at startup; existing environment variables win
 ├── .env.example        # local MailHog settings; copy to .env (gitignored)
@@ -113,11 +114,13 @@ The process environment is the source of truth. On startup, `main` loads a gitig
 
 Local MailHog, when used, is `SMTP_HOST=127.0.0.1` and `SMTP_PORT=1025` (web inbox on port 8025). With `SMTP_HOST` unset, the mailer logs the link to the console.
 
-Production sets the same names with `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`, `BASE_URL`, `ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, and, behind the proxy described under Deployment, `TRUSTED_IP_HEADER`. The app does not read Turnstile or Paddle settings. Those features are not built.
+Production sets the same names with `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`, `BASE_URL`, `ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and, behind the proxy described under Deployment, `TRUSTED_IP_HEADER`. The app does not read Paddle settings. Billing is not built.
 
 `ENV` is `dev` or `prod`. Any other value refuses to start. `ENV=dev` turns off the `Secure` cookie flag so browsers work on `http://localhost`.
 
 In production, `BASE_URL` must be set and must be an `https` URL with a host. The process exits otherwise, so a missing public URL is not discovered when the first login email goes out.
+
+Production also requires `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`. The process exits if either is missing, and the error does not include the secret. The secret is not written to logs. Development leaves both unset and then uses Cloudflare's always-pass test keys, so local signup does not need production credentials. Setting only one of them is a configuration error. The trackanything.io widget is Managed mode. Verification is an HTTP POST to Siteverify from the request, with a 5 second timeout, before the protected action. The client address sent as `remoteip` is the same address rate limiting uses (`Fly-Client-IP` in production). A missing token, a failed check, a malformed body, a non-200 response, a timeout, or a network error all reject the action with the same page message and do not perform it. Tests stub that HTTP call and do not contact Cloudflare.
 
 `TRUSTED_IP_HEADER` is empty unless this process sits behind a proxy that strips client-supplied forwarding headers and sets that one header itself. The only accepted values are empty, `Fly-Client-IP`, `CF-Connecting-IP`, and `X-Forwarded-For`. Empty means the client address is `RemoteAddr`. `Fly-Client-IP` and `CF-Connecting-IP` are a single address. `X-Forwarded-For` is a list, and only the first address is used. The app does not fall back from one header to another. Production sets `TRUSTED_IP_HEADER=Fly-Client-IP` because Fly Proxy is the trusted public ingress. See Deployment.
 
@@ -380,6 +383,7 @@ The render helper checks `HX-Request` and returns either the full page or a part
 - **Forms post, then redirect.** Every form works as a plain `POST` that redirects back to its page. With HTMX, the form also has `hx-post`; HTMX follows the redirect, the page comes back as its content block, and `<main>` is swapped in place. Handlers have one code path either way.
 - **Log button**: a small delegated handler in `app.js` updates the summary on tap before the response arrives. The optimistic line follows the tracker's summary display: the next Times today count, "Done today", or "Last" at the current time. The server response replaces it. If the request fails or never reaches the server, the previous line is restored and a short inline message says it was not saved. Nothing is queued. The Done today attribute value is `done`. The later offline path is separate. See Offline logging.
 - **Errors swap too.** The `htmx-config` meta tag swaps 4xx responses, so a validation message or "too late to undo" appears in place.
+- Signup, login, and change password stay full-page posts. A successful login has to replace the header, which lives outside the HTMX swap target. The Turnstile script is in the layout of those pages only. A failed submit is a new page with a new widget, because the previous token cannot be reused. If an HTMX response does include the form, `app.js` renders a widget for any `.cf-turnstile` element that is not already mounted.
 - Owner deletes, member removal, promotion, and invite regeneration use `hx-confirm`.
 
 ## Authentication
@@ -431,7 +435,7 @@ Phase 3 has two steps. The tracker page loads Chart.js when it shows a historica
 - Redirects after login use `safeNext`. It parses the value with `net/url` and allows only a local path. Absolute URLs, scheme-relative URLs, backslashes, and control characters fall back to `/`.
 - Per-IP fixed-window rate limits on password login, magic-link requests, signup, and share-link posts. The client address is `RemoteAddr` unless `TRUSTED_IP_HEADER` names `Fly-Client-IP`, `CF-Connecting-IP`, or `X-Forwarded-For`. Nothing else is consulted, and there is no fallback from one header to the other. The in-memory map stops admitting new keys at 10,000. See Deployment for what the proxy must do before that header is set.
 - Authentication and verification mail is also limited to 3 messages per recipient address every 15 minutes. When that limit is hit, the response is the same as a successful send.
-- **Cloudflare Turnstile is not built.** Signup, login, and change password do not check a Turnstile token. It is remaining work before the first public deploy, listed in `PLAN.md`.
+- Cloudflare Turnstile protects signup, password login, magic-link requests, and change password. The browser widget is not sufficient: the server checks `cf-turnstile-response` with Siteverify before the action. Turnstile does not replace CSRF or the rate limits above. Those still run, and a failed verification still counts toward the rate limit.
 - The Paddle webhook is not built. Signature checking for it belongs with billing, in phase 5.
 
 ## SQLite
@@ -527,6 +531,7 @@ trackanything container (Go binary, plain HTTP on $PORT)
 - **SQLite storage**: `dokku storage:mount` a host directory, e.g. `/var/lib/dokku/data/storage/trackanything:/data`, with `DB_PATH=/data/trackanything.db`. Exactly one instance.
 - **Host header must survive the chain**, for Dokku's routing and the CSRF origin check.
 - **`Secure` cookies still work**, because the browser sees HTTPS.
+- **Turnstile.** Production sets `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`. The trackanything.io widget is Managed mode. Signup, login, and change password verify the token server-side. Turnstile does not replace CSRF or rate limiting.
 - **Client IP.** The current production deployment sets `TRUSTED_IP_HEADER=Fly-Client-IP` because Fly Proxy is the trusted public ingress. Fly Proxy writes the original visitor address in `Fly-Client-IP`. Fly nginx overwrites that header before the request crosses WireGuard to Dokku, so a client-supplied value does not survive. `Fly-Client-IP` is one address, the same shape as `CF-Connecting-IP`. Leave `TRUSTED_IP_HEADER` empty until the origin cannot be reached except through the proxy that sets the header. `CF-Connecting-IP` stays valid when that proxy replaces the header itself. `X-Forwarded-For` is a list; the app uses the first address only when `TRUSTED_IP_HEADER` is set to `X-Forwarded-For` on purpose, after a proxy replaces the header rather than appending to it. The app does not fall back from one header to another and does not assume the configured header is present.
 - **Backups**: [Litestream](https://litestream.io) to S3-compatible storage, or a nightly `sqlite3 .backup` cron job on box to start. The choice can wait while phase 2 is built, but before the first public deploy a method and destination are chosen, configured, and tested by restoring a copy. Live from the first deploy, no exceptions. How long backups keep deleted data stays open until the phase 5 privacy policy.
 - **Before the first public deploy**: the production email relay sends a magic link end to end, and backups run and restore.
@@ -547,7 +552,7 @@ Three layers:
 
 What the suite has to pin down:
 
-- **Accounts.** Signup does not store a password. Password login works after the email is confirmed and a password is set in settings. A password or session created before that confirmation does not survive the verification link or the first magic link. Magic link (works once, fails when expired or reused, stored only as a hash), logout, session expiry, session IDs stored only as a hash, rate limits, email case-insensitivity. Turnstile is not part of this suite until it is built.
+- **Accounts.** Signup does not store a password. Password login works after the email is confirmed and a password is set in settings. A password or session created before that confirmation does not survive the verification link or the first magic link. Magic link (works once, fails when expired or reused, stored only as a hash), logout, session expiry, session IDs stored only as a hash, rate limits, email case-insensitivity. Turnstile: production config requires both keys and development can omit them; a successful Siteverify response allows signup, login, and password change; a missing token, `success: false`, a network error, a malformed response, and a non-200 response reject the action. CSRF and rate limits still apply. The suite does not call Cloudflare.
 - **Households.** A new user gets a "My trackers" household as owner. The phase 1 backfill gives each user without a household a "My trackers" household as owner, and running it twice creates nothing new. Invite link joins as member; a regenerated or disabled link fails. Owners can remove members and promote members to owner; members can't. Removing an owner, including yourself, is refused and nothing changes. A household someone else created shows that person's email in its dashboard heading.
 - **Archive and restore.** Archiving hides the tracker from the dashboard, makes its tracker page and entry routes 404, and clears its share link. The owner's household page lists it under archived trackers; a member's doesn't. Restore brings it back with its entries and with sharing off. Members can't archive or restore.
 - **Permissions.** For every owner-only route, a member gets refused and nothing changes. Non-members get 404 for trackers, entries, and households.
@@ -585,7 +590,7 @@ What the suite has to pin down:
 | Metrics | Not built | A Prometheus scrape is a later idea, not part of the running app |
 | Time zone | UTC timestamps, stored IANA zone | Detected once at signup. Not revised from the browser. Grouped in Go |
 | Email | `net/smtp`, console logger in dev | Optional `.env`. Relay vendor still open |
-| Bot protection | Not built | Turnstile on signup, login, and change password is remaining work before the first public deploy. See `PLAN.md` |
+| Bot protection | Cloudflare Turnstile, Managed mode | Signup, login, and change password. Server-side Siteverify. Does not replace CSRF or rate limits |
 | First public deploy | Dokku on the homelab, Fly.io as ingress only | App has no TLS and no host-specific code, so a later move to Fly.io is a redeploy |
 | Offline logging | Later, around the existing log POST | Browser cache and IndexedDB queue. Client id for idempotent retry. `OccurredAt` is the tap; `CreatedAt` is the sync. No server queue and no client framework |
 

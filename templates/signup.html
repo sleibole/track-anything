@@ -1,4 +1,5 @@
 {{define "title"}}Sign up · Track Anything{{end}}
+{{define "scripts"}}{{template "turnstile-script" .}}{{end}}
 {{define "content"}}
 {{with .Data}}
 <article class="auth-card">
@@ -11,6 +12,7 @@
       {{icon "mail"}} Email
       <input type="email" name="email" value="{{.Email}}" required autocomplete="email" autofocus>
     </label>
+    {{template "turnstile" $.TurnstileSiteKey}}
     <button type="submit">Continue</button>
   </form>
   <p class="auth-foot">You can add a password in Settings after you confirm your email.</p>

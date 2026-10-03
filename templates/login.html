@@ -1,4 +1,5 @@
 {{define "title"}}Log in · Track Anything{{end}}
+{{define "scripts"}}{{template "turnstile-script" .}}{{end}}
 {{define "content"}}
 {{with .Data}}
 <article class="auth-card">
@@ -14,6 +15,7 @@
       {{icon "lock"}} Password
       <input type="password" name="password" data-auth-password autocomplete="current-password" minlength="8" maxlength="72" {{if .ShowPassword}}autofocus{{end}}>
     </label>
+    {{template "turnstile" $.TurnstileSiteKey}}
     {{if .ShowPassword}}
     <button type="submit" class="auth-password-submit" formaction="/login">Log in</button>
     <button type="submit" class="auth-link-submit" formaction="/login/link">Continue</button>
