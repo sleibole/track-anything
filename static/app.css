@@ -238,6 +238,14 @@ main:has(.auth-card) {
   }
 }
 
+input[data-select-on-focus] {
+  cursor: pointer;
+}
+
+input[data-select-on-focus] + small.copied {
+  color: var(--pico-ins-color);
+}
+
 .error {
   color: var(--pico-del-color);
 }

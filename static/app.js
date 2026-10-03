@@ -96,10 +96,66 @@ function clockInZone(date, timeZone) {
   return `${part("hour")}:${part("minute")} ${part("dayPeriod")}`;
 }
 
-// Invite and share links select on focus so they're easy to copy.
+// Invite and share links select on focus so a keyboard can copy them.
+// A tap copies too: iOS will not select text in a readonly field.
 document.addEventListener("focusin", (event) => {
   if (event.target.matches("input[data-select-on-focus]")) event.target.select();
 });
+
+const copiedTimers = new WeakMap();
+
+document.addEventListener("click", (event) => {
+  const input = event.target.closest("input[data-select-on-focus]");
+  if (!input || !input.value) return;
+  copyText(input.value).then(() => showCopied(input)).catch(() => {});
+});
+
+function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).catch(() => copyWithCommand(text));
+  }
+  return copyWithCommand(text);
+}
+
+function copyWithCommand(text) {
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.append(area);
+  area.focus();
+  area.select();
+  area.setSelectionRange(0, text.length);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  area.remove();
+  return ok ? Promise.resolve() : Promise.reject(new Error("copy failed"));
+}
+
+function showCopied(input) {
+  let note = input.nextElementSibling;
+  if (!note?.matches("[data-copied]")) {
+    note = document.createElement("small");
+    note.className = "copied";
+    note.setAttribute("role", "status");
+    note.dataset.copied = "";
+    note.textContent = "Copied to clipboard";
+    input.after(note);
+  }
+  clearTimeout(copiedTimers.get(note));
+  copiedTimers.set(
+    note,
+    setTimeout(() => {
+      note.remove();
+      copiedTimers.delete(note);
+    }, 2000),
+  );
+}
 
 // A closed password field must not be submitted with the email-only form.
 document.querySelectorAll(".auth-password-toggle").forEach((toggle) => {
