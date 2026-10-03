@@ -16,7 +16,7 @@ Within `docs/development/`:
 - `PLAN.md` describes what Track Anything is and what we're building.
 - `DESIGN.md` defines visual design and UI/UX conventions.
 - `ARCHITECTURE.md` records technical and implementation decisions.
-- `SUMMARY-DISPLAY.md` is the implementation plan for the summary display setting. The behavior itself is in the three documents above.
+- `SUMMARY-DISPLAY.md` records how the summary display setting was built. The behavior itself is in the three documents above.
 
 These development documents contain settled project decisions and should be followed when implementing new features.
 
@@ -68,7 +68,7 @@ Start with the smallest useful tracker and add value shapes only when a real use
 - Any entry can have an optional **note**, but the note never slows down the normal one-tap path.
 - Each tracker has an optional **icon** and an optional **accent**. The icon comes from a small built-in picker of clear icons or emoji and defaults to the tally-mark icon. The accent comes from a small built-in set of soft colors and defaults to none. Both can be changed later. The name is always shown with them. Someone picking a tracker can tell it by the name alone. User-uploaded icons are a later idea, not part of the first version.
 - The card's logging button uses a short **log label**. The default is "+ Log". It can be changed to a few words such as "+ Ate" or "Gave Motrin". The tap still records the current time. The log label and the summary display are separate settings. Changing one leaves the other as it was.
-- Each tracker has a **summary display**: Times today, Done today, or Last occurrence. It only changes the summary line above the log button. The tracker is still a list of timestamped entries. Details, including the three wordings, are under Summary display. The default is Times today, which is what phase 2 shows. The setting itself arrives in the small follow-on after phase 2.
+- Each tracker has a **summary display**: Times today, Done today, or Last occurrence. It only changes the summary line above the log button. The tracker is still a list of timestamped entries. Details, including the three wordings, are under Summary display. The default is Times today, which is what phase 2 shows. The setting itself arrived in the small follow-on after phase 2.
 - A tracker has **no schedule** in these phases. Recurrence, a period goal, and a reminder are a later direction: optional metadata on an ordinary tracker, not a new kind. See Later ideas.
 - A count tracker can store one **recorded zero** for a calendar day: the count is deliberately none. That mark is not an event and does not increase the count. A day with no entries and no recorded zero is **nothing logged**. Logging an event for that day clears the recorded zero. Charts and per-day counts draw a recorded zero as zero and leave an unlogged day blank. A recorded zero is not an entry, so Done today and Last occurrence ignore it when they build the summary line. History still shows it.
 - For number trackers, **the last value carries forward**: if you used a 5lb club last time, the form already says 5, and **Log again** records it with one tap. Backfilling an older entry does not change what carries forward. The note does not carry forward, and the time defaults to now. Changing the prefilled value (moving up to 6lb) and submitting is how a new value starts carrying forward.
@@ -95,7 +95,7 @@ Sheldon                         Wife
     └── Woods run                   └── Woods run
 ```
 
-Family is one household that both people belong to. Each person's "My trackers" is their own. Creating households, renaming them, moving a tracker between households you own, and leaving a household are the follow-on after phase 2 (Household organization). Phase 2 itself left them out on purpose. The sharing model does not change: a tracker belongs to exactly one household, and membership in that household decides who can see it.
+Family is one household that both people belong to. Each person's "My trackers" is their own. Creating households, renaming them, moving a tracker between households you own, and leaving a household arrived in the Household organization follow-on after phase 2. Phase 2 itself left them out on purpose. The sharing model does not change: a tracker belongs to exactly one household, and membership in that household decides who can see it.
 
 Household names do not have to be unique across people. You cannot own two whose names match after trimming surrounding whitespace and ignoring case, so "Family" and " family " cannot both be yours. Another person can still own "Family", and belonging to their Family does not stop you owning your own. When two households you can see share a name under that same comparison, such as your "My trackers" and a partner's, the one someone else created shows that person's email beside its name. Otherwise the name stands alone.
 
@@ -116,16 +116,16 @@ Household names do not have to be unique across people. You cannot own two whose
 | Create, edit, archive, or restore trackers | Yes | No | No |
 | Turn on, regenerate, or turn off a share link | Yes | No | No |
 | Invite members, remove members, promote a member to owner, regenerate the invite link | Yes | No | No |
-| Rename the household (after phase 2) | Yes | No | No |
-| Move a tracker to another household they own (after phase 2) | Yes | No | No |
-| Leave the household (after phase 2) | No | Yes | No |
+| Rename the household | Yes | No | No |
+| Move a tracker to another household they own | Yes | No | No |
+| Leave the household | No | Yes | No |
 
-Any logged-in user can create a new household and becomes its owner (after phase 2).
+Any logged-in user can create a new household and becomes its owner.
 
 - **Recent** means an entry or recorded zero created in the last 15 minutes, by when it was saved, not when it happened. That covers "oops, I tapped twice" without letting a link holder wipe history. The window is a constant, easy to change.
 - The server enforces the time rule: a member's entry always happens now, even if a request supplies a different time. The later offline sync accepts the time of that tap, and only on that path. See Later ideas.
 - A household can have more than one owner, so ownership can be shared.
-- Ownership management stays small on purpose. Owners invite, remove members, and promote a member to owner. Removing applies to members only: an owner cannot remove themselves or another owner. There is no demotion. After phase 2 a regular member can leave a household; an owner cannot use that route. Owner departure, ownership transfer, sole-owner cases, and deleting a household are not designed yet. They belong with phase 5 account deletion and the other destructive operations.
+- Ownership management stays small on purpose. Owners invite, remove members, and promote a member to owner. Removing applies to members only: an owner cannot remove themselves or another owner. There is no demotion. A regular member can leave a household; an owner cannot use that route. Owner departure, ownership transfer, sole-owner cases, and deleting a household are not designed yet. They belong with phase 5 account deletion and the other destructive operations.
 - **Regenerating** a share link or invite link makes the old one stop working immediately. Turning a share link off does the same. Archiving a tracker turns its share link off, and restoring it leaves sharing off until the owner turns on a new link.
 - Members who want their own trackers make them in their personal household, where they are the owner. Private trackers stay there. Shared trackers go in a shared household.
 - Entries remember who logged them, or that they came in through a share link. The UI can show that where it helps without cluttering every view.
@@ -151,7 +151,7 @@ Sessions last 30 days. Once a session is past half its lifetime, the next reques
 
 A calm, mobile-first tracking notebook. Logging is fast, review is easy, and the same screens cover the dog's meals now and a workout measurement in phase 4. Tone takes a little from a family calendar: a recognizable icon, a soft color, an approachable card. The layout stays sparser than a calendar. How the screens look is in `DESIGN.md`.
 
-**Home.** Trackers stay grouped by household. Each one is a card with its name, icon, optional accent, a summary, and one logging button. The summary follows that tracker's summary display. Millie ate, set to Times today, reads "2 times today". McGill Big 3, set to Done today, reads "Done today". Logan Motrin, set to Last occurrence, reads "Last: 6:42 AM". The button records the current time in one tap, then offers **Undo**. The button's words are the log label, which is separate from the summary. Phase 2, before that setting exists, shows the Times today wording on every card.
+**Home.** Trackers stay grouped by household. Each one is a card with its name, icon, optional accent, a summary, and one logging button. The summary follows that tracker's summary display. Millie ate, set to Times today, reads "2 times today". McGill Big 3, set to Done today, reads "Done today". Logan Motrin, set to Last occurrence, reads "Last: 6:42 AM". The button records the current time in one tap, then offers **Undo**. The button's words are the log label, which is separate from the summary. Before that setting existed, phase 2 showed the Times today wording on every card.
 
 **Tracker detail.** Today's logging control and today's entries come first. History and trends follow. Correcting a mistake sits on the entry. Anyone who can log can undo an entry or a recorded zero from the last 15 minutes. Only an owner can choose when a new entry happened, edit the time or note, delete an older entry, mark an earlier day as none, or clear an older recorded zero. On a phone the logging action stays first. On a wider screen, history and charts can sit beside that column. They never sit above it.
 
@@ -159,7 +159,7 @@ A calm, mobile-first tracking notebook. Logging is fast, review is easy, and the
 
 **Trends.** The chart matches the tracker: events per day, a value over time, or a duration over time. A recorded zero is a zero. A day with nothing logged is a gap. That historical chart is on this page. Overlaying another tracker's events is a later phase 3 view. See Charts and overlays.
 
-**First slice.** Phase 2 replaces paper tick marks: create a tracker, choose an icon, log an event with the current time, correct a mistake, and review recent history, including a recorded zero versus nothing logged. An accent and a custom log label can be set then too; both are optional. Summary display is the small follow-on after that slice is in real use. Richer workout inputs stay in phase 4. Phase 3 is a historical chart first, then overlays of related events. Event-relative summaries are a later idea.
+**First slice.** Phase 2 replaces paper tick marks: create a tracker, choose an icon, log an event with the current time, correct a mistake, and review recent history, including a recorded zero versus nothing logged. An accent and a custom log label can be set then too; both are optional. Summary display was the small follow-on after that slice was in real use. Richer workout inputs stay in phase 4. Phase 3 is a historical chart first, then overlays of related events. Event-relative summaries are a later idea.
 
 ## Charts and overlays
 
@@ -231,7 +231,7 @@ Undo and delete recompute the line from the entries that remain. Removing the on
 
 ## Summaries
 
-- **Summary display** on the log-control line: Times today, Done today, or Last occurrence (the small follow-on after phase 2). Times today is the default. The three wordings are under Summary display.
+- **Summary display** on the log-control line: Times today, Done today, or Last occurrence. Times today is the default. The three wordings are under Summary display.
 - **Count per day** over the last 30 days, where an unlogged day stays blank (phase 2). This list does not follow summary display.
 - **Historical charts** for counts (phase 3).
 - **Overlays** of a related tracker's events on that chart (phase 3, after the historical chart).
@@ -278,13 +278,13 @@ Signup, password login, magic-link login, logout, and settings for password and 
 
 **Done when:** you can sign up, log out, log back in with a password and with a magic link, and a second account works independently.
 
-### Phase 2: The dog tracker, shared
+### Phase 2: The dog tracker, shared (done)
 
 The first screen replaces paper tick marks: create a tracker, choose an icon, log now, correct a mistake, and read recent history. Two people in the house use it from their phones, see today's count, deliberately record zero meals, tell that apart from a day nobody logged, fix recent mistakes, and look back over recent days. Phase 2 is the smallest version that does that well. Historical charts and overlays are specified above and stay in phase 3. Workout measurements stay in phase 4.
 
-- Households, count trackers, and entries. A personal household named "My trackers" is created at signup. Accounts from phase 1 get the same household when phase 2 ships. Phase 2 does not create or rename households. Those arrive in the Household organization follow-on below.
-- Create, edit, archive, and restore trackers (owners). Create and edit set the name, icon, accent, and log label. The icon defaults to the tally mark, the accent defaults to none, and the label defaults to "+ Log". Summary display is not on this form yet. Permanent deletion waits for phase 5.
-- Dashboard grouped by household. Each tracker is a card: name, icon, optional accent, the Times today summary ("3 times today", "1 time today", "None today", or "Nothing logged today"), and the log button. **Undo** shows immediately. Done today and Last occurrence are the follow-on after phase 2.
+- Households, count trackers, and entries. A personal household named "My trackers" is created at signup. Accounts from phase 1 get the same household when phase 2 ships. Phase 2 does not create or rename households. Those arrived in the Household organization follow-on below.
+- Create, edit, archive, and restore trackers (owners). Create and edit set the name, icon, accent, and log label. The icon defaults to the tally mark, the accent defaults to none, and the label defaults to "+ Log". Summary display was not on this form. It arrived in the follow-on below. Permanent deletion waits for phase 5.
+- Dashboard grouped by household. Each tracker is a card: name, icon, optional accent, the Times today summary ("3 times today", "1 time today", "None today", or "Nothing logged today"), and the log button. **Undo** shows immediately. Done today and Last occurrence arrived in the follow-on after phase 2.
 - A recorded zero ("none") is separate from a day with nothing logged. Logging an event clears that day's recorded zero.
 - Tracker page: today's log control and today's entries first, then history. Anyone in the household can log now with an optional note, and undo while recent. Owners can also choose the time (backfill), edit an entry's time or note, and delete. The last 30 days show each day's count, a recorded zero, or nothing logged.
 - On a phone, the log control stays first. On a wider screen, history can sit beside it. There is no chart on this page yet.
@@ -295,9 +295,9 @@ The first screen replaces paper tick marks: create a tracker, choose an icon, lo
 
 **Done when:** both of you log the dog's meals from your own phones (or one of you through the share link) for a week instead of using paper, and the Dog ate card shows "3 times today" correctly in your time zone. That wording is Times today, the default. The other two summary displays are not part of this done-when.
 
-### After phase 2: Summary display
+### After phase 2: Summary display (done)
 
-A small enhancement from dogfooding phase 2. It is not required for phase 2 to be done, and it does not wait for charts (phase 3) or for number and duration trackers (phase 4). How to build it is `SUMMARY-DISPLAY.md`.
+A small enhancement from dogfooding phase 2. It is not required for phase 2 to be done, and it does not wait for charts (phase 3) or for number and duration trackers (phase 4). How it was built is `SUMMARY-DISPLAY.md`.
 
 - Add **summary display** to create and edit, with Times today, Done today, and Last occurrence. The wording for each is under Summary display. The form uses ordinary radios. The stored values are `times`, `done`, and `last`.
 - Existing trackers, and any tracker saved without a choice, stay Times today. A phase 2 card keeps "3 times today".
@@ -307,7 +307,7 @@ A small enhancement from dogfooding phase 2. It is not required for phase 2 to b
 
 **Done when:** Millie ate reads "2 times today", McGill Big 3 reads "Done today" after one log and still after a second log the same day, and Logan Motrin reads "Last: 6:42 AM" on that day and "Last: Yesterday, 8:15 PM" the next day. The entries underneath are unchanged.
 
-### After phase 2: Household organization
+### After phase 2: Household organization (done)
 
 A small follow-on from dogfooding phase 2. Inviting a spouse into "My trackers" shared every tracker in it, including ones meant to stay private. The fix is to organize trackers into households. The sharing model stays the same: households, members, owners, and one household per tracker. This follow-on does not depend on summary display, charts, or phase 4. The product shape is under Sharing.
 
@@ -461,7 +461,7 @@ The product stays a small, flexible way to record arbitrary events and measureme
 | Payments | Paddle Billing | Merchant of record handles sales tax and VAT; ~15% fees at $5 accepted for that |
 | Sharing | Households plus per-tracker share links | Share links work without logging in; non-owners can log now, mark today as none, and undo recent entries. Only owners choose an entry's time on an ordinary post. Later offline sync stores the tap time |
 | Households in phase 2 | Personal "My trackers" household, invites only | Phase 2 had no household creation or renaming. Owners invite, remove members, and promote; no self-removal, demotion, or leaving |
-| Household organization | After phase 2, from dogfooding | Personal households stay private by default. Shared trackers live in a separately created household. Create, rename, move a tracker between households you own, and member leave. Names are not globally unique, but one person cannot own two that match after trim and case folding. A move keeps an active share link. Same `Household` model, no personal-tracker type. Creator email only when visible names collide. Household deletion, owner leave, demotion, and transfer stay deferred |
+| Household organization | Shipped after phase 2, from dogfooding | Personal households stay private by default. Shared trackers live in a separately created household. Create, rename, move a tracker between households you own, and member leave. Names are not globally unique, but one person cannot own two that match after trim and case folding. A move keeps an active share link. Same `Household` model, no personal-tracker type. Creator email only when visible names collide. Household deletion, owner leave, demotion, and transfer stay deferred |
 | Tracker removal | Archive and restore; permanent delete in phase 5 | Restore lives in a collapsed section on the household page |
 | Streaks | Not planned | No clear definition, and gamification is a non-goal. Reconsider only for a concrete use case. A later schedule does not add them |
 | Schedules and reminders | Later direction, outside phases 0–5 | Optional metadata on an ordinary tracker: no schedule, a frequency, or selected days or an interval, plus an optional conditional reminder. Not a new kind. Not a calendar, a todo list, or a habit platform. Storage, delivery, and exact wording stay open until the core tracker is dogfooded. See Later ideas |
@@ -475,7 +475,7 @@ The product stays a small, flexible way to record arbitrary events and measureme
 | Tracker icon | Optional, in phase 2 | Built-in picker of clear icons or emoji. Default is the tally mark. Name stays visible. Uploads stay a later idea. Moved out of later ideas so the first tracker is recognizable on its card. |
 | Accent | Optional, small built-in set | Recognition on the card and icon only. Pico remains the only UI palette. Default is none. |
 | Log button | Short label, still one tap | Default "+ Log". The dog card can say "+ Ate". Logan Motrin can say "Gave Motrin". Same quick-log and 15-minute undo as the earlier "+1" label. Independent of summary display. |
-| Summary display | Times today, Done today, or Last occurrence | Stored as `times`, `done`, or `last`. Presentation of the same timestamped entries. Default `times`. After phase 2. Done today does not cap entries per day. Last occurrence crosses midnight. An empty tracker says "Never logged". See Summary display. |
+| Summary display | Times today, Done today, or Last occurrence | Stored as `times`, `done`, or `last`. Presentation of the same timestamped entries. Default `times`. Shipped after phase 2. Done today does not cap entries per day. Last occurrence crosses midnight. An empty tracker says "Never logged". See Summary display. |
 | Zero vs unlogged | Different states | A recorded zero is deliberate. No entries and no recorded zero means nothing logged. Charts leave that day blank. The Times today summary says "None today" or "Nothing logged today". Done today and Last occurrence do not treat the zero as an entry. |
 | Analysis | Historical chart, then overlay | Chart.js time series first (phase 3), then one tracker's events marked on another's chart. Looking at the 1–3 days after a woods outing is the test case. Event-relative summaries are a later idea, not a statistics feature. Patterns, not causes. |
 | Ads | AdSense with a certified consent platform, after launch | No home-made consent banner. No ads on share, login, or settings |

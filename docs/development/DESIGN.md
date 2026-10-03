@@ -29,7 +29,7 @@ Logged-in home keeps the household groups. Inside a group, each tracker is one c
 - The chosen icon, or the tally-mark default.
 - An optional accent, as a soft tint on the card or the icon. No accent means an ordinary Pico card.
 - A summary line, from that tracker's summary display (`PLAN.md`). The log label does not choose this line.
-  - **Times today** (the default, and every card in phase 2): "Nothing logged today", "1 time today", "3 times today", or "None today".
+  - **Times today** (the default): "Nothing logged today", "1 time today", "3 times today", or "None today".
   - **Done today**: "Done today" when today has at least one entry, "Not done today" otherwise. A second entry today does not change the line.
   - **Last occurrence**: "Last: 6:42 AM" when the latest entry is today, "Last: Yesterday, 8:15 PM" when it was yesterday, "Last: Mon, Jan 2, 8:15 PM" when it was earlier, or "Never logged" when the tracker has no entries. After midnight, today's time becomes "Last: Yesterday, …". It does not become "Nothing logged today".
 - One prominent logging button. On the Millie card that button is **+ Ate**. Logan Motrin can say **Gave Motrin**. The default label is **+ Log**. One tap records the current time and then offers **Undo**. The button text is the log label, not the summary.
@@ -38,7 +38,7 @@ Cards stack in a single column. They do not tile into a dense grid. On a wide sc
 
 Each group's heading is the household name, and usually nothing else. When two households on the page have the same name, after trimming surrounding whitespace and ignoring case, the one someone else created adds that person's email in quieter text, so a partner's "My trackers" doesn't look like your own. Your own households never carry your email, and you cannot own two that match that way. "My trackers" is just the default name for a personal household. It does not suggest a shared family space.
 
-Below the groups, a quiet **New household** action (a `<details>` element, closed by default) opens one name field and a **Create** button. A name that matches another household you already own, after trimming surrounding whitespace and ignoring case, stays on the form with an error and creates nothing. Creating one lands on the new household's page, where the invite link is. Home does not turn into a household admin screen. This arrives with the Household organization follow-on (`PLAN.md`).
+Below the groups, a quiet **New household** action (a `<details>` element, closed by default) opens one name field and a **Create** button. A name that matches another household you already own, after trimming surrounding whitespace and ignoring case, stays on the form with an error and creates nothing. Creating one lands on the new household's page, where the invite link is. Home does not turn into a household admin screen.
 
 The header's global **New tracker** keeps its household picker. Starting from a household page is still the preferred path, because it opens the form already set to that household.
 
@@ -65,7 +65,7 @@ Below that, the household's trackers. An owner sees **New tracker**, which opens
 
 An owner also sees a collapsed **Archived trackers** section (a `<details>` element), closed by default and left out when nothing is archived. Each archived tracker shows its icon and name with a quiet **Restore** action. There is no separate archive page.
 
-The Household organization follow-on (`PLAN.md`) adds two quiet controls to this page:
+Two quiet controls sit on this page:
 
 - **Rename**, for owners, next to the heading. It is a `<details>` element with the name field and a **Save** button. It is not a separate settings page. A personal "My trackers" can be renamed the same way. A name that matches another household you own stays on the form with an error and changes nothing.
 - **Leave household**, for regular members, as quiet text at the bottom of the page. It asks for confirmation and then returns home. Owners don't see it.
@@ -112,7 +112,7 @@ The new-tracker form is one of these cards. The name, the icon picker, the optio
 - **Done today** — show whether it happened today
 - **Last occurrence** — show when it last happened
 
-Times today is selected by default. It is not tied to the log label. Edit offers the same choice. Phase 2's form does not have it yet; the follow-on after phase 2 adds it. The primary button is still the single full-width action that creates the tracker.
+Times today is selected by default. It is not tied to the log label. Edit offers the same choice. The primary button is still the single full-width action that creates the tracker.
 
 Inside a focused form:
 
@@ -144,7 +144,7 @@ Recording stays faster than reading.
 - Controls a person can't use aren't shown. Members get the note field but no time field. Share-link visitors get the summary line, the log button, **Record none**, and **Undo**. The summary is the same line as on the card.
 - Owners edit an entry's time or note in place. Delete asks for confirmation. Those controls sit on the entry. Members and share links still only undo while the entry is recent.
 - **Archive** is a quiet owner action on the tracker's edit form, not a button on the card. Restoring happens on the household page.
-- **Move to household** sits beside Archive on the edit form, after the Household organization follow-on. It only appears when the owner owns another household. It is a small select listing those households, with a **Move** button and a confirmation. The confirmation names the destination and says who the move affects: members of the current household who are not in the destination lose access, and members of the destination gain access, including the tracker's history. When the tracker has an active share link, the confirmation also says that link will keep working. The move does not turn the link off or replace it. Then it returns to the tracker page. The tracker keeps its name, icon, accent, log label, summary display, entries, and share link.
+- **Move to household** sits beside Archive on the edit form. It only appears when the owner owns another household. It is a small select listing those households, with a **Move** button and a confirmation. The confirmation names the destination and says who the move affects: members of the current household who are not in the destination lose access, and members of the destination gain access, including the tracker's history. When the tracker has an active share link, the confirmation also says that link will keep working. The move does not turn the link off or replace it. Then it returns to the tracker page. The tracker keeps its name, icon, accent, log label, summary display, entries, and share link.
 - A trend never sits above the log control, and the log control works without the chart script. Chart pages describe a pattern and never claim a cause.
 - Empty and early screens say what is missing in one or two sentences and offer the next action. They do not lecture.
 

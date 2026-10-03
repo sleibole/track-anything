@@ -11,6 +11,7 @@ Trackers belong to a household. Anyone in the household can log. A share link le
 - Choose the summary line: how many times today, whether it happened today, or when it last happened.
 - Log with one tap. Undo a recent entry, add an optional note, or mark today as none when nothing happened.
 - Invite household members with a link, or turn on a share link for a single tracker.
+- Create another household, rename one you own, move a tracker into a household you own, or leave a household you do not own.
 - Archive a tracker and restore it later from the household page.
 
 The app is one Go process and one SQLite database. Pages are server-rendered HTML. Forms work without JavaScript; HTMX updates the log control in place when it is available.

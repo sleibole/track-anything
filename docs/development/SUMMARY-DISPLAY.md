@@ -1,6 +1,8 @@
 # Summary display — implementation plan
 
-How to build the tracker setting specified in `PLAN.md` (Summary display, and After phase 2), `DESIGN.md` (Home, Tracker detail, Focused forms, Recording), and `ARCHITECTURE.md` (`Tracker.SummaryDisplay`, the create/edit routes, and the Summary display test bullet). Those documents decide the behavior. This one says where to change the code.
+How the tracker setting in `PLAN.md` (Summary display), `DESIGN.md` (Home, Tracker detail, Focused forms, Recording), and `ARCHITECTURE.md` (`Tracker.SummaryDisplay`, the create/edit routes, and the Summary display test bullet) was built. Those documents decide the behavior. This one says where the code lives.
+
+**Done.** The order of work below is in the app, and `make test` covers the cases under Tests. The sections from Data through Optimistic update describe that finished change.
 
 This is a presentation setting on an existing count tracker. Do not add a tracker kind, a new table, or a limit of one entry per day.
 
@@ -10,23 +12,23 @@ An owner chooses Times today, Done today, or Last occurrence on create and on ed
 
 **Done when** matches `PLAN.md`: Millie ate reads "2 times today", McGill Big 3 reads "Done today" after one log and still after a second log the same day, and Logan Motrin reads "Last: 6:42 AM" on that day and "Last: Yesterday, 8:15 PM" the next day. `make test` passes, including the cases under Tests.
 
-## Where the line is built today
+## Where the line is built
 
-`todaySummary` in `days.go` always returns the Times today wording. `cardFor` in `handlers_trackers.go` calls it for every card. The same `logControl` partial renders that sentence on the home card, the tracker page, and the share page (`templates/partials/tracker.html`).
+`summaryLine` in `days.go` chooses the sentence. `todaySummary` stays the Times today wording. `cardFor` in `handlers_trackers.go` calls `summaryLine` for every card. The same `logControl` partial renders that sentence on the home card, the tracker page, and the share page (`templates/partials/tracker.html`).
 
-Three callers build a card, and all three must pick up the new line:
+Three callers build a card, and all three go through `cardView`:
 
 - `app.card`, used by the dashboard in `handlers.go`
-- `trackerPage` in `handlers_trackers.go`, which calls `cardFor` after `loadToday`
-- `renderShare` in `handlers_share.go`, which calls `cardFor` the same way
+- `trackerPage` in `handlers_trackers.go`, which calls `cardView` after `loadToday`
+- `renderShare` in `handlers_share.go`, which calls `cardView` the same way
 
-`loadToday` only loads the current local day. That is enough for Times today and Done today. Last occurrence needs the entry with the latest `OccurredAt` on the tracker, including entries from earlier days.
+`loadToday` only loads the current local day. That is enough for Times today and Done today. Last occurrence loads the entry with the latest `OccurredAt` through `latestEntry`, including entries from earlier days. `cardView` calls `latestEntry` only when the display is `last`.
 
-`static/app.js` rewrites the sentence on a quick-log tap as a count (`data-count` plus one, then "N times today"). The server's redirect replaces it. That rewrite has to follow the tracker's setting, or a Done today or Last occurrence card flashes the Times today sentence.
+`static/app.js` rewrites the sentence on a quick-log tap from `data-summary-display`: the next Times today count, "Done today", or "Last:" at the current time in `data-time-zone`. The server's redirect replaces it.
 
-Create and edit go through `readTrackerForm`, `handleCreateTracker`, and `handleUpdateTracker`, and `templates/tracker_form.html`. The form has name, icon, accent, and log label. It has no summary field yet.
+Create and edit go through `readTrackerForm`, `handleCreateTracker`, and `handleUpdateTracker`, and `templates/tracker_form.html`. The form has name, icon, accent, log label, and summary display.
 
-Undo, delete, and editing an entry's time already redirect back and rebuild the page. They do not need their own summary code once the line is computed at render.
+Undo, delete, and editing an entry's time redirect back and rebuild the page. They do not have their own summary code. The line is computed at render.
 
 ## Data
 
@@ -160,7 +162,7 @@ Do not read the browser zone. Signup already stored the account zone, and a shar
 
 ## Tests
 
-Pure cases go in `days_test.go`, table-driven, no HTTP. Handler cases go in `trackers_test.go` and `share_test.go`, using the cookie jar and the fixed clock the suite already has.
+These cases are in the suite. Pure cases are in `days_test.go`, table-driven, no HTTP. Handler cases are in `trackers_test.go` and `share_test.go`, using the cookie jar and the fixed clock the suite already has.
 
 **Wording** (`summaryLine`):
 
@@ -196,11 +198,11 @@ Pure cases go in `days_test.go`, table-driven, no HTTP. Handler cases go in `tra
 
 **Regression.** `TestTodaySummary` and `TestCountsByDay` stay. A tracker created the way phase 2 tests create one still renders "Nothing logged today", "1 time today", and "None today".
 
-## Order of work
+## Order of work (done)
 
-1. Column, constants, and `summaryLine`, with the `days_test.go` table. Nothing visible changes until a caller uses it, and Times today is what `cardFor` still calls.
-2. `latestEntry`, `cardFor`, and the three call sites. Default rows still render Times today. Add the Done today and Last occurrence page tests.
-3. Form read, create, update, and the template. Add the validation and independence tests.
+1. Column, constants, and `summaryLine`, with the `days_test.go` table.
+2. `latestEntry`, `cardView`, `cardFor`, and the three call sites, with the Done today and Last occurrence page tests.
+3. Form read, create, update, and the template, with the validation and independence tests.
 4. `data-summary-display`, `data-time-zone`, and the `app.js` branch.
 
-Run `make test` after step 2 and again at the end. Existing Times today tests should stay green at every step because omitted and empty mean `times`.
+All four are in the app. Omitted and empty mean `times`, so existing Times today tests stay on that wording.
