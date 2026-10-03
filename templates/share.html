@@ -1,6 +1,7 @@
 {{define "title"}}{{.Data.Tracker.Name}} · Track Anything{{end}}
 {{define "content"}}
 {{with .Data}}
+{{template "autoRefresh" (printf "/s/%s" .Token)}}
 <section class="tracker-log share-page">
   {{template "trackerTitle" .Tracker}}
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}

@@ -25,6 +25,11 @@
 </article>
 {{end}}
 
+{{/* Re-fetches the page content every 30 seconds, and when the tab comes back, unless someone is editing. */}}
+{{define "autoRefresh"}}
+<div hidden data-refresh hx-get="{{.}}" hx-trigger="every 30s [trackerIdle()], visibilitychange[trackerIdle()] from:document" hx-target="#content" hx-swap="innerHTML show:none"></div>
+{{end}}
+
 {{define "trackerTitle"}}
 <h1 class="tracker-title{{with .Accent}} accent-{{.}}{{end}}"><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</h1>
 {{end}}

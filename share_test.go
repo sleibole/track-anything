@@ -26,6 +26,39 @@ func shareLink(t *testing.T) (ts *testServer, owner *browser, tr Tracker, link s
 	return ts, owner, tr, "/s/" + *tr.ShareToken
 }
 
+func TestTrackerPagesRefreshThemselves(t *testing.T) {
+	ts, owner, tr, link := shareLink(t)
+	trigger := `hx-trigger="every 30s [trackerIdle()], visibilitychange[trackerIdle()] from:document"`
+	for _, path := range []string{"/", fmt.Sprintf("/trackers/%d", tr.ID)} {
+		body := owner.get(path).body
+		if !strings.Contains(body, `data-refresh hx-get="`+path+`"`) || !strings.Contains(body, trigger) {
+			t.Errorf("%s does not refresh itself", path)
+		}
+	}
+	if body := ts.browser(t).get(link).body; !strings.Contains(body, `data-refresh hx-get="`+link+`"`) {
+		t.Error("share page does not refresh itself")
+	}
+	for _, path := range []string{fmt.Sprintf("/trackers/%d/edit", tr.ID), fmt.Sprintf("/households/%d", tr.HouseholdID), "/trackers/new", "/settings"} {
+		if strings.Contains(owner.get(path).body, "data-refresh") {
+			t.Errorf("%s refreshes, but it is a form page", path)
+		}
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.srv.URL+fmt.Sprintf("/trackers/%d", tr.ID), nil)
+	req.Header.Set("HX-Request", "true")
+	r := owner.do(req)
+	if r.status != http.StatusOK || strings.Contains(r.body, "<!doctype html>") || !strings.Contains(r.body, "Dog ate") {
+		t.Fatalf("refresh request: %d, full layout %v", r.status, strings.Contains(r.body, "<!doctype html>"))
+	}
+
+	script := owner.get("/static/app.js").body
+	for _, want := range []string{"window.trackerIdle", `details[open], .htmx-request`, `"input, textarea, select"`, "htmx:abort"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("app.js missing %q", want)
+		}
+	}
+}
+
 func TestShareLinkLogsWithoutAnAccount(t *testing.T) {
 	ts, owner, tr, link := shareLink(t)
 	sitter := ts.browser(t)

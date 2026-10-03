@@ -68,6 +68,22 @@ function restoreUnsavedLog(event) {
 document.addEventListener("htmx:responseError", restoreUnsavedLog);
 document.addEventListener("htmx:sendError", restoreUnsavedLog);
 
+// Tracker pages refresh themselves (the autoRefresh partial). Skip it while the tab is
+// hidden, a form field has focus, a details section is open, or a request is in flight.
+window.trackerIdle = function () {
+  if (document.visibilityState !== "visible") return false;
+  const content = document.getElementById("content");
+  if (!content || content.querySelector("details[open], .htmx-request")) return false;
+  const active = document.activeElement;
+  return !(active && content.contains(active) && active.matches("input, textarea, select"));
+};
+
+// A tap or form submit wins over a refresh already on its way, so a stale page can't land after it.
+document.addEventListener("htmx:beforeRequest", (event) => {
+  if (event.detail.elt.matches("[data-refresh]")) return;
+  document.querySelectorAll("[data-refresh]").forEach((el) => htmx.trigger(el, "htmx:abort"));
+});
+
 // clockInZone matches Go's "3:04 PM": hour without a leading zero, and a normal space before AM/PM.
 function clockInZone(date, timeZone) {
   const parts = new Intl.DateTimeFormat("en-US", {

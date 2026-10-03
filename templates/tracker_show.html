@@ -1,6 +1,7 @@
 {{define "title"}}{{.Data.Tracker.Name}} · Track Anything{{end}}
 {{define "content"}}
 {{with .Data}}
+{{template "autoRefresh" (printf "/trackers/%d" .Tracker.ID)}}
 <div class="tracker-page">
   <section class="tracker-log">
     <div class="page-head">
