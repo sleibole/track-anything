@@ -219,6 +219,7 @@ func (a *app) routes() http.Handler {
 
 	mux.Handle("GET /static/", http.FileServerFS(embedded))
 	mux.HandleFunc("GET /healthz", a.handleHealthz)
+	mux.HandleFunc("GET /debug/client-ip", a.handleDebugClientIP)
 	mux.HandleFunc("GET /{$}", a.handleHome)
 
 	mux.HandleFunc("GET /signup", a.handleSignupForm)
