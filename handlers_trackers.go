@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"gorm.io/gorm"
 )
 
 const (
@@ -341,18 +343,17 @@ type trackerForm struct {
 	Icons          []choice
 	Accents        []choice
 	Summaries      []choice
-	Tracker        *Tracker // set when editing
-	ShareURL       string
+	Tracker         *Tracker // set when editing
+	ShareURL        string
+	MoveHouseholds  []Household // other households the owner owns; empty hides the move control
+	MoveConfirm     string
+	MoveError       string
 }
 
 func (a *app) newTrackerForm(u *User) (trackerForm, error) {
 	f := trackerForm{Icons: trackerIcons, Accents: trackerAccents, Summaries: summaryDisplays, SummaryDisplay: summaryTimes}
-	err := a.db.Table("households").
-		Select("households.*").
-		Joins("JOIN household_members ON household_members.household_id = households.id").
-		Where("household_members.user_id = ? AND household_members.role = ?", u.ID, roleOwner).
-		Order("household_members.created_at, households.id").
-		Find(&f.Households).Error
+	hs, err := ownedHouseholds(a.db, u.ID)
+	f.Households = hs
 	if len(f.Households) > 0 {
 		f.HouseholdID = f.Households[0].ID
 	}
@@ -482,12 +483,49 @@ func (a *app) editForm(t Tracker) trackerForm {
 	return f
 }
 
+// withMove fills the move control for households the user owns besides this tracker's.
+func (a *app) withMove(u *User, t Tracker, f trackerForm) (trackerForm, error) {
+	owned, err := ownedHouseholds(a.db, u.ID)
+	if err != nil {
+		return f, err
+	}
+	for _, h := range owned {
+		if h.ID != t.HouseholdID {
+			f.MoveHouseholds = append(f.MoveHouseholds, h)
+		}
+	}
+	f.MoveConfirm = moveConfirm(f.MoveHouseholds, t.ShareToken != nil)
+	return f, nil
+}
+
+func moveConfirm(dests []Household, shareOn bool) string {
+	if len(dests) == 0 {
+		return ""
+	}
+	var msg string
+	if len(dests) == 1 {
+		name := dests[0].Name
+		msg = fmt.Sprintf("Move this tracker to %s? Members of this household who aren't in %s will lose access. Members of %s will gain access, including its history.", name, name, name)
+	} else {
+		msg = "Move this tracker to the household you selected? Members of this household who aren't in it will lose access. Members of that household will gain access, including its history."
+	}
+	if shareOn {
+		msg += " The existing share link will keep working."
+	}
+	return msg
+}
+
 func (a *app) handleEditTracker(w http.ResponseWriter, r *http.Request) {
 	t, ok := a.ownedTracker(w, r)
 	if !ok {
 		return
 	}
-	a.render(w, r, http.StatusOK, "tracker_form.html", a.editForm(t))
+	f, err := a.withMove(currentUser(r), t, a.editForm(t))
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	a.render(w, r, http.StatusOK, "tracker_form.html", f)
 }
 
 func (a *app) handleUpdateTracker(w http.ResponseWriter, r *http.Request) {
@@ -495,12 +533,16 @@ func (a *app) handleUpdateTracker(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	f := a.editForm(t)
+	f, err := a.withMove(currentUser(r), t, a.editForm(t))
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	if f.Error = readTrackerForm(r, &f); f.Error != "" {
 		a.render(w, r, http.StatusUnprocessableEntity, "tracker_form.html", f)
 		return
 	}
-	err := a.db.Model(&t).Updates(map[string]any{
+	err = a.db.Model(&t).Updates(map[string]any{
 		"name": f.Name, "icon": f.Icon, "accent": f.Accent, "log_label": f.LogLabel, "summary_display": f.SummaryDisplay,
 	}).Error
 	if err != nil {
@@ -508,6 +550,48 @@ func (a *app) handleUpdateTracker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/trackers/%d", t.ID), http.StatusSeeOther)
+}
+
+func (a *app) handleMoveTracker(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	t, ok := a.ownedTracker(w, r)
+	if !ok {
+		return
+	}
+	dest, role, err := householdForUser(a.db, u.ID, parseID(r.PostFormValue("household")))
+	if err != nil {
+		a.lookupError(w, r, err)
+		return
+	}
+	if role != roleOwner {
+		a.ownerOnly(w, r)
+		return
+	}
+	if dest.ID == t.HouseholdID {
+		f, err := a.withMove(u, t, a.editForm(t))
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		f.MoveError = "This tracker is already in that household."
+		a.render(w, r, http.StatusUnprocessableEntity, "tracker_form.html", f)
+		return
+	}
+	err = a.db.Transaction(func(tx *gorm.DB) error {
+		var last int
+		if err := tx.Model(&Tracker{}).Where("household_id = ?", dest.ID).Select("COALESCE(MAX(position), 0)").Scan(&last).Error; err != nil {
+			return err
+		}
+		return tx.Model(&Tracker{}).Where("id = ?", t.ID).Updates(map[string]any{
+			"household_id": dest.ID,
+			"position":     last + 1,
+		}).Error
+	})
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	redirectTo(w, r, fmt.Sprintf("/trackers/%d", t.ID))
 }
 
 // Archiving clears the share link, so restoring never brings an old link back.

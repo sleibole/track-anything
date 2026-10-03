@@ -77,6 +77,18 @@
   {{end}}
 </article>
 
+{{if $.Data.MoveHouseholds}}
+<form method="post" action="/trackers/{{.ID}}/move" hx-post="/trackers/{{.ID}}/move" hx-confirm="{{$.Data.MoveConfirm}}" class="move-form">
+  <label>
+    Move to household
+    <select name="household">
+      {{range $.Data.MoveHouseholds}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+    </select>
+  </label>
+  {{with $.Data.MoveError}}<p role="alert" class="error">{{.}}</p>{{end}}
+  <button type="submit" class="quiet">Move</button>
+</form>
+{{end}}
 <form method="post" action="/trackers/{{.ID}}/archive" class="archive-form">
   <button type="submit" class="quiet">{{icon "archive"}} Archive this tracker</button>
   <small>Hides it and turns off its share link. Entries are kept; restore it from the household page.</small>

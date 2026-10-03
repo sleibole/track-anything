@@ -44,6 +44,18 @@ func archivedTrackerForOwner(db *gorm.DB, userID, trackerID uint) (Tracker, erro
 	return t, err
 }
 
+// ownedHouseholds returns the households the user owns, oldest membership first.
+func ownedHouseholds(db *gorm.DB, userID uint) ([]Household, error) {
+	var hs []Household
+	err := db.Table("households").
+		Select("households.*").
+		Joins("JOIN household_members ON household_members.household_id = households.id").
+		Where("household_members.user_id = ? AND household_members.role = ?", userID, roleOwner).
+		Order("household_members.created_at, households.id").
+		Find(&hs).Error
+	return hs, err
+}
+
 // householdForUser returns a household and the user's role in it.
 func householdForUser(db *gorm.DB, userID, householdID uint) (Household, string, error) {
 	var h Household

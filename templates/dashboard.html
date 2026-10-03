@@ -3,7 +3,7 @@
   <h1>Your trackers</h1>
   <a href="/trackers/new" role="button" class="secondary outline">{{icon "plus"}} New tracker</a>
 </div>
-{{range .Data}}
+{{range .Data.Groups}}
 <section class="household-group">
   <h2>
     <a href="/households/{{.Household.ID}}">{{.Household.Name}}</a>
@@ -14,4 +14,15 @@
   {{end}}
 </section>
 {{end}}
+<details class="new-household"{{if .Data.Error}} open{{end}}>
+  <summary>New household</summary>
+  {{with .Data.Error}}<p role="alert" class="error">{{.}}</p>{{end}}
+  <form method="post" action="/households" hx-post="/households">
+    <label>
+      Name
+      <input type="text" name="name" value="{{.Data.Name}}" required maxlength="60"{{if .Data.Error}} autofocus{{end}}>
+    </label>
+    <button type="submit">Create</button>
+  </form>
+</details>
 {{end}}

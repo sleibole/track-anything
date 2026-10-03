@@ -64,7 +64,7 @@ track-anything/
 ├── handlers.go         # health check, dashboard, shared handler helpers
 ├── handlers_trackers.go # create, edit, archive, restore, share link, tracker page
 ├── handlers_entries.go  # log, undo, owner corrections, recorded zeros
-├── handlers_households.go # members, invite link, join, archived trackers
+├── handlers_households.go # create, rename, leave, members, invite link, join, archived trackers
 ├── handlers_share.go   # share-link pages, no login
 ├── render.go           # template loading + render helper (full page vs HTMX partial)
 ├── middleware.go       # request logging, panic recovery, security headers
@@ -231,7 +231,7 @@ type RecordedZero struct {
 - **Personal household.** Signup creates the user, a `Household` named "My trackers", and an owner `HouseholdMember` row in one transaction. Nothing marks it as personal. It is an ordinary household that has one member until someone is invited. Shared trackers go in a separately created household (`PLAN.md`, Sharing). There is no personal-tracker flag and no per-tracker access list.
 - **Phase 1 → phase 2 backfill.** Accounts created in phase 1 have no household. After `AutoMigrate`, `db.go` runs a one-time step in a transaction: every user with no `household_members` row gets a "My trackers" household with that user as owner. It is idempotent, so running it again changes nothing. Request handlers do not check for a missing household. Once every existing database has run the step (local development databases; production first launches with phase 2), the step is deleted.
 - **Ownership stays small.** Removing deletes a `member` row. If invites are on, the same transaction replaces the invite token, so the old link cannot be used to rejoin. The handler refuses to remove any owner, including the person asking. There is no demotion. Phase 2 has no leave route. After phase 2, leaving is for members only (below). Owner departure, ownership transfer, sole-owner cases, and household deletion are not designed. They belong with phase 5 account deletion.
-- **Household organization (after phase 2).** **Not built.** `Household`, `HouseholdMember`, and `Tracker.HouseholdID` are enough. There are no new tables or columns.
+- **Household organization (after phase 2).** `Household`, `HouseholdMember`, and `Tracker.HouseholdID` are enough. There are no new tables or columns.
   - **Create** inserts a `Household` and an owner `HouseholdMember` row for the creator in one transaction, the same pair signup makes. The name is trimmed, required, and limited to the tracker name length (`maxTrackerName`). Invites start off. Before the insert, the trimmed name is compared, case-insensitively, with the names of households that user already owns. A match is rejected and nothing is created. A household they only belong to does not count, so two people can each own "Family".
   - **Rename** updates `Name` with the same validation and the same owned-name check, excluding the household being renamed. Saving its own name, including a spacing or case change, is allowed. There is no unique index on `Name`. The check is in the handler, because it is per owner rather than global.
   - **Leave** deletes the caller's own row only when that row's role is `member`, as one conditional delete. If the caller is an owner, nothing changes. Leaving does not rotate the invite token, because the person left on their own and is not being kept out. It touches no other household, so a personal household and other memberships are untouched.
@@ -343,10 +343,10 @@ POST   /settings/timezone         set the stored IANA zone from a friendly name
 POST   /settings/password         set or change, only after the email is verified; logs out other sessions
 POST   /settings/verify           resend the confirmation email
 
-POST   /households                            create a household; the creator is its owner (after phase 2, not built)
+POST   /households                            create a household; the creator is its owner
 GET    /households/{hid}                      members, invite link, trackers; owners also see a collapsed archived list
-POST   /households/{hid}                      rename (owner; after phase 2, not built)
-POST   /households/{hid}/leave                leave as a regular member; refused for owners (after phase 2, not built)
+POST   /households/{hid}                      rename (owner)
+POST   /households/{hid}/leave                leave as a regular member; refused for owners
 POST   /households/{hid}/invite               turn on or regenerate the invite link (owner)
 POST   /households/{hid}/invite/delete        turn invites off (owner)
 POST   /households/{hid}/members/{uid}/delete remove a member (owner; refused for any owner, including yourself)
@@ -361,7 +361,7 @@ GET    /trackers/{id}             tracker page: log control and today's entries 
 POST   /trackers/{id}             rename, icon, accent, log label; summary display after phase 2 (owner)
 POST   /trackers/{id}/archive     archive; clears the share link (owner)
 POST   /trackers/{id}/restore     restore an archived tracker, sharing stays off (owner)
-POST   /trackers/{id}/move        move to another household the user owns; entries untouched (owner of both; after phase 2, not built)
+POST   /trackers/{id}/move        move to another household the user owns; entries untouched (owner of both)
 POST   /trackers/{id}/delete      permanently delete, with confirmation (owner, phase 5, not built)
 POST   /trackers/{id}/share       turn on or regenerate share link (owner)
 POST   /trackers/{id}/share/delete turn share link off (owner)

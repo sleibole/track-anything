@@ -268,7 +268,10 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /settings/password", a.requireUser(a.handleSettingsPassword))
 	mux.HandleFunc("POST /settings/verify", a.requireUser(a.handleSettingsVerify))
 
+	mux.HandleFunc("POST /households", a.requireUser(a.handleCreateHousehold))
 	mux.HandleFunc("GET /households/{hid}", a.requireUser(a.handleHousehold))
+	mux.HandleFunc("POST /households/{hid}", a.requireUser(a.handleRenameHousehold))
+	mux.HandleFunc("POST /households/{hid}/leave", a.requireUser(a.handleLeaveHousehold))
 	mux.HandleFunc("POST /households/{hid}/invite", a.requireUser(a.handleInviteOn))
 	mux.HandleFunc("POST /households/{hid}/invite/delete", a.requireUser(a.handleInviteOff))
 	mux.HandleFunc("POST /households/{hid}/members/{uid}/delete", a.requireUser(a.handleRemoveMember))
@@ -283,6 +286,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /trackers/{id}", a.requireUser(a.handleUpdateTracker))
 	mux.HandleFunc("POST /trackers/{id}/archive", a.requireUser(a.handleArchiveTracker))
 	mux.HandleFunc("POST /trackers/{id}/restore", a.requireUser(a.handleRestoreTracker))
+	mux.HandleFunc("POST /trackers/{id}/move", a.requireUser(a.handleMoveTracker))
 	mux.HandleFunc("POST /trackers/{id}/share", a.requireUser(a.handleShareOn))
 	mux.HandleFunc("POST /trackers/{id}/share/delete", a.requireUser(a.handleShareOff))
 

@@ -68,6 +68,17 @@ func parseID(s string) uint {
 	return uint(id)
 }
 
+// redirectTo sends a form to another page. A normal submit is a 303. An HTMX submit
+// gets a full navigation, so the address bar matches the page it lands on.
+func redirectTo(w http.ResponseWriter, r *http.Request, to string) {
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", to)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
 // redirectBack sends a form post back to the page it came from. HTMX follows the
 // redirect and swaps the page content in place.
 func redirectBack(w http.ResponseWriter, r *http.Request, fallback string) {
@@ -89,14 +100,20 @@ func (a *app) handleHome(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, http.StatusOK, "dashboard.html", groups)
+	a.render(w, r, http.StatusOK, "dashboard.html", dashboardPage{Groups: groups})
 }
 
 type householdGroup struct {
 	Household Household
 	Role      string
-	CreatedBy string // the creator's email, when that isn't the viewer
+	CreatedBy string // creator's email, and only when another visible household has the same name
 	Cards     []trackerCard
+}
+
+type dashboardPage struct {
+	Groups []householdGroup
+	Name   string // the name field, kept when creating a household fails
+	Error  string
 }
 
 func (g householdGroup) IsOwner() bool { return g.Role == roleOwner }
@@ -114,10 +131,6 @@ func (a *app) dashboard(u *User) ([]householdGroup, error) {
 		if err := a.db.Take(&g.Household, m.HouseholdID).Error; err != nil {
 			return nil, err
 		}
-		var err error
-		if g.CreatedBy, err = a.createdByOther(m.HouseholdID, u.ID); err != nil {
-			return nil, err
-		}
 		var trackers []Tracker
 		if err := a.db.Where("household_id = ? AND archived_at IS NULL", m.HouseholdID).Order("position, id").Find(&trackers).Error; err != nil {
 			return nil, err
@@ -132,7 +145,35 @@ func (a *app) dashboard(u *User) ([]householdGroup, error) {
 		}
 		groups = append(groups, g)
 	}
+	// The creator's email appears only when two visible households share a name,
+	// and never on a household the viewer created.
+	dup := duplicateHouseholdNames(groups)
+	for i := range groups {
+		if !dup[groups[i].Household.ID] {
+			continue
+		}
+		email, err := a.createdByOther(groups[i].Household.ID, u.ID)
+		if err != nil {
+			return nil, err
+		}
+		groups[i].CreatedBy = email
+	}
 	return groups, nil
+}
+
+// duplicateHouseholdNames marks households whose names match another on the page,
+// after trimming surrounding whitespace and ignoring case.
+func duplicateHouseholdNames(groups []householdGroup) map[uint]bool {
+	dup := map[uint]bool{}
+	for i := range groups {
+		for j := i + 1; j < len(groups); j++ {
+			if sameHouseholdName(groups[i].Household.Name, groups[j].Household.Name) {
+				dup[groups[i].Household.ID] = true
+				dup[groups[j].Household.ID] = true
+			}
+		}
+	}
+	return dup
 }
 
 // createdByOther returns the household creator's email, or "" when the viewer created it.

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Helpers shared by the phase 2 tests.
@@ -187,6 +188,7 @@ func TestMembersCantManageHousehold(t *testing.T) {
 		fmt.Sprintf("/households/%d/invite/delete", h.ID),
 		fmt.Sprintf("/households/%d/members/%d/delete", h.ID, ownerID),
 		fmt.Sprintf("/households/%d/members/%d/owner", h.ID, ts.user(t, "member@example.com").ID),
+		fmt.Sprintf("/households/%d", h.ID),
 	} {
 		if r := member.post(path, nil); r.status != http.StatusForbidden {
 			t.Errorf("member POST %s: %d", path, r.status)
@@ -199,12 +201,18 @@ func TestMembersCantManageHousehold(t *testing.T) {
 		t.Error("member changed roles")
 	}
 	page := member.get(fmt.Sprintf("/households/%d", h.ID)).body
-	if strings.Contains(page, "Remove") || strings.Contains(page, "/join/") || strings.Contains(page, "New tracker") {
+	if strings.Contains(page, "Remove") || strings.Contains(page, "/join/") || strings.Contains(page, "New tracker") || strings.Contains(page, "Rename") {
 		t.Error("member sees owner controls")
 	}
+	if !strings.Contains(page, "Leave household") {
+		t.Error("member has no way to leave")
+	}
 	ownerPage := owner.get(fmt.Sprintf("/households/%d", h.ID)).body
-	if !strings.Contains(ownerPage, "Make owner") {
+	if !strings.Contains(ownerPage, "Make owner") || !strings.Contains(ownerPage, "Rename") {
 		t.Error("owner doesn't see member controls")
+	}
+	if strings.Contains(ownerPage, "Leave household") {
+		t.Error("owner sees leave")
 	}
 	if !strings.Contains(ownerPage, fmt.Sprintf(`/trackers/new?household=%d`, h.ID)) {
 		t.Error("owner has no way to add a tracker from the household page")
@@ -280,7 +288,311 @@ func TestNonMembersGet404ForHouseholds(t *testing.T) {
 	if r := stranger.post(fmt.Sprintf("/households/%d/invite", h.ID), nil); r.status != http.StatusNotFound {
 		t.Errorf("POST invite: %d", r.status)
 	}
+	if r := stranger.post(fmt.Sprintf("/households/%d", h.ID), url.Values{"name": {"Nope"}}); r.status != http.StatusNotFound {
+		t.Errorf("POST rename: %d", r.status)
+	}
+	if r := stranger.post(fmt.Sprintf("/households/%d/leave", h.ID), nil); r.status != http.StatusNotFound {
+		t.Errorf("POST leave: %d", r.status)
+	}
 	if r := stranger.get("/households/999"); r.status != http.StatusNotFound {
 		t.Errorf("missing household: %d", r.status)
+	}
+}
+
+func (ts *testServer) ownedNamed(t *testing.T, email, name string) Household {
+	t.Helper()
+	var h Household
+	err := ts.app.db.Table("households").
+		Select("households.*").
+		Joins("JOIN household_members hm ON hm.household_id = households.id").
+		Where("hm.user_id = ? AND hm.role = ? AND households.name = ?", ts.user(t, email).ID, roleOwner, name).
+		Take(&h).Error
+	if err != nil {
+		t.Fatalf("household %q owned by %s: %v", name, email, err)
+	}
+	return h
+}
+
+func headingShows(body string, id uint, email string) bool {
+	needle := fmt.Sprintf(`/households/%d">`, id)
+	i := strings.Index(body, needle)
+	if i < 0 {
+		return false
+	}
+	rest := body[i:]
+	end := strings.Index(rest, "</h2>")
+	if end < 0 {
+		return false
+	}
+	return strings.Contains(rest[:end], email)
+}
+
+func TestCreateAndRenameHousehold(t *testing.T) {
+	ts := newTestServer(t)
+	owner := ts.browser(t)
+	owner.signup("owner@example.com", "")
+	if !strings.Contains(owner.get("/").body, "New household") {
+		t.Fatal("dashboard has no way to create a household")
+	}
+
+	if r := owner.post("/households", url.Values{"name": {"   "}}); r.status != http.StatusUnprocessableEntity || !strings.Contains(r.body, "Give the household a name.") {
+		t.Fatalf("blank name: %d", r.status)
+	}
+	if r := owner.post("/households", url.Values{"name": {strings.Repeat("a", maxTrackerName+1)}}); r.status != http.StatusUnprocessableEntity || !strings.Contains(r.body, "60 characters") {
+		t.Fatalf("long name: %d", r.status)
+	}
+	exact := strings.Repeat("b", maxTrackerName)
+	if r := owner.post("/households", url.Values{"name": {exact}}); r.status != http.StatusOK {
+		t.Fatalf("name at the limit: %d", r.status)
+	}
+
+	r := owner.post("/households", url.Values{"name": {"  Family  "}})
+	h := ts.ownedNamed(t, "owner@example.com", "Family")
+	if r.url.Path != fmt.Sprintf("/households/%d", h.ID) {
+		t.Fatalf("create landed at %s", r.url)
+	}
+	if h.InviteToken != nil {
+		t.Fatal("a new household starts with invites on")
+	}
+	if ts.role(t, h, "owner@example.com") != roleOwner {
+		t.Fatal("creator is not the owner")
+	}
+	if !strings.Contains(r.body, "Invite someone") {
+		t.Fatal("new household page has no invite control")
+	}
+
+	// Renaming to the same name, including spacing and case, is allowed.
+	if r := owner.post(fmt.Sprintf("/households/%d", h.ID), url.Values{"name": {" family "}}); r.url.Path != fmt.Sprintf("/households/%d", h.ID) {
+		t.Fatalf("rename landed at %s", r.url)
+	}
+	if got := ts.household(t, h.ID).Name; got != "family" {
+		t.Fatalf("renamed to %q", got)
+	}
+
+	member := ts.browser(t)
+	member.signup("member@example.com", "")
+	if r := member.post(fmt.Sprintf("/households/%d", h.ID), url.Values{"name": {"Nope"}}); r.status != http.StatusNotFound || ts.household(t, h.ID).Name != "family" {
+		t.Fatalf("non-member rename: %d", r.status)
+	}
+}
+
+func TestOwnedHouseholdNamesStayDistinctForOnePerson(t *testing.T) {
+	ts := newTestServer(t)
+	owner := ts.browser(t)
+	owner.signup("owner@example.com", "")
+	owner.post("/households", url.Values{"name": {"Family"}})
+	h := ts.ownedNamed(t, "owner@example.com", "Family")
+
+	for _, name := range []string{" family ", "FAMILY"} {
+		r := owner.post("/households", url.Values{"name": {name}})
+		if r.status != http.StatusUnprocessableEntity || !strings.Contains(r.body, "already have a household") {
+			t.Fatalf("create %q: %d", name, r.status)
+		}
+	}
+	if r := owner.post(fmt.Sprintf("/households/%d", ts.personalHousehold(t, "owner@example.com").ID), url.Values{"name": {" family "}}); r.status != http.StatusUnprocessableEntity || ts.household(t, h.ID).Name != "Family" {
+		t.Fatalf("rename onto an owned name: %d", r.status)
+	}
+	personal := ts.personalHousehold(t, "owner@example.com")
+	if personal.Name != "My trackers" {
+		t.Fatalf("rejected rename changed the personal household to %q", personal.Name)
+	}
+
+	other := ts.browser(t)
+	other.signup("other@example.com", "")
+	if r := other.post("/households", url.Values{"name": {"Family"}}); r.status != http.StatusOK {
+		t.Fatalf("another user owning Family: %d", r.status)
+	}
+	if ts.ownedNamed(t, "other@example.com", "Family").ID == h.ID {
+		t.Fatal("the other user joined the existing Family instead of creating one")
+	}
+
+	owner.post(fmt.Sprintf("/households/%d/invite", h.ID), nil)
+	h = ts.household(t, h.ID)
+	member := ts.browser(t)
+	member.signup("member@example.com", "")
+	member.post("/join/"+*h.InviteToken, nil)
+	if ts.role(t, h, "member@example.com") != roleMember {
+		t.Fatal("did not join")
+	}
+	if r := member.post("/households", url.Values{"name": {"Family"}}); r.status != http.StatusOK {
+		t.Fatalf("member of someone else's Family creating their own: %d", r.status)
+	}
+	if ts.role(t, ts.ownedNamed(t, "member@example.com", "Family"), "member@example.com") != roleOwner {
+		t.Fatal("membership blocked owning a household of the same name")
+	}
+}
+
+func TestDashboardDisambiguatesDuplicateNames(t *testing.T) {
+	ts := newTestServer(t)
+	owner := ts.browser(t)
+	owner.signup("owner@example.com", "")
+	owner.post("/households", url.Values{"name": {"Family"}})
+	h := ts.ownedNamed(t, "owner@example.com", "Family")
+	owner.post(fmt.Sprintf("/households/%d/invite", h.ID), nil)
+	h = ts.household(t, h.ID)
+
+	member := ts.browser(t)
+	member.signup("member@example.com", "")
+	member.post("/join/"+*h.InviteToken, nil)
+
+	// "My trackers" and "Family" don't match, so the heading is just the name.
+	home := member.get("/").body
+	if headingShows(home, h.ID, "owner@example.com") || strings.Contains(home, "member@example.com") {
+		t.Fatalf("unique names were disambiguated:\n%s", home)
+	}
+
+	// The member can rename their own household to Family. They don't own the other one.
+	personal := ts.personalHousehold(t, "member@example.com")
+	member.post(fmt.Sprintf("/households/%d", personal.ID), url.Values{"name": {" family "}})
+	personal = ts.household(t, personal.ID)
+	if personal.Name != "family" {
+		t.Fatalf("rename to own name stored %q", personal.Name)
+	}
+	home = member.get("/").body
+	if !headingShows(home, h.ID, "owner@example.com") {
+		t.Fatal("a partner's same-named household doesn't show who created it")
+	}
+	if headingShows(home, personal.ID, "member@example.com") || strings.Contains(home, "member@example.com") {
+		t.Fatal("the viewer's own household shows their email")
+	}
+}
+
+func TestMoveTrackerBetweenOwnedHouseholds(t *testing.T) {
+	ts, owner, member, personal := sharedHouse(t)
+	tr := owner.createTracker(personal, "Millie ate", url.Values{
+		"icon": {"paw"}, "accent": {"green"}, "log_label": {"+ Ate"}, "summary_display": {"done"},
+	})
+	edit := fmt.Sprintf("/trackers/%d/edit", tr.ID)
+	if strings.Contains(owner.get(edit).body, "Move to household") {
+		t.Fatal("move is offered when the owner has nowhere to move it")
+	}
+
+	owner.post("/households", url.Values{"name": {"Family"}})
+	family := ts.ownedNamed(t, "owner@example.com", "Family")
+	other := owner.createTracker(family, "Already there", nil)
+
+	owner.post(fmt.Sprintf("/households/%d/invite", family.ID), nil)
+	family = ts.household(t, family.ID)
+	dest := ts.browser(t)
+	dest.signup("dest@example.com", "")
+	dest.post("/join/"+*family.InviteToken, nil)
+
+	if r := member.get(fmt.Sprintf("/trackers/%d", tr.ID)); r.status != http.StatusOK {
+		t.Fatal("source member can't see the tracker yet")
+	}
+	if r := dest.get(fmt.Sprintf("/trackers/%d", tr.ID)); r.status != http.StatusNotFound {
+		t.Fatal("destination member can see the tracker before the move")
+	}
+
+	owner.post(fmt.Sprintf("/trackers/%d/quick", tr.ID), nil)
+	entryID := ts.entries(t, tr.ID)[0].ID
+	ts.clock.advance(25 * time.Hour)
+	owner.post(fmt.Sprintf("/trackers/%d/zero", tr.ID), nil)
+	zeroID := ts.zeros(t, tr.ID)[0].ID
+	owner.post(fmt.Sprintf("/trackers/%d/share", tr.ID), nil)
+	tr = ts.tracker(t, tr.ID)
+	token := *tr.ShareToken
+
+	page := owner.get(edit).body
+	for _, want := range []string{"Move to household", "lose access", "gain access", family.Name, "share link will keep working"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("move confirmation missing %q", want)
+		}
+	}
+
+	move := fmt.Sprintf("/trackers/%d/move", tr.ID)
+	if r := owner.post(move, url.Values{"household": {fmt.Sprint(personal.ID)}}); r.status != http.StatusUnprocessableEntity || ts.tracker(t, tr.ID).HouseholdID != personal.ID {
+		t.Fatalf("move into the current household: %d", r.status)
+	}
+	if r := member.post(move, url.Values{"household": {fmt.Sprint(family.ID)}}); r.status != http.StatusForbidden || ts.tracker(t, tr.ID).HouseholdID != personal.ID {
+		t.Fatalf("member move: %d", r.status)
+	}
+	if r := dest.post(move, url.Values{"household": {fmt.Sprint(family.ID)}}); r.status != http.StatusNotFound || ts.tracker(t, tr.ID).HouseholdID != personal.ID {
+		t.Fatalf("non-member move: %d", r.status)
+	}
+	// A household the owner only belongs to, and one they can't see, are both refused.
+	if r := member.post(fmt.Sprintf("/trackers/%d/move", member.createTracker(ts.personalHousehold(t, "member@example.com"), "Private", nil).ID), url.Values{"household": {fmt.Sprint(personal.ID)}}); r.status != http.StatusForbidden {
+		t.Fatalf("move into a household where the user is only a member: %d", r.status)
+	}
+	strangerHouse := ts.personalHousehold(t, "dest@example.com")
+	private := ts.tracker(t, member.createTracker(ts.personalHousehold(t, "member@example.com"), "Still private", nil).ID)
+	if r := member.post(fmt.Sprintf("/trackers/%d/move", private.ID), url.Values{"household": {fmt.Sprint(strangerHouse.ID)}}); r.status != http.StatusNotFound || ts.tracker(t, private.ID).HouseholdID != private.HouseholdID {
+		t.Fatalf("move into an unseen household: %d", r.status)
+	}
+
+	if r := owner.post(move, url.Values{"household": {fmt.Sprint(family.ID)}}); r.url.Path != fmt.Sprintf("/trackers/%d", tr.ID) {
+		t.Fatalf("move landed at %s", r.url)
+	}
+	got := ts.tracker(t, tr.ID)
+	if got.ID != tr.ID || got.HouseholdID != family.ID || got.Name != "Millie ate" || got.Icon != "paw" || got.Accent != "green" || got.LogLabel != "+ Ate" || got.SummaryDisplay != "done" {
+		t.Fatalf("tracker after move: %+v", got)
+	}
+	if got.ShareToken == nil || *got.ShareToken != token {
+		t.Fatal("move replaced the share link")
+	}
+	if got.Position <= ts.tracker(t, other.ID).Position {
+		t.Fatalf("position %d is not last (other is %d)", got.Position, ts.tracker(t, other.ID).Position)
+	}
+	es := ts.entries(t, tr.ID)
+	zs := ts.zeros(t, tr.ID)
+	if len(es) != 1 || es[0].ID != entryID || len(zs) != 1 || zs[0].ID != zeroID {
+		t.Fatalf("history changed: entries %+v zeros %+v", es, zs)
+	}
+	if r := ts.browser(t).get("/s/" + token); r.status != http.StatusOK || !strings.Contains(r.body, "Millie ate") {
+		t.Fatalf("share link after move: %d", r.status)
+	}
+	if r := member.get(fmt.Sprintf("/trackers/%d", tr.ID)); r.status != http.StatusNotFound {
+		t.Fatal("a member of only the old household can still see the tracker")
+	}
+	if r := member.post(fmt.Sprintf("/trackers/%d/quick", tr.ID), nil); r.status != http.StatusNotFound || len(ts.entries(t, tr.ID)) != 1 {
+		t.Fatal("a member of only the old household can still log")
+	}
+	if r := dest.post(fmt.Sprintf("/trackers/%d/quick", tr.ID), nil); r.status != http.StatusOK || len(ts.entries(t, tr.ID)) != 2 {
+		t.Fatalf("destination member log: %d", r.status)
+	}
+
+	archived := owner.createTracker(personal, "Old", nil)
+	owner.post(fmt.Sprintf("/trackers/%d/archive", archived.ID), nil)
+	if r := owner.post(fmt.Sprintf("/trackers/%d/move", archived.ID), url.Values{"household": {fmt.Sprint(family.ID)}}); r.status != http.StatusNotFound || ts.tracker(t, archived.ID).HouseholdID != personal.ID {
+		t.Fatalf("move archived: %d", r.status)
+	}
+}
+
+func TestLeaveHousehold(t *testing.T) {
+	ts, owner, member, h := sharedHouse(t)
+	token := *h.InviteToken
+	personal := ts.personalHousehold(t, "member@example.com")
+
+	owner.post("/households", url.Values{"name": {"Home"}})
+	home := ts.ownedNamed(t, "owner@example.com", "Home")
+	owner.post(fmt.Sprintf("/households/%d/invite", home.ID), nil)
+	home = ts.household(t, home.ID)
+	member.post("/join/"+*home.InviteToken, nil)
+	if ts.role(t, home, "member@example.com") != roleMember {
+		t.Fatal("did not join the second household")
+	}
+
+	if r := owner.post(fmt.Sprintf("/households/%d/leave", h.ID), nil); r.status != http.StatusForbidden || ts.role(t, h, "owner@example.com") != roleOwner {
+		t.Fatalf("owner leave: %d", r.status)
+	}
+	if got := ts.household(t, h.ID).InviteToken; got == nil || *got != token {
+		t.Fatal("owner leave changed the invite link")
+	}
+
+	r := member.post(fmt.Sprintf("/households/%d/leave", h.ID), nil)
+	if r.url.Path != "/" || ts.role(t, h, "member@example.com") != "" {
+		t.Fatalf("member leave: %d at %s, role %q", r.status, r.url, ts.role(t, h, "member@example.com"))
+	}
+	if got := ts.household(t, h.ID).InviteToken; got == nil || *got != token {
+		t.Fatal("leaving rotated the invite link")
+	}
+	if ts.role(t, personal, "member@example.com") != roleOwner {
+		t.Fatal("leaving changed the personal household")
+	}
+	if ts.role(t, home, "member@example.com") != roleMember {
+		t.Fatal("leaving one household dropped another membership")
+	}
+	if r := member.get(fmt.Sprintf("/households/%d", h.ID)); r.status != http.StatusNotFound {
+		t.Fatal("someone who left can still open the household")
 	}
 }
