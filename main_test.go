@@ -89,37 +89,6 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
-func TestDebugClientIP(t *testing.T) {
-	a := newTestApp(t)
-	a.cfg.TrustedIPHeader = "Fly-Client-IP"
-	h := a.routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/debug/client-ip", nil)
-	req.Header.Set("Fly-Client-IP", "203.0.113.9")
-	req.Header.Set("X-Forwarded-For", "198.51.100.1")
-	req.Header.Set("CF-Connecting-IP", "203.0.113.5")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d", rec.Code)
-	}
-	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
-		t.Fatalf("content-type %q", ct)
-	}
-	if rec.Body.String() != a.clientIP(req)+"\n" {
-		t.Fatalf("body %q", rec.Body.String())
-	}
-	if strings.Contains(rec.Body.String(), "Fly-Client-IP") || strings.Contains(rec.Body.String(), "X-Forwarded-For") || strings.Contains(rec.Body.String(), "198.51.100.1") {
-		t.Fatalf("body leaked other request data: %q", rec.Body.String())
-	}
-
-	untrusted := newTestApp(t).routes()
-	code, body := get(t, untrusted, "/debug/client-ip", map[string]string{"Fly-Client-IP": "203.0.113.9"})
-	if code != http.StatusOK || body != "192.0.2.1\n" {
-		t.Fatalf("got %d %q", code, body)
-	}
-}
-
 func TestHealthzDBFailure(t *testing.T) {
 	var buf bytes.Buffer
 	a := newTestApp(t)

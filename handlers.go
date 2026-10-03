@@ -23,13 +23,6 @@ func (a *app) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok\n"))
 }
 
-// handleDebugClientIP reports the address used for rate limits.
-// Temporary: remove after verifying production client-IP detection.
-func (a *app) handleDebugClientIP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Write([]byte(a.clientIP(r) + "\n"))
-}
-
 type messagePage struct {
 	Title  string
 	Text   string
