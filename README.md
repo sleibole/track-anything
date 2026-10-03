@@ -48,7 +48,7 @@ The SQLite file is created at `data/trackanything.db`.
 | `SMTP_USER` | empty | SMTP username. |
 | `SMTP_PASS` | empty | SMTP password. |
 | `MAIL_FROM` | `Track Anything <hello@trackanything.io>` | From address. |
-| `TRUSTED_IP_HEADER` | empty | Client IP header set by a trusted proxy: `CF-Connecting-IP` or `X-Forwarded-For`. Empty uses the connection address. |
+| `TRUSTED_IP_HEADER` | empty | Client IP header set by a trusted proxy: `Fly-Client-IP`, `CF-Connecting-IP`, or `X-Forwarded-For`. Empty uses the connection address. Production sets `Fly-Client-IP`. |
 
 ## Tests
 

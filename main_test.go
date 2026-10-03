@@ -213,6 +213,10 @@ func TestValidateConfig(t *testing.T) {
 	if err := prod.validate(); err != nil {
 		t.Fatal(err)
 	}
+	fly := config{Env: "prod", BaseURL: "https://trackanything.io", baseURLSet: true, TrustedIPHeader: "Fly-Client-IP"}
+	if err := fly.validate(); err != nil {
+		t.Fatal(err)
+	}
 	for _, cfg := range []config{
 		{Env: "production", BaseURL: "https://trackanything.io", baseURLSet: true},
 		{Env: "prod", BaseURL: "http://localhost:8080"},
@@ -241,6 +245,14 @@ func TestLoadConfigReadsTrustedProxyHeader(t *testing.T) {
 	t.Setenv("ENV", "prod")
 	t.Setenv("BASE_URL", "https://trackanything.io")
 	cfg = loadConfig()
+	if err := cfg.validate(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TRUSTED_IP_HEADER", "Fly-Client-IP")
+	cfg = loadConfig()
+	if cfg.TrustedIPHeader != "Fly-Client-IP" {
+		t.Fatalf("%+v", cfg)
+	}
 	if err := cfg.validate(); err != nil {
 		t.Fatal(err)
 	}

@@ -74,9 +74,9 @@ func (c config) validate() error {
 		return fmt.Errorf("ENV must be dev or prod, got %q", c.Env)
 	}
 	switch c.TrustedIPHeader {
-	case "", "CF-Connecting-IP", "X-Forwarded-For":
+	case "", "CF-Connecting-IP", "Fly-Client-IP", "X-Forwarded-For":
 	default:
-		return fmt.Errorf("TRUSTED_IP_HEADER must be empty, CF-Connecting-IP, or X-Forwarded-For, got %q", c.TrustedIPHeader)
+		return fmt.Errorf("TRUSTED_IP_HEADER must be empty, CF-Connecting-IP, Fly-Client-IP, or X-Forwarded-For, got %q", c.TrustedIPHeader)
 	}
 	if c.Env != "prod" {
 		return nil

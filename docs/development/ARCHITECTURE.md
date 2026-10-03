@@ -119,7 +119,7 @@ Production sets the same names with `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`
 
 In production, `BASE_URL` must be set and must be an `https` URL with a host. The process exits otherwise, so a missing public URL is not discovered when the first login email goes out.
 
-`TRUSTED_IP_HEADER` is empty unless this process sits behind a proxy that strips client-supplied forwarding headers and sets that one header itself. The only accepted values are empty, `CF-Connecting-IP`, and `X-Forwarded-For`. Empty means the client address is `RemoteAddr`. The app does not fall back from one header to another.
+`TRUSTED_IP_HEADER` is empty unless this process sits behind a proxy that strips client-supplied forwarding headers and sets that one header itself. The only accepted values are empty, `Fly-Client-IP`, `CF-Connecting-IP`, and `X-Forwarded-For`. Empty means the client address is `RemoteAddr`. `Fly-Client-IP` and `CF-Connecting-IP` are a single address. `X-Forwarded-For` is a list, and only the first address is used. The app does not fall back from one header to another. Production sets `TRUSTED_IP_HEADER=Fly-Client-IP` because Fly Proxy is the trusted public ingress. See Deployment.
 
 In production, a configured SMTP server must negotiate TLS. The mailer uses implicit TLS on port 465 and STARTTLS otherwise, and it refuses to send if neither happens. Development can use MailHog without TLS.
 
@@ -429,7 +429,7 @@ Phase 3 has two steps. The tracker page loads Chart.js when it shows a historica
 - `html/template` escapes output.
 - Request logs record the route pattern for login links, verification links, share links, and invite links (`/login/link/{token}`, `/verify/{token}`, `/s/{token}`, `/join/{token}`). The raw token is not written.
 - Redirects after login use `safeNext`. It parses the value with `net/url` and allows only a local path. Absolute URLs, scheme-relative URLs, backslashes, and control characters fall back to `/`.
-- Per-IP fixed-window rate limits on password login, magic-link requests, signup, and share-link posts. The client address is `RemoteAddr` unless `TRUSTED_IP_HEADER` names `CF-Connecting-IP` or `X-Forwarded-For`. Nothing else is consulted, and there is no fallback from one header to the other. The in-memory map stops admitting new keys at 10,000. See Deployment for what the proxy must do before that header is set.
+- Per-IP fixed-window rate limits on password login, magic-link requests, signup, and share-link posts. The client address is `RemoteAddr` unless `TRUSTED_IP_HEADER` names `Fly-Client-IP`, `CF-Connecting-IP`, or `X-Forwarded-For`. Nothing else is consulted, and there is no fallback from one header to the other. The in-memory map stops admitting new keys at 10,000. See Deployment for what the proxy must do before that header is set.
 - Authentication and verification mail is also limited to 3 messages per recipient address every 15 minutes. When that limit is hit, the response is the same as a successful send.
 - **Cloudflare Turnstile is not built.** Signup, login, and change password do not check a Turnstile token. It is remaining work before the first public deploy, listed in `PLAN.md`.
 - The Paddle webhook is not built. Signature checking for it belongs with billing, in phase 5.
@@ -508,10 +508,10 @@ The app runs on the homelab server ("box") under Dokku. Fly.io provides only a s
 Browser
   │ HTTPS
   ▼
-Cloudflare (DNS, proxy, browser-facing TLS)
-  │ HTTPS
+Fly Proxy (trusted public ingress; sets Fly-Client-IP)
+  │
   ▼
-Fly.io VM :443 (public ingress, TLS termination, reverse proxy)
+Fly nginx (overwrites Fly-Client-IP before forwarding)
   │ plain HTTP over WireGuard
   ▼
 box:80 (Dokku's nginx, routes by Host header)
@@ -527,7 +527,7 @@ trackanything container (Go binary, plain HTTP on $PORT)
 - **SQLite storage**: `dokku storage:mount` a host directory, e.g. `/var/lib/dokku/data/storage/trackanything:/data`, with `DB_PATH=/data/trackanything.db`. Exactly one instance.
 - **Host header must survive the chain**, for Dokku's routing and the CSRF origin check.
 - **`Secure` cookies still work**, because the browser sees HTTPS.
-- **Client IP.** Leave `TRUSTED_IP_HEADER` empty until the origin cannot be reached except through the proxy that sets the header. For this chain, set `TRUSTED_IP_HEADER=CF-Connecting-IP` only after the Fly ingress accepts connections from Cloudflare and rejects the rest (Cloudflare's published IP ranges, or Authenticated Origin Pulls). The proxy must strip any client-supplied `CF-Connecting-IP` and `X-Forwarded-For` and set the trusted header itself. Cloudflare appends to `X-Forwarded-For`, so that header is not the client address unless a proxy replaces it and `TRUSTED_IP_HEADER` is set to `X-Forwarded-For` on purpose. The app does not assume either header is present.
+- **Client IP.** The current production deployment sets `TRUSTED_IP_HEADER=Fly-Client-IP` because Fly Proxy is the trusted public ingress. Fly Proxy writes the original visitor address in `Fly-Client-IP`. Fly nginx overwrites that header before the request crosses WireGuard to Dokku, so a client-supplied value does not survive. `Fly-Client-IP` is one address, the same shape as `CF-Connecting-IP`. Leave `TRUSTED_IP_HEADER` empty until the origin cannot be reached except through the proxy that sets the header. `CF-Connecting-IP` stays valid when that proxy replaces the header itself. `X-Forwarded-For` is a list; the app uses the first address only when `TRUSTED_IP_HEADER` is set to `X-Forwarded-For` on purpose, after a proxy replaces the header rather than appending to it. The app does not fall back from one header to another and does not assume the configured header is present.
 - **Backups**: [Litestream](https://litestream.io) to S3-compatible storage, or a nightly `sqlite3 .backup` cron job on box to start. The choice can wait while phase 2 is built, but before the first public deploy a method and destination are chosen, configured, and tested by restoring a copy. Live from the first deploy, no exceptions. How long backups keep deleted data stays open until the phase 5 privacy policy.
 - **Before the first public deploy**: the production email relay sends a magic link end to end, and backups run and restore.
 

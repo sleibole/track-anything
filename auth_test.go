@@ -629,11 +629,18 @@ func TestClientIP(t *testing.T) {
 		{"remote addr", "", nil, "192.0.2.1"},
 		{"spoofed cloudflare ignored", "", map[string]string{"CF-Connecting-IP": "203.0.113.5", "X-Forwarded-For": "198.51.100.1"}, "192.0.2.1"},
 		{"spoofed forwarded-for ignored", "", map[string]string{"X-Forwarded-For": "198.51.100.1, 10.0.0.1"}, "192.0.2.1"},
+		{"spoofed fly ignored", "", map[string]string{"Fly-Client-IP": "203.0.113.9"}, "192.0.2.1"},
 		{"cloudflare when configured", "CF-Connecting-IP", map[string]string{"CF-Connecting-IP": "203.0.113.5", "X-Forwarded-For": "198.51.100.1"}, "203.0.113.5"},
 		{"forwarded-for ignored unless it is the trusted header", "CF-Connecting-IP", map[string]string{"X-Forwarded-For": "198.51.100.1"}, "192.0.2.1"},
 		{"forwarded-for when configured", "X-Forwarded-For", map[string]string{"X-Forwarded-For": "198.51.100.1, 10.0.0.1", "CF-Connecting-IP": "203.0.113.5"}, "198.51.100.1"},
 		{"invalid trusted value falls back", "CF-Connecting-IP", map[string]string{"CF-Connecting-IP": "not-an-ip"}, "192.0.2.1"},
 		{"embedded control characters in a trusted header fall back", "CF-Connecting-IP", map[string]string{"CF-Connecting-IP": "203.0.113.5\r\nX-Evil: 1"}, "192.0.2.1"},
+		{"fly ipv4 when configured", "Fly-Client-IP", map[string]string{"Fly-Client-IP": "203.0.113.9", "CF-Connecting-IP": "203.0.113.5", "X-Forwarded-For": "198.51.100.1"}, "203.0.113.9"},
+		{"fly ipv6 when configured", "Fly-Client-IP", map[string]string{"Fly-Client-IP": "2001:db8::1"}, "2001:db8::1"},
+		{"fly missing falls back", "Fly-Client-IP", nil, "192.0.2.1"},
+		{"fly malformed falls back", "Fly-Client-IP", map[string]string{"Fly-Client-IP": "not-an-ip"}, "192.0.2.1"},
+		{"fly list is not split", "Fly-Client-IP", map[string]string{"Fly-Client-IP": "203.0.113.9, 10.0.0.1"}, "192.0.2.1"},
+		{"fly control characters fall back", "Fly-Client-IP", map[string]string{"Fly-Client-IP": "203.0.113.9\r\nX-Evil: 1"}, "192.0.2.1"},
 	} {
 		r := httptest.NewRequest(http.MethodGet, "/", nil) // RemoteAddr 192.0.2.1:1234
 		for k, v := range tc.headers {

@@ -80,7 +80,9 @@ func (l *rateLimiter) sweep(t time.Time) {
 
 // clientIP returns the address used for rate limits. trustedHeader is empty unless
 // this process is behind a proxy that strips client-supplied forwarding headers and
-// sets that one header itself. Any other header, including X-Forwarded-For, is ignored.
+// sets that one header itself. Any other header is ignored. X-Forwarded-For is a
+// comma-separated list and only its first address is used. Every other trusted
+// header is a single address.
 func clientIP(r *http.Request, trustedHeader string) string {
 	if trustedHeader != "" {
 		raw := strings.TrimSpace(r.Header.Get(trustedHeader))
