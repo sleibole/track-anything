@@ -80,7 +80,24 @@ Start with the smallest useful tracker and add value shapes only when a real use
 
 Trackers belong to a **household**, and a single tracker can also be shared by **link**.
 
-**Households.** Every user gets a personal household at signup, named "My trackers", with that user as owner. The owner can invite people with an **invite link** (copied and sent by hand; the app sends no invite email). Opening it asks you to log in or sign up, then adds you as a member. You can belong to several households; the dashboard shows trackers from all of them, grouped by household. A household someone else created shows that person's email beside its name, so two households called "My trackers" stay distinct. Phase 2 has no screens for creating or renaming households.
+**Households.** A household is the unit of sharing. Everyone in it sees and logs all of its trackers. The owner can invite people with an **invite link** (copied and sent by hand; the app sends no invite email). Opening it asks you to log in or sign up, then adds you as a member. You can belong to several households and own several. The dashboard shows trackers from all of them, grouped by household.
+
+**Personal household.** Every user gets one at signup, named "My trackers", with that user as owner. It is the default place for that person's private trackers. It is an ordinary household: the same model, the same rules, and no separate personal-tracker type. It is not shared with a spouse or family by default. Joining someone else's household does not expose either person's personal household. The name is only a default and can be renamed.
+
+**Shared households.** Trackers meant for more than one person live in a separate household that someone creates for them, such as Family, Home, or Millie. Dogfooding phase 2 showed why. Inviting a spouse into "My trackers" shares every tracker in it, and some trackers should stay private. A tracker like "Girl stuff" stays in one person's personal household, while Millie ate and Woods run belong in a shared Family household:
+
+```
+Sheldon                         Wife
+├── My trackers                 ├── My trackers
+│   └── private trackers        │   └── private trackers
+└── Family                      └── Family
+    ├── Millie ate                  ├── Millie ate
+    └── Woods run                   └── Woods run
+```
+
+Family is one household that both people belong to. Each person's "My trackers" is their own. Creating households, renaming them, moving a tracker between households you own, and leaving a household are the follow-on after phase 2 (Household organization). Phase 2 itself left them out on purpose. The sharing model does not change: a tracker belongs to exactly one household, and membership in that household decides who can see it.
+
+Household names do not have to be unique across people. You cannot own two whose names match after trimming surrounding whitespace and ignoring case, so "Family" and " family " cannot both be yours. Another person can still own "Family", and belonging to their Family does not stop you owning your own. When two households you can see share a name under that same comparison, such as your "My trackers" and a partner's, the one someone else created shows that person's email beside its name. Otherwise the name stands alone.
 
 **Share links.** The owner can turn on a share link for one tracker. Anyone with the link can use that tracker **without logging in**. That covers a kitchen tablet, a dog sitter, or a relative who will never make an account.
 
@@ -99,13 +116,18 @@ Trackers belong to a **household**, and a single tracker can also be shared by *
 | Create, edit, archive, or restore trackers | Yes | No | No |
 | Turn on, regenerate, or turn off a share link | Yes | No | No |
 | Invite members, remove members, promote a member to owner, regenerate the invite link | Yes | No | No |
+| Rename the household (after phase 2) | Yes | No | No |
+| Move a tracker to another household they own (after phase 2) | Yes | No | No |
+| Leave the household (after phase 2) | No | Yes | No |
+
+Any logged-in user can create a new household and becomes its owner (after phase 2).
 
 - **Recent** means an entry or recorded zero created in the last 15 minutes, by when it was saved, not when it happened. That covers "oops, I tapped twice" without letting a link holder wipe history. The window is a constant, easy to change.
 - The server enforces the time rule: a member's entry always happens now, even if a request supplies a different time. The later offline sync accepts the time of that tap, and only on that path. See Later ideas.
 - A household can have more than one owner, so ownership can be shared.
-- Ownership management stays small in phase 2. Removing applies to members only: an owner cannot remove themselves or another owner. There is no demotion and no "leave household". Phase 5 account deletion handles the sole-owner cases.
+- Ownership management stays small on purpose. Owners invite, remove members, and promote a member to owner. Removing applies to members only: an owner cannot remove themselves or another owner. There is no demotion. After phase 2 a regular member can leave a household; an owner cannot use that route. Owner departure, ownership transfer, sole-owner cases, and deleting a household are not designed yet. They belong with phase 5 account deletion and the other destructive operations.
 - **Regenerating** a share link or invite link makes the old one stop working immediately. Turning a share link off does the same. Archiving a tracker turns its share link off, and restoring it leaves sharing off until the owner turns on a new link.
-- Members who want their own trackers make them in their personal household, where they are the owner.
+- Members who want their own trackers make them in their personal household, where they are the owner. Private trackers stay there. Shared trackers go in a shared household.
 - Entries remember who logged them, or that they came in through a share link. The UI can show that where it helps without cluttering every view.
 - A tracker you can't see is indistinguishable from one that doesn't exist.
 
@@ -260,13 +282,13 @@ Signup, password login, magic-link login, logout, and settings for password and 
 
 The first screen replaces paper tick marks: create a tracker, choose an icon, log now, correct a mistake, and read recent history. Two people in the house use it from their phones, see today's count, deliberately record zero meals, tell that apart from a day nobody logged, fix recent mistakes, and look back over recent days. Phase 2 is the smallest version that does that well. Historical charts and overlays are specified above and stay in phase 3. Workout measurements stay in phase 4.
 
-- Households, count trackers, and entries. A personal household named "My trackers" is created at signup. Accounts from phase 1 get the same household when phase 2 ships. No household creation or renaming.
+- Households, count trackers, and entries. A personal household named "My trackers" is created at signup. Accounts from phase 1 get the same household when phase 2 ships. Phase 2 does not create or rename households. Those arrive in the Household organization follow-on below.
 - Create, edit, archive, and restore trackers (owners). Create and edit set the name, icon, accent, and log label. The icon defaults to the tally mark, the accent defaults to none, and the label defaults to "+ Log". Summary display is not on this form yet. Permanent deletion waits for phase 5.
 - Dashboard grouped by household. Each tracker is a card: name, icon, optional accent, the Times today summary ("3 times today", "1 time today", "None today", or "Nothing logged today"), and the log button. **Undo** shows immediately. Done today and Last occurrence are the follow-on after phase 2.
 - A recorded zero ("none") is separate from a day with nothing logged. Logging an event clears that day's recorded zero.
 - Tracker page: today's log control and today's entries first, then history. Anyone in the household can log now with an optional note, and undo while recent. Owners can also choose the time (backfill), edit an entry's time or note, and delete. The last 30 days show each day's count, a recorded zero, or nothing logged.
 - On a phone, the log control stays first. On a wider screen, history can sit beside it. There is no chart on this page yet.
-- Household page: invite link (create, regenerate, disable), join flow, remove members, promote a member to owner. Owners can't remove themselves or other owners; there is no demotion and no leaving. A collapsed **Archived trackers** section restores archived trackers.
+- Household page: invite link (create, regenerate, disable), join flow, remove members, promote a member to owner. Owners can't remove themselves or other owners; there is no demotion, and phase 2 has no leaving. A collapsed **Archived trackers** section restores archived trackers.
 - Share links: turn on, regenerate, turn off; share page with the same summary line as the card, log button, record-none for today, and undo; no login. In phase 2 that line is the Times today wording.
 - **First public deploy**, with a confirmed home-screen install on a phone. Before it goes out, a production email relay is chosen and delivering magic links, and a backup method and destination are chosen, configured, and tested with a restore. Backups run from day one. Neither choice blocks building the rest of phase 2. Hosting steps are in `ARCHITECTURE.md`.
 - **Cloudflare Turnstile** protects signup, login (password and magic link), and change password. Production requires `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`. The trackanything.io widget is Managed mode. Verification is a server-side Siteverify call. Local development uses Cloudflare's always-pass test keys when those variables are unset. Turnstile does not replace rate limits or CSRF. There is no Turnstile SDK.
@@ -284,6 +306,20 @@ A small enhancement from dogfooding phase 2. It is not required for phase 2 to b
 - No new tracker kind, and no change to history rows or charts.
 
 **Done when:** Millie ate reads "2 times today", McGill Big 3 reads "Done today" after one log and still after a second log the same day, and Logan Motrin reads "Last: 6:42 AM" on that day and "Last: Yesterday, 8:15 PM" the next day. The entries underneath are unchanged.
+
+### After phase 2: Household organization
+
+A small follow-on from dogfooding phase 2. Inviting a spouse into "My trackers" shared every tracker in it, including ones meant to stay private. The fix is to organize trackers into households. The sharing model stays the same: households, members, owners, and one household per tracker. This follow-on does not depend on summary display, charts, or phase 4. The product shape is under Sharing.
+
+- **Create a household.** Any logged-in user can create one with a name and becomes its owner. Typical names are Family, Home, or Millie. Then invite people with the existing invite link. The name cannot match another household that person already owns, after trimming surrounding whitespace and ignoring case.
+- **Rename a household.** Owners can rename it, including their personal "My trackers". The same owned-name rule applies. Renaming a household to its own current name, including a change of spacing or case, is fine.
+- **Move a tracker** to another household the same person owns. It is the same tracker with all of its entries, recorded zeros, and history. Nothing is copied. It still belongs to exactly one household. After the move, membership in the new household decides who can see it: members of the old household who are not in the new one lose access, and members of the new one gain it. Its settings stay as they are. An active share link is kept and keeps working. The move does not turn it off or replace it. This is how Millie ate and Woods run go from "My trackers" into a new Family household without being recreated.
+- **Leave a household.** A regular member can leave a household. Owners cannot leave this way.
+- **Dashboard headings** show only the household name. The creator's email appears only when two households you can see have the same name. See Sharing.
+
+Not in this follow-on: deleting a household, demoting an owner, an owner leaving, ownership transfer, merging households, per-tracker permissions, nested households, family roles, invitations by email, and separate private and shared tracker types.
+
+**Done when:** each of you keeps private trackers in your own "My trackers", Millie ate and Woods run have moved into a shared Family household with their full history, both of you log them there, and neither of you sees the other's private trackers.
 
 ### Phase 3: Historical charts, then overlays
 
@@ -424,7 +460,8 @@ The product stays a small, flexible way to record arbitrary events and measureme
 | Price | $5/year, may change | $1/month superseded. The price lives in Paddle; the app stores only `PADDLE_PRICE_ID` |
 | Payments | Paddle Billing | Merchant of record handles sales tax and VAT; ~15% fees at $5 accepted for that |
 | Sharing | Households plus per-tracker share links | Share links work without logging in; non-owners can log now, mark today as none, and undo recent entries. Only owners choose an entry's time on an ordinary post. Later offline sync stores the tap time |
-| Households in phase 2 | Personal "My trackers" household, invites only | No household creation or renaming. Owners invite, remove members, and promote; no self-removal, demotion, or leaving |
+| Households in phase 2 | Personal "My trackers" household, invites only | Phase 2 had no household creation or renaming. Owners invite, remove members, and promote; no self-removal, demotion, or leaving |
+| Household organization | After phase 2, from dogfooding | Personal households stay private by default. Shared trackers live in a separately created household. Create, rename, move a tracker between households you own, and member leave. Names are not globally unique, but one person cannot own two that match after trim and case folding. A move keeps an active share link. Same `Household` model, no personal-tracker type. Creator email only when visible names collide. Household deletion, owner leave, demotion, and transfer stay deferred |
 | Tracker removal | Archive and restore; permanent delete in phase 5 | Restore lives in a collapsed section on the household page |
 | Streaks | Not planned | No clear definition, and gamification is a non-goal. Reconsider only for a concrete use case. A later schedule does not add them |
 | Schedules and reminders | Later direction, outside phases 0–5 | Optional metadata on an ordinary tracker: no schedule, a frequency, or selected days or an interval, plus an optional conditional reminder. Not a new kind. Not a calendar, a todo list, or a habit platform. Storage, delivery, and exact wording stay open until the core tracker is dogfooded. See Later ideas |

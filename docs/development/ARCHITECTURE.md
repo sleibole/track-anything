@@ -169,7 +169,7 @@ type VerificationToken struct {
 
 type Household struct {
     ID          uint
-    Name        string  `gorm:"not null"` // "My trackers" for a personal household; no rename UI in phase 2
+    Name        string  `gorm:"not null"` // "My trackers" for a personal household. Not globally unique. One owner cannot have two that match after trim and case folding. Owners rename it after phase 2
     InviteToken *string `gorm:"uniqueIndex"` // nil = invites off
     CreatedAt   time.Time
 }
@@ -228,9 +228,21 @@ type RecordedZero struct {
 
 - **`OccurredAt` vs `CreatedAt`**: owners can backfill, so when it happened is separate from when the row was written. The undo window uses `CreatedAt`. Later offline sync uses the same split: `OccurredAt` is the tap, and `CreatedAt` is when the server writes the row.
 - **Only owners set `OccurredAt` on an ordinary post.** `POST /trackers/{id}/entries` reads the time field only when the role is owner, interpreting it in the owner's stored zone. For a member it ignores any submitted time and uses the server's current time, so a hand-built request can't backfill. The note is accepted from both. Share-link posts never read a time. The later offline sync is the exception, and only for a new client id. See Offline logging.
-- **Personal household.** Signup creates the user, a `Household` named "My trackers", and an owner `HouseholdMember` row in one transaction.
+- **Personal household.** Signup creates the user, a `Household` named "My trackers", and an owner `HouseholdMember` row in one transaction. Nothing marks it as personal. It is an ordinary household that has one member until someone is invited. Shared trackers go in a separately created household (`PLAN.md`, Sharing). There is no personal-tracker flag and no per-tracker access list.
 - **Phase 1 → phase 2 backfill.** Accounts created in phase 1 have no household. After `AutoMigrate`, `db.go` runs a one-time step in a transaction: every user with no `household_members` row gets a "My trackers" household with that user as owner. It is idempotent, so running it again changes nothing. Request handlers do not check for a missing household. Once every existing database has run the step (local development databases; production first launches with phase 2), the step is deleted.
-- **Ownership stays small.** Removing deletes a `member` row. If invites are on, the same transaction replaces the invite token, so the old link cannot be used to rejoin. The handler refuses to remove any owner, including the person asking. There is no demotion and no leave route. Account deletion (phase 5) handles sole-owner cases.
+- **Ownership stays small.** Removing deletes a `member` row. If invites are on, the same transaction replaces the invite token, so the old link cannot be used to rejoin. The handler refuses to remove any owner, including the person asking. There is no demotion. Phase 2 has no leave route. After phase 2, leaving is for members only (below). Owner departure, ownership transfer, sole-owner cases, and household deletion are not designed. They belong with phase 5 account deletion.
+- **Household organization (after phase 2).** **Not built.** `Household`, `HouseholdMember`, and `Tracker.HouseholdID` are enough. There are no new tables or columns.
+  - **Create** inserts a `Household` and an owner `HouseholdMember` row for the creator in one transaction, the same pair signup makes. The name is trimmed, required, and limited to the tracker name length (`maxTrackerName`). Invites start off. Before the insert, the trimmed name is compared, case-insensitively, with the names of households that user already owns. A match is rejected and nothing is created. A household they only belong to does not count, so two people can each own "Family".
+  - **Rename** updates `Name` with the same validation and the same owned-name check, excluding the household being renamed. Saving its own name, including a spacing or case change, is allowed. There is no unique index on `Name`. The check is in the handler, because it is per owner rather than global.
+  - **Leave** deletes the caller's own row only when that row's role is `member`, as one conditional delete. If the caller is an owner, nothing changes. Leaving does not rotate the invite token, because the person left on their own and is not being kept out. It touches no other household, so a personal household and other memberships are untouched.
+  - **Move** changes only `Tracker.HouseholdID`.
+    - The source tracker comes from `trackerForUser` and must have the role `owner`. An archived tracker is not movable.
+    - The destination comes from `householdForUser` and must also have the role `owner` for the same user. A destination where the user is only a member is refused and nothing changes. So is a destination the user cannot see, or the tracker's current household.
+    - In one transaction, the move sets `HouseholdID` and puts the tracker last in the destination's `Position` order.
+    - `Entry` and `RecordedZero` rows belong to the tracker, not the household, so they are not touched or copied. `ShareToken`, `ArchivedAt`, and the presentation fields stay as they were. The move neither clears nor replaces `ShareToken`, so an active share link still resolves through `trackerForShareToken`.
+    - After the move, access follows `household_members` for the destination. `trackerForUser` already joins through `trackers.household_id`, so nothing else has to change. Members of the old household who are not in the new one get a 404.
+    - A share page uses the destination household's first owner's zone from then on.
+  - **Dashboard disambiguation.** The dashboard still loads `householdCreator` for each group. Names match with the same rule as the owned-name check: trim surrounding whitespace, then compare case-insensitively. It shows the creator's email only on a household created by someone else whose name matches another household on the same dashboard. A household the viewer created never shows the email. One person cannot own two that match, so a collision on the dashboard is always between households created by different people.
 - **Value columns on `Entry`** (`Number`, `DurationSec`) instead of a generic field system. Two nullable columns cover the planned tracker kinds with no joins. Fields and sub-trackers, if they are ever built, add a `Field` table, a `Value` table, and `ParentID` on `Tracker` and `Entry`.
 - **Email is stored lowercased** so `Sheldon@…` and `sheldon@…` can't become two accounts.
 - **Archive, not delete**, for trackers. Archiving sets `ArchivedAt` and clears `ShareToken`. Restoring clears `ArchivedAt` and leaves sharing off, so an old link can't come back. Entries are untouched either way. Permanent delete is a separate confirmed action in phase 5.
@@ -331,7 +343,10 @@ POST   /settings/timezone         set the stored IANA zone from a friendly name
 POST   /settings/password         set or change, only after the email is verified; logs out other sessions
 POST   /settings/verify           resend the confirmation email
 
+POST   /households                            create a household; the creator is its owner (after phase 2, not built)
 GET    /households/{hid}                      members, invite link, trackers; owners also see a collapsed archived list
+POST   /households/{hid}                      rename (owner; after phase 2, not built)
+POST   /households/{hid}/leave                leave as a regular member; refused for owners (after phase 2, not built)
 POST   /households/{hid}/invite               turn on or regenerate the invite link (owner)
 POST   /households/{hid}/invite/delete        turn invites off (owner)
 POST   /households/{hid}/members/{uid}/delete remove a member (owner; refused for any owner, including yourself)
@@ -346,6 +361,7 @@ GET    /trackers/{id}             tracker page: log control and today's entries 
 POST   /trackers/{id}             rename, icon, accent, log label; summary display after phase 2 (owner)
 POST   /trackers/{id}/archive     archive; clears the share link (owner)
 POST   /trackers/{id}/restore     restore an archived tracker, sharing stays off (owner)
+POST   /trackers/{id}/move        move to another household the user owns; entries untouched (owner of both; after phase 2, not built)
 POST   /trackers/{id}/delete      permanently delete, with confirmation (owner, phase 5, not built)
 POST   /trackers/{id}/share       turn on or regenerate share link (owner)
 POST   /trackers/{id}/share/delete turn share link off (owner)
@@ -384,7 +400,7 @@ The render helper checks `HX-Request` and returns either the full page or a part
 - **Log button**: a small delegated handler in `app.js` updates the summary on tap before the response arrives. The optimistic line follows the tracker's summary display: the next Times today count, "Done today", or "Last" at the current time. The server response replaces it. If the request fails or never reaches the server, the previous line is restored and a short inline message says it was not saved. Nothing is queued. The Done today attribute value is `done`. The later offline path is separate. See Offline logging.
 - **Errors swap too.** The `htmx-config` meta tag swaps 4xx responses, so a validation message or "too late to undo" appears in place.
 - Signup, login, and change password stay full-page posts. A successful login has to replace the header, which lives outside the HTMX swap target. The Turnstile script is in the layout of those pages only. A failed submit is a new page with a new widget, because the previous token cannot be reused. If an HTMX response does include the form, `app.js` renders a widget for any `.cf-turnstile` element that is not already mounted.
-- Owner deletes, member removal, promotion, and invite regeneration use `hx-confirm`.
+- Owner deletes, member removal, promotion, and invite regeneration use `hx-confirm`. After phase 2, leaving a household and moving a tracker do too.
 
 ## Authentication
 
@@ -553,7 +569,8 @@ Three layers:
 What the suite has to pin down:
 
 - **Accounts.** Signup does not store a password. Password login works after the email is confirmed and a password is set in settings. A password or session created before that confirmation does not survive the verification link or the first magic link. Magic link (works once, fails when expired or reused, stored only as a hash), logout, session expiry, session IDs stored only as a hash, rate limits, email case-insensitivity. Turnstile: production config requires both keys and development can omit them; a successful Siteverify response allows signup, login, and password change; a missing token, `success: false`, a network error, a malformed response, and a non-200 response reject the action. CSRF and rate limits still apply. The suite does not call Cloudflare.
-- **Households.** A new user gets a "My trackers" household as owner. The phase 1 backfill gives each user without a household a "My trackers" household as owner, and running it twice creates nothing new. Invite link joins as member; a regenerated or disabled link fails. Owners can remove members and promote members to owner; members can't. Removing an owner, including yourself, is refused and nothing changes. A household someone else created shows that person's email in its dashboard heading.
+- **Households.** A new user gets a "My trackers" household as owner. The phase 1 backfill gives each user without a household a "My trackers" household as owner, and running it twice creates nothing new. Invite link joins as member; a regenerated or disabled link fails. Owners can remove members and promote members to owner; members can't. Removing an owner, including yourself, is refused and nothing changes. A household someone else created shows that person's email in its dashboard heading. Once the follow-on lands, that email appears only when the household's name matches another one on the dashboard.
+- **Household organization (after phase 2).** Creating a household makes the creator its owner. Owners can rename one, including a personal "My trackers". Members can't, and an empty or too-long name is rejected with nothing changed. Creating or renaming so the trimmed, case-insensitive name matches another household that person owns is rejected and nothing changes. "Family" and " family " cannot both be owned by one person. Another user can own "Family". Belonging to someone else's "Family" does not block owning your own. Renaming a household to its own current name is allowed. When two households on the same dashboard share a name under that comparison, the one someone else created shows its creator's email. A name that matches nothing else shows no email. Moving a tracker between two households the user owns keeps the same tracker id, every entry, and every recorded zero, and it creates no copies. An active share link keeps its token and still opens the tracker after the move. The move does not turn the link off or replace it. Moving into a household where the user is only a member, or one they can't see, is refused and nothing changes. A member of the old household who isn't in the new one gets a 404 for the tracker and its entries afterward. A member of the destination can see and log it. A regular member can leave, and their row is gone. An owner posting to the leave route is refused and nothing changes. Leaving one household leaves the user's personal household and other memberships as they were.
 - **Archive and restore.** Archiving hides the tracker from the dashboard, makes its tracker page and entry routes 404, and clears its share link. The owner's household page lists it under archived trackers; a member's doesn't. Restore brings it back with its entries and with sharing off. Members can't archive or restore.
 - **Permissions.** For every owner-only route, a member gets refused and nothing changes. Non-members get 404 for trackers, entries, and households.
 - **Share links.** Logging and undo work without a session. The share page shows only that tracker. Undo fails after 15 minutes. Regenerated, disabled, and archived-tracker links return 404, and so does the old link after a restore. Owner-only actions are unreachable through a link.
@@ -585,6 +602,7 @@ What the suite has to pin down:
 | Entry time | Server sets `OccurredAt` to now for members and share links | Only owners' submitted times are read on an ordinary post. Later offline sync stores the tap time for a new client id. See Offline logging |
 | Archive | `ArchivedAt` plus clearing `ShareToken` | Restore leaves sharing off. Permanent delete is phase 5 |
 | Phase 1 households | One-time idempotent backfill after `AutoMigrate` | No request-time fallback. Deleted once existing databases have run it |
+| Household organization | Existing `Household`, `HouseholdMember`, and `Tracker.HouseholdID` | After phase 2. No new tables or columns. One owner cannot have two names that match after trim and case folding. Move updates `HouseholdID` in one transaction, requires owner on both sides, and keeps `ShareToken`. Member-only leave. No household deletion, owner leave, demotion, or transfer |
 | Persistence | SQLite, one shared database | Database per user rejected: migrations, backups, and sharing all get worse |
 | Dependencies | GORM, pure-Go SQLite, `x/crypto` | No Paddle SDK. No Prometheus client. No server-side queue |
 | Metrics | Not built | A Prometheus scrape is a later idea, not part of the running app |
