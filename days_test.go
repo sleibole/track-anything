@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -148,6 +150,212 @@ func TestSummaryLine(t *testing.T) {
 	later := at("2026-01-05 12:00")
 	if got, want := summaryLine(summaryLast, 9, true, ptr(older), la, later), "Last: "+older.Format("Mon, Jan 2, 3:04 PM"); got != want {
 		t.Errorf("older = %q, want %q", got, want)
+	}
+}
+
+func TestChartSeriesLocalDays(t *testing.T) {
+	la := location("America/Los_Angeles")
+	at := func(s string) time.Time {
+		v, err := time.ParseInLocation("2006-01-02 15:04", s, la)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	events := []time.Time{
+		at("2026-06-14 23:30"),
+		at("2026-06-15 00:30"), // just after local midnight, a different day
+		at("2026-06-15 18:00"),
+		at("2026-06-16 09:00"),
+	}
+	// The 16th has an event, so its recorded zero does not become the day's value.
+	zeros := []string{"2026-06-13", "2026-06-16"}
+
+	days, err := countsByDay(events, zeros, la, "2026-06-17", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	series, err := chartSeries(events, zeros, la, "2026-06-17", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(series) != len(days) {
+		t.Fatalf("%d chart days, %d history days", len(series), len(days))
+	}
+	assertConsecutiveDays(t, series, la)
+	if series[0].Day != "2026-06-13" || series[len(series)-1].Day != "2026-06-17" {
+		t.Fatalf("order %+v", series)
+	}
+	for i, d := range days {
+		got := series[len(series)-1-i]
+		if got.Day != d.Day || got.Label != d.Date.Format("Jan 2") {
+			t.Fatalf("day %d chart %+v, history %+v", i, got, d)
+		}
+		switch {
+		case !d.Logged():
+			if got.Count != nil {
+				t.Fatalf("%s gap plotted as %d", d.Day, *got.Count)
+			}
+		case got.Count == nil || *got.Count != d.Count:
+			t.Fatalf("%s chart count %v, history %d", d.Day, got.Count, d.Count)
+		}
+	}
+
+	zero, one, two := 0, 1, 2
+	want := map[string]*int{
+		"2026-06-13": &zero,
+		"2026-06-14": &one,
+		"2026-06-15": &two,
+		"2026-06-16": &one,
+		"2026-06-17": nil,
+	}
+	for _, d := range series {
+		w := want[d.Day]
+		if (w == nil) != (d.Count == nil) || (w != nil && *w != *d.Count) {
+			t.Fatalf("%s = %v, want %v", d.Day, d.Count, w)
+		}
+	}
+
+	b, err := json.Marshal(series)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(b, []byte(`"day":"2026-06-17","label":"Jun 17","count":null`)) {
+		t.Fatalf("gap was not null: %s", b)
+	}
+	if !bytes.Contains(b, []byte(`"day":"2026-06-13","label":"Jun 13","count":0`)) {
+		t.Fatalf("recorded zero was not 0: %s", b)
+	}
+
+	empty, err := chartSeries(nil, nil, la, "2026-06-17", chartDays)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(empty) != chartDays || chartHasData(empty) {
+		t.Fatalf("empty window len %d usable %v", len(empty), chartHasData(empty))
+	}
+	if !chartHasData(series) {
+		t.Fatal("a recorded zero should be enough to draw")
+	}
+}
+
+func TestChartSeriesUsesLocationNotUTC(t *testing.T) {
+	// 06:30 UTC is still the previous evening in Los Angeles.
+	instant := time.Date(2026, 6, 15, 6, 30, 0, 0, time.UTC)
+	la := location("America/Los_Angeles")
+	if localDay(instant, time.UTC) == localDay(instant, la) {
+		t.Fatal("fixture is the same calendar day in both zones")
+	}
+
+	utc, err := chartSeries([]time.Time{instant}, nil, time.UTC, "2026-06-15", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pacific, err := chartSeries([]time.Time{instant}, nil, la, "2026-06-14", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if utc[0].Day != "2026-06-13" || utc[2].Day != "2026-06-15" || utc[2].Count == nil || *utc[2].Count != 1 || utc[1].Count != nil {
+		t.Fatalf("utc %+v", utc)
+	}
+	if pacific[0].Day != "2026-06-12" || pacific[2].Day != "2026-06-14" || pacific[2].Count == nil || *pacific[2].Count != 1 {
+		t.Fatalf("pacific %+v", pacific)
+	}
+	for _, d := range pacific {
+		if d.Day == "2026-06-15" {
+			t.Fatal("Los Angeles series included the UTC date")
+		}
+	}
+}
+
+func TestChartSeriesDSTDoesNotSkipOrRepeatDays(t *testing.T) {
+	la := location("America/Los_Angeles")
+	at := func(s string) time.Time {
+		v, err := time.ParseInLocation("2006-01-02 15:04", s, la)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	// 2026-03-08 is the spring-forward day: 02:00 becomes 03:00.
+	spring, err := chartSeries([]time.Time{
+		at("2026-03-07 23:30"),
+		at("2026-03-08 00:30"),
+		at("2026-03-08 03:30"),
+	}, nil, la, "2026-03-20", chartDays)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spring) != chartDays {
+		t.Fatalf("spring len %d", len(spring))
+	}
+	assertConsecutiveDays(t, spring, la)
+	var march7, march8 int
+	seen := map[string]int{}
+	for _, d := range spring {
+		seen[d.Day]++
+		if d.Day == "2026-03-07" && d.Count != nil {
+			march7 = *d.Count
+		}
+		if d.Day == "2026-03-08" && d.Count != nil {
+			march8 = *d.Count
+		}
+	}
+	if seen["2026-03-08"] != 1 || march7 != 1 || march8 != 2 {
+		t.Fatalf("spring-forward day seen %d, march 7 = %d, march 8 = %d", seen["2026-03-08"], march7, march8)
+	}
+
+	// Fall back: 01:15 happens twice. Both instants belong to November 1.
+	pdt := time.Date(2026, 11, 1, 8, 15, 0, 0, time.UTC) // 01:15 PDT
+	pst := time.Date(2026, 11, 1, 9, 15, 0, 0, time.UTC) // 01:15 PST
+	if localDay(pdt, la) != "2026-11-01" || localDay(pst, la) != "2026-11-01" {
+		t.Fatalf("fall-back local days %s and %s", localDay(pdt, la), localDay(pst, la))
+	}
+	fall, err := chartSeries([]time.Time{pdt, pst}, []string{"2026-11-02"}, la, "2026-11-05", chartDays)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fall) != chartDays {
+		t.Fatalf("fall len %d", len(fall))
+	}
+	assertConsecutiveDays(t, fall, la)
+	var nov1, nov2 *int
+	seen = map[string]int{}
+	for _, d := range fall {
+		seen[d.Day]++
+		if d.Day == "2026-11-01" {
+			nov1 = d.Count
+		}
+		if d.Day == "2026-11-02" {
+			nov2 = d.Count
+		}
+	}
+	if seen["2026-11-01"] != 1 || nov1 == nil || *nov1 != 2 {
+		t.Fatalf("nov 1 seen %d count %v", seen["2026-11-01"], nov1)
+	}
+	if nov2 == nil || *nov2 != 0 {
+		t.Fatalf("nov 2 recorded zero = %v", nov2)
+	}
+}
+
+func assertConsecutiveDays(t *testing.T, series []chartDay, loc *time.Location) {
+	t.Helper()
+	if len(series) == 0 {
+		t.Fatal("no days")
+	}
+	prev, err := time.ParseInLocation(dayLayout, series[0].Day, loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < len(series); i++ {
+		want := prev.AddDate(0, 0, 1).Format(dayLayout)
+		if series[i].Day != want {
+			t.Fatalf("day %d = %s, want %s after %s", i, series[i].Day, want, prev.Format(dayLayout))
+		}
+		prev, err = time.ParseInLocation(dayLayout, series[i].Day, loc)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

@@ -608,7 +608,23 @@ button.quiet:hover {
   font-size: 0.875rem;
 }
 
-/* Wide screens: history sits beside the logging column, never above it. */
+.tracker-side {
+  min-width: 0;
+}
+
+.chart-frame {
+  position: relative;
+  height: 14rem;
+  margin-top: 0.75rem;
+}
+
+.chart-frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Wide screens: history and the trend sit beside the logging column, never above it. */
 @media (min-width: 1024px) {
   .tracker-page {
     display: grid;

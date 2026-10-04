@@ -51,7 +51,7 @@ Order on a phone:
 1. Today's logging control: the summary line, then the log button, then a small form with an optional note. The summary is the same line as on the card. Owners also see a time field, set to now, for backfill. Members don't see it.
 2. Today's entries. Each one can be undone while it is recent. An owner can edit the time or note in place, or delete with confirmation.
 3. History.
-4. The trend, once that tracker has one. Counts arrive in phase 3. Weight and duration arrive in phase 4.
+4. The trend. A count tracker shows a line of the last 30 local days once any of those days has a count or a recorded zero. Otherwise one sentence says nothing was logged in that window. The heading is Trend. Weight and duration arrive in phase 4. There is no overlay on this page.
 
 On a wider screen, history and the trend may sit beside the logging column. They do not move above it. Logging does not require scrolling past a chart.
 
@@ -86,9 +86,11 @@ Choose the chart from the tracker's data:
 - Number: the value over time, such as workout weight.
 - Duration: length over time.
 
-A recorded zero is a zero. A day with nothing logged is a gap, not a zero bar.
+A recorded zero is a zero. A day with nothing logged is a gap, not a zero.
 
-The historical chart is on the tracker page. Overlaying another tracker comes after that, on the phase 3 charts view. Events from the second tracker sit on the first tracker's time series as a marker, an annotation, or a shaded vertical region. Which of those is still open (`PLAN.md`). Woods outings on the meals chart are the reference. The page describes the chart and does not claim a cause. On a phone the chart follows the overlay controls. On a wider screen it can sit beside them.
+The historical count chart is on the tracker page. It is a line of events per day for the last 30 local days, oldest at the left, including today. A recorded zero is a point at zero. A day with nothing logged is a gap in the line, not a zero. If none of those days has a count or a recorded zero, the page says so in one sentence and does not draw a chart. Week and month, and number and duration charts, are not on the page yet.
+
+Overlaying another tracker comes after that, on the phase 3 charts view, and is not built. Events from the second tracker would sit on the first tracker's time series as a marker, an annotation, or a shaded vertical region. Which of those is still open (`PLAN.md`). Woods outings on the meals chart are the reference. The page describes the chart and does not claim a cause. On a phone the chart follows the overlay controls. On a wider screen it can sit beside them.
 
 ### Icon and accent
 

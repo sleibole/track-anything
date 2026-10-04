@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strings"
 	"time"
@@ -213,15 +215,16 @@ type historyDay struct {
 }
 
 type trackerPage struct {
-	Card     trackerCard
-	IsOwner  bool
-	Today    todayState
-	ZeroNew  bool
-	Entries  []entryView
-	History  []historyDay
-	NowValue string // default for the owner's time field
-	Note     string
-	Error    string
+	Card        trackerCard
+	IsOwner     bool
+	Today       todayState
+	ZeroNew     bool
+	Entries     []entryView
+	History     []historyDay
+	ChartScript template.HTML // daily count series; empty when there is nothing to plot
+	NowValue    string        // default for the owner's time field
+	Note        string
+	Error       string
 }
 
 func (p trackerPage) Tracker() Tracker { return p.Card.Tracker }
@@ -298,7 +301,45 @@ func (a *app) trackerPage(t Tracker, role string, u *User) (trackerPage, error) 
 		}
 		p.History = append(p.History, h)
 	}
+	if t.Kind == "count" {
+		script, err := countChartScript(today, older, zeros, loc)
+		if err != nil {
+			return p, err
+		}
+		p.ChartScript = script
+	}
 	return p, nil
+}
+
+// countChartScript embeds the daily count series for the chartDays local days
+// ending today, oldest first. History is the previous historyDays and does not
+// include today. An empty result means every day in the window is a gap, so the
+// page shows a sentence instead of a chart. json.Marshal escapes <, >, and &,
+// so the series cannot close the script element.
+func countChartScript(today todayState, older []Entry, zeros []RecordedZero, loc *time.Location) (template.HTML, error) {
+	events := make([]time.Time, 0, len(today.Entries)+len(older))
+	for _, e := range today.Entries {
+		events = append(events, e.OccurredAt)
+	}
+	for _, e := range older {
+		events = append(events, e.OccurredAt)
+	}
+	zeroDays := make([]string, len(zeros), len(zeros)+1)
+	for i := range zeros {
+		zeroDays[i] = zeros[i].Day
+	}
+	if today.Zero != nil {
+		zeroDays = append(zeroDays, today.Day)
+	}
+	series, err := chartSeries(events, zeroDays, loc, today.Day, chartDays)
+	if err != nil || !chartHasData(series) {
+		return "", err
+	}
+	b, err := json.Marshal(series)
+	if err != nil {
+		return "", err
+	}
+	return template.HTML(`<script type="application/json" id="count-chart">` + string(b) + `</script>`), nil
 }
 
 func (a *app) handleShowTracker(w http.ResponseWriter, r *http.Request) {
@@ -343,11 +384,11 @@ type trackerForm struct {
 	Icons          []choice
 	Accents        []choice
 	Summaries      []choice
-	Tracker         *Tracker // set when editing
-	ShareURL        string
-	MoveHouseholds  []Household // other households the owner owns; empty hides the move control
-	MoveConfirm     string
-	MoveError       string
+	Tracker        *Tracker // set when editing
+	ShareURL       string
+	MoveHouseholds []Household // other households the owner owns; empty hides the move control
+	MoveConfirm    string
+	MoveError      string
 }
 
 func (a *app) newTrackerForm(u *User) (trackerForm, error) {

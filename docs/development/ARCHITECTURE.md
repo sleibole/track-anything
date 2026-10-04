@@ -14,7 +14,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 - **Do not optimize for hypothetical scale** before the product has users. Exactly one instance, because of SQLite.
 - **Direct Go dependencies:** GORM, `github.com/glebarez/sqlite`, and `golang.org/x/crypto`. Everything else is the standard library, vendored static files, or HTTP calls. Prometheus is not a dependency. See Metrics.
 - **No public API, and no offline mode through phase 5.** Basic offline logging is a later enhancement: a small cache and a browser queue around the existing log action. The app stays server-rendered. See Offline logging.
-- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js is the planned chart library for phase 3. It is not vendored, and phase 2 does not load it. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password include a Cloudflare Turnstile widget. The form is still a normal POST. The server rejects the action when the token does not verify. The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
+- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js (`static/chart.umd.min.js`) draws the count trend. A small `static/chart.js` loads that file only when the tracker page contains a chart. Logging does not use either script. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password include a Cloudflare Turnstile widget. The form is still a normal POST. The server rejects the action when the token does not verify. The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
 
 ## Stack
 
@@ -32,7 +32,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 | Password hashing | `golang.org/x/crypto/bcrypt` | |
 | Email (magic links) | `net/smtp` to a transactional email relay | In development, links are logged to the console instead of sent |
 | Frontend | HTMX (vendored `htmx.min.js`) | Served from `/static`, no CDN |
-| Charts | Not built | Chart.js is the planned library for phase 3. It is not vendored. Logging does not depend on it. |
+| Charts | Chart.js 4.5.1, vendored `chart.umd.min.js` | Count trend on the tracker page. Loaded only when that chart is present. Logging does not depend on it. Overlays are not built. |
 | CSS | Pico.css (vendored `pico.min.css`) | Classless-first, minimal custom CSS. Visual rules are in `DESIGN.md` |
 | Icons | Tabler, individual SVGs vendored and embedded | MIT. Inlined so `stroke="currentColor"` follows Pico, including dark mode. A tracker's own icon is an allow-listed Tabler name or emoji. |
 | Payments | Not built | Paddle is the planned merchant of record for phase 5. There is no billing code |
@@ -82,6 +82,8 @@ track-anything/
 ├── icons/              # Tabler SVGs we use, inlined by the icon template func
 ├── static/
 │   ├── htmx.min.js
+│   ├── chart.umd.min.js   # Chart.js 4.5.1 UMD, MIT. Loaded only by chart.js
+│   ├── chart.js           # draws the embedded count series
 │   ├── pico.min.css
 │   ├── app.css
 │   ├── manifest.webmanifest
@@ -357,7 +359,7 @@ POST   /join/{token}                          join as a member
 GET    /trackers/new              new tracker form (household, icon, accent, log label, summary display)
 GET    /trackers/{id}/edit        edit form, share link controls, archive (owner)
 POST   /trackers                  create tracker
-GET    /trackers/{id}             tracker page: log control and today's entries first, then history; trend from phase 3
+GET    /trackers/{id}             tracker page: log control and today's entries first, then history, then the count trend when any of the last 30 local days was logged
 POST   /trackers/{id}             rename, icon, accent, log label, summary display (owner)
 POST   /trackers/{id}/archive     archive; clears the share link (owner)
 POST   /trackers/{id}/restore     restore an archived tracker, sharing stays off (owner)
@@ -382,7 +384,7 @@ POST   /s/{token}/zero            record none for today via the link
 POST   /s/{token}/entries/{eid}/undo  undo a recent entry via the link
 POST   /s/{token}/zeros/{zid}/undo    undo a recent recorded zero via the link
 
-GET    /charts                    not registered; overlay is phase 3
+GET    /charts                    not registered; overlay is not built
 
 GET    /billing                   not registered; upgrade, portal, and webhook are phase 5
 
@@ -437,9 +439,15 @@ A tracker icon is not looked up the same way. `Icon` is either empty (render the
 
 ## Charts
 
-**Not built.** Phase 3. Chart.js (`chart.umd.min.js`) is the planned library. It is not vendored. The server computes series in Go, using the same time-zone grouping as counts, and embeds them as JSON in a `<script type="application/json">` tag. A small script passes that JSON to Chart.js. The primary series includes a recorded zero as zero and omits a day with nothing logged.
+The count trend is on `GET /trackers/{id}`. Number charts, duration charts, and overlays are not built. There is no `/charts` route. Event-relative alignment is a later idea in `PLAN.md` and is not computed here.
 
-Phase 3 has two steps. The tracker page loads Chart.js when it shows a historical chart (counts in phase 3; numbers and durations in phase 4). The overlay page loads it when a second tracker's events are placed on that series. How the mark is drawn is still open (`PLAN.md`); the handler supplies the second tracker's dates on the same axis. The log form does not depend on the script. Phase 2 does not load Chart.js. Event-relative alignment is a later idea in `PLAN.md` and is not computed here.
+`chartSeries` in `days.go` builds the series from `countsByDay`, so a day's count means the same thing as a history row. The window is the `chartDays` (30) local days ending today, in the viewer's stored zone, oldest first. History stays the previous `historyDays` and does not include today. Week and month views are not built; a later one should bucket these days instead of counting events a second way.
+
+Each day is `{day, label, count}`. `day` is `YYYY-MM-DD`. `label` is `Jan 2`, for the axis. `count` is a number when that day was logged, including `0` for a recorded zero, and `null` when nothing was logged. The day stays in the series either way, so the axis does not close up around a gap. `json.Marshal` escapes `<`, `>`, and `&`. The page embeds that JSON in `<script type="application/json" id="count-chart">`.
+
+`static/chart.js` is on the page only when that element is present. It loads the vendored Chart.js 4.5.1 UMD build (`static/chart.umd.min.js`, MIT) from `/static` and draws a line. `spanGaps` is false, so a null breaks the line. A point is drawn at zero, so a recorded zero is not an empty stretch. The chart does not animate, because the page refreshes in place. If every day in the window is a gap, the page says "Nothing logged in the last 30 days." and does not load Chart.js. The log form is a normal POST and does not use either script. Home, share, and other pages do not load them.
+
+The overlay page, when it exists, will load Chart.js when a second tracker's events are placed on that series. How the mark is drawn is still open (`PLAN.md`). The handler would supply the second tracker's dates on the same axis.
 
 ## Security
 
@@ -563,7 +571,7 @@ Standard library only: `testing` and `net/http/httptest`. Each test gets its own
 
 Three layers:
 
-1. **Pure logic**, table-driven, no HTTP: day boundaries in an IANA time zone including DST spring-forward and fall-back; per-day series for charts, with a recorded zero as zero and an unlogged day omitted; the undo window; which entry carries forward (a backfilled older entry must not win).
+1. **Pure logic**, table-driven, no HTTP: day boundaries in an IANA time zone including DST spring-forward and fall-back; the count-chart series, with a recorded zero as zero and an unlogged day as null, over a 30-day window that does not skip or repeat a local day; the undo window; which entry carries forward (a backfilled older entry must not win).
 2. **Handlers**: every route has a happy path and the failures that matter: bad input, CSRF rejection, logged-out redirect, expired session, a non-member, and a member attempting an owner-only action.
 3. **Flows** through the cookie jar, matching each phase's "done when" in `PLAN.md`.
 
@@ -580,7 +588,7 @@ What the suite has to pin down:
 - **Icons and accents.** An empty icon renders as the tally mark and an empty accent adds none. A picker value is stored. A value outside the allow-list is rejected. The name is present wherever the icon is.
 - **Recorded zeros.** Marking today as none does not increment the count. An event that day deletes the mark. A day with neither is absent from the per-day series. A recorded zero is present as zero. A member or share link can undo a mark from the last 15 minutes. Clearing an older mark, or marking an earlier day, is owner-only, and a member's attempt changes nothing.
 - **Time.** "Today" and per-day grouping follow the viewer's stored time zone (or the household owner's on share pages), not the browser's current zone. DST changes don't double-count or skip a day.
-- **Charts.** The embedded series matches the per-day counts, omits unlogged days, and includes a recorded zero as zero. Overlay data is the other tracker's event days on that same axis. The tracker page's log form does not require Chart.js. Event-relative alignment is not part of this suite until that later idea is built.
+- **Charts.** The count chart's embedded series is the last 30 local days ending today, in the viewer's zone. It matches per-day counts, uses null for an unlogged day, and uses zero for a recorded zero. The tracker page's log form does not require Chart.js. Overlay data, and number and duration charts, join this suite when they are built. Event-relative alignment is not part of this suite until that later idea is built.
 - **Values (phase 4).** Number and duration entries, prefill from the last entry, **Log again**.
 - **Deletion (phase 5).** Permanent tracker delete removes the tracker and its entries, owner only, with confirmation.
 - **Ads and billing (phase 5).** No ad markup for ad-free users, users in the grace period, or on share/login/settings pages. The Paddle webhook rejects bad signatures and old timestamps, applies an event once even if delivered twice, ignores an older event arriving after a newer one, finds the user through `custom_data`, and sets and clears the plan. Tests build the `Paddle-Signature` header the way Paddle does, against a test secret, and the portal handler talks to a stub API URL.
@@ -595,7 +603,7 @@ What the suite has to pin down:
 | --- | --- | --- |
 | Implementation | Go web app | One binary, standard library where it is enough |
 | Frontend | Go templates + HTMX + Pico.css | No SPA. Forms work without JavaScript |
-| Charts | Chart.js, vendored | JSON embedded by the server. Historical chart, then overlay, both phase 3. Not loaded in phase 2. Logging works without it. No frontend framework. |
+| Charts | Chart.js 4.5.1, vendored | JSON embedded by the server for the daily count line. Loaded only when that chart is on the page. Logging works without it. Overlays, and number and duration charts, are not built. No frontend framework. |
 | Tracker icon | Optional allow-listed string | Empty renders the tally mark. Emoji are text. A removed picker name falls back to the tally mark. |
 | Summary display | `times`, `done`, or `last` on `Tracker` | Empty and the column default are `times`. Presentation only. Wording in `PLAN.md`. Shipped after phase 2. |
 | Schedules and reminders | Not specified | Later product direction in `PLAN.md`. No schema, notification channel, or routes until that direction is ready to build. |

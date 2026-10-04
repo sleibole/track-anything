@@ -149,7 +149,7 @@ func TestHomeHTMXPartial(t *testing.T) {
 
 func TestStaticFiles(t *testing.T) {
 	h := newTestApp(t).routes()
-	for _, path := range []string{"/static/pico.min.css", "/static/htmx.min.js", "/static/app.css", "/static/app.js"} {
+	for _, path := range []string{"/static/pico.min.css", "/static/htmx.min.js", "/static/app.css", "/static/app.js", "/static/chart.js", "/static/chart.umd.min.js"} {
 		if code, _ := get(t, h, path, nil); code != http.StatusOK {
 			t.Errorf("%s: status %d", path, code)
 		}

@@ -8,6 +8,7 @@ import (
 const (
 	undoWindow  = 15 * time.Minute
 	historyDays = 30
+	chartDays   = 30
 	dayLayout   = "2006-01-02"
 )
 
@@ -135,4 +136,50 @@ func (d dayCount) Summary() string {
 		return "None"
 	}
 	return "Nothing logged"
+}
+
+// chartDay is one local calendar day on the count chart.
+// Count is nil when nothing was logged. A recorded zero is 0, not a gap.
+type chartDay struct {
+	Day   string `json:"day"`
+	Label string `json:"label"`
+	Count *int   `json:"count"`
+}
+
+// chartSeries is the n local days ending on lastDay, oldest first.
+// It uses countsByDay, so a day's count means the same thing as a history row.
+// A later week or month chart should bucket these days rather than count events again.
+func chartSeries(events []time.Time, zeroDays []string, loc *time.Location, lastDay string, n int) ([]chartDay, error) {
+	days, err := countsByDay(events, zeroDays, loc, lastDay, n)
+	if err != nil {
+		return nil, err
+	}
+	series := make([]chartDay, len(days))
+	for i, d := range days {
+		series[len(days)-1-i] = chartDay{
+			Day:   d.Day,
+			Label: d.Date.Format("Jan 2"),
+			Count: loggedCount(d),
+		}
+	}
+	return series, nil
+}
+
+func loggedCount(d dayCount) *int {
+	if !d.Logged() {
+		return nil
+	}
+	n := d.Count
+	return &n
+}
+
+// chartHasData is false when every day in the window is a gap.
+// A single recorded zero is enough to draw.
+func chartHasData(series []chartDay) bool {
+	for _, d := range series {
+		if d.Count != nil {
+			return true
+		}
+	}
+	return false
 }
