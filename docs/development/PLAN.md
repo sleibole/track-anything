@@ -62,8 +62,8 @@ Start with the smallest useful tracker and add value shapes only when a real use
 | Kind | Each entry records | Examples | Arrives in |
 | --- | --- | --- | --- |
 | Count | A timestamp | Dog ate, medication taken, symptom occurred | Phase 2 |
-| Number | A timestamp and a number with the tracker's unit | Body weight, kettlebell weight, temperature | Phase 4 |
-| Duration | A timestamp and a length of time | Off-leash time, workout length | Phase 4 |
+| Number | A timestamp and a number with the tracker's unit | Body weight, kettlebell weight, temperature | Phase 4 (built) |
+| Duration | A timestamp and a length of time | Off-leash time, workout length | Phase 4 (built) |
 
 - Any entry can have an optional **note**, but the note never slows down the normal one-tap path.
 - Each tracker has an optional **icon** and an optional **accent**. The icon comes from a small built-in picker of clear icons or emoji and defaults to the tally-mark icon. The accent comes from a small built-in set of soft colors and defaults to none. Both can be changed later. The name is always shown with them. Someone picking a tracker can tell it by the name alone. User-uploaded icons are a later idea, not part of the first version.
@@ -71,7 +71,8 @@ Start with the smallest useful tracker and add value shapes only when a real use
 - Each tracker has a **summary display**: Times today, Done today, or Last occurrence. It only changes the summary line above the log button. The tracker is still a list of timestamped entries. Details, including the three wordings, are under Summary display. The default is Times today, which is what phase 2 shows. The setting itself arrived in the small follow-on after phase 2.
 - A tracker has **no schedule** in these phases. Recurrence, a period goal, and a reminder are a later direction: optional metadata on an ordinary tracker, not a new kind. See Later ideas.
 - A count tracker can store one **recorded zero** for a calendar day: the count is deliberately none. That mark is not an event and does not increase the count. A day with no entries and no recorded zero is **nothing logged**. Logging an event for that day clears the recorded zero. Charts and per-day counts draw a recorded zero as zero and leave an unlogged day blank. A recorded zero is not an entry, so Done today and Last occurrence ignore it when they build the summary line. History still shows it.
-- For number trackers, **the last value carries forward**: if you used a 5lb club last time, the form already says 5, and **Log again** records it with one tap. Backfilling an older entry does not change what carries forward. The note does not carry forward, and the time defaults to now. Changing the prefilled value (moving up to 6lb) and submitting is how a new value starts carrying forward.
+- For number and duration trackers, **the last value carries forward**: if you used a 5lb club last time, the form already says 5, and **Log again** records it with one tap. A duration works the same way, shown as words such as "45 min" or "1 hr 10 min". Backfilling an older entry does not change what carries forward. The note does not carry forward, and the time defaults to now. Changing the prefilled value (moving up to 6lb) and submitting is how a new value starts carrying forward. The button says **Log again**. The custom log label stays on a count tracker, and on the link that opens a number or duration tracker before it has a value.
+- A tracker's kind can change until it has an entry or a recorded zero. After that it stays, so old rows are not reinterpreted. The unit on a number tracker can still be edited. There is no unit conversion.
 - Members log at the current time, with an optional note. Owners can also choose when an entry happened, which is how they backfill ("I forgot to log yesterday"). When it happened is separate from when the row was written. Undo uses when it was written. Marking an earlier day as none is the same kind of backfill: owner only.
 - **Archive, not delete**, for trackers. Archiving hides the tracker and is the normal way to say "I don't want this tracker anymore." It is reversible: the owner restores it from the household page. Permanently deleting a tracker and its entries is a separate, confirmed owner action that arrives in phase 5, with the other destructive privacy operations.
 - **Fields and sub-trackers** (one workout containing several exercises, each with weight, reps, and sets) are designed below but deferred. They get built only if number and duration trackers prove painful for workouts in real use.
@@ -149,15 +150,15 @@ Sessions last 30 days. Once a session is past half its lifetime, the next reques
 
 ## Interface
 
-A calm, mobile-first tracking notebook. Logging is fast, review is easy, and the same screens cover the dog's meals now and a workout measurement in phase 4. Tone takes a little from a family calendar: a recognizable icon, a soft color, an approachable card. The layout stays sparser than a calendar. How the screens look is in `DESIGN.md`.
+A calm, mobile-first tracking notebook. Logging is fast, review is easy, and the same screens cover the dog's meals and a workout measurement. Tone takes a little from a family calendar: a recognizable icon, a soft color, an approachable card. The layout stays sparser than a calendar. How the screens look is in `DESIGN.md`.
 
 **Home.** Trackers stay grouped by household. Each one is a card with its name, icon, optional accent, a summary, and one logging button. The summary follows that tracker's summary display. Millie ate, set to Times today, reads "2 times today". McGill Big 3, set to Done today, reads "Done today". Logan Motrin, set to Last occurrence, reads "Last: 6:42 AM". The button records the current time in one tap, then offers **Undo**. The button's words are the log label, which is separate from the summary. Before that setting existed, phase 2 showed the Times today wording on every card.
 
-**Tracker detail.** Today's logging control and today's entries come first. The trend follows, then history. Correcting a mistake sits on the entry. Anyone who can log can undo an entry or a recorded zero from the last 15 minutes. Only an owner can choose when a new entry happened, edit the time or note, delete an older entry, mark an earlier day as none, or clear an older recorded zero. On a phone the logging action stays first. On a wider screen, the trend and history can sit beside that column, with the trend above history. They never sit above the log control.
+**Tracker detail.** Today's logging control and today's entries come first. The trend follows, then history. Correcting a mistake sits on the entry. Anyone who can log can undo an entry or a recorded zero from the last 15 minutes. Only an owner can choose when a new entry happened, edit the time, note, or value, delete an older entry, mark an earlier day as none, or clear an older recorded zero. On a phone the logging action stays first. On a wider screen, the trend and history can sit beside that column, with the trend above history. They never sit above the log control.
 
 **History.** Dated entries, with the time they happened. "None" (a recorded zero) and "Nothing logged" are different rows. That distinction matters for the dog: a day with no meals is data, and a day nobody wrote down is a gap.
 
-**Trends.** The chart matches the tracker: events per day, a value over time, or a duration over time. A recorded zero is a zero. A day with nothing logged is a gap. The count chart is on this page: a line of the last 30 local days, including today. Week and month views are not built. One other tracker's events can be drawn on that line as shaded bands. See Charts and overlays.
+**Trends.** The chart matches the tracker: events per day, a value over time, or a duration over time. A recorded zero is a zero. A day with nothing logged is a gap. Each chart is on this page: the last 30 local days, including today. Week and month views are not built. One other count tracker's events can be drawn on that chart as shaded bands. See Charts and overlays.
 
 **First slice.** Phase 2 replaces paper tick marks: create a tracker, choose an icon, log an event with the current time, correct a mistake, and review recent history, including a recorded zero versus nothing logged. An accent and a custom log label can be set then too; both are optional. Summary display was the small follow-on after that slice was in real use. Richer workout inputs stay in phase 4. Phase 3 is the historical chart, then overlays of related events. The daily count chart is on the tracker page, and one other tracker's events can be marked on it. Event-relative summaries are a later idea.
 
@@ -177,7 +178,7 @@ Chart.js draws the charts. It fits the server-rendered pages and HTMX, so visual
 
 Charts stay secondary to recording. The log control comes first, a trend never sits above it, and logging works if the chart does not load. The historical chart lives on the tracker page, below the log control or beside it on a wide screen. An overlay is drawn on that same chart. There is no separate charts page.
 
-- **Historical chart.** One tracker over time. Counts are events per day, week, or month (meals per day). Numbers are a value over time (workout weight). Durations are length over time. A recorded zero is drawn as zero. A day with nothing logged is left blank. The count chart, per day for the last 30 local days, is on the tracker page. Week and month buckets are not built. Number and duration charts are phase 4, in the same place.
+- **Historical chart.** One tracker over time. Counts are events per day (meals per day). Numbers are a value over time (workout weight), one point per entry, not a daily sum. Durations are length over time, the same way. A recorded zero is drawn as zero on a count chart. A day with nothing logged is left blank on a count chart. All three use the last 30 local days, including today, on the tracker page. Week and month buckets are not built.
 - **Overlay.** Events from one other tracker you can see, drawn on that historical chart. The treatment is a narrow translucent vertical band on each local day that has an event. The band marks the day. It is not a duration and not a second count. Several events on the same local day are one band. The picker shows the icon and the name, and None removes the overlay. The choice is a query on the tracker page (`?overlay=`). It is not stored. Dog eating and woods outings, in Reference use cases, are the test case: you look at the one to three days after an outing. The page describes what is on the chart and never claims a cause.
 - The overlay is general. The same chart could later mark a workout against later soreness or recovery, alcohol against sleep, coffee against anxiety or energy, a medication against symptom frequency, or a late bedtime against next-day energy.
 
@@ -235,7 +236,7 @@ Undo and delete recompute the line from the entries that remain. Removing the on
 - **Count per day** over the last 30 days, where an unlogged day stays blank (phase 2). This list does not follow summary display.
 - **Historical count chart** on the tracker page: events per day for the last 30 local days. Week and month are not built. Unlogged days stay blank.
 - **Overlays** of one related tracker's events on that chart, as vertical shaded bands. One overlay at a time. Event-relative summaries are not part of this.
-- **Values and durations over time** (phase 4), on the same kind of chart. Overlays apply there too.
+- **Values and durations over time** (built in phase 4), on the same kind of chart. Overlays apply there too.
 - **Event-relative summaries** (later; see Later ideas).
 - **Period progress** on a tracker that has a schedule (later; see Later ideas). It is not a fourth summary display, and it is not part of the follow-on after phase 2.
 
@@ -327,16 +328,16 @@ Basic time series first. A related event on that chart only after the single-tra
 
 - **Count chart (built).** Chart.js line of counts per local day, on the tracker page after today's logging and before history (beside that column on a wide screen, still above history). The range is the last 30 local days, including today. Unlogged days are gaps. Recorded zeros are zeros. Chart.js loads for that trend and is not required to log. Week and month aggregation are not built.
 - **Overlays (built).** One other tracker you can see, chosen on this page. Its events are narrow vertical shaded bands on that same chart, one band per local day that has an event. The picker shows each tracker's icon and name, plus None. The choice is `?overlay=` on `GET /trackers/{id}` and is not stored. Dog meals and woods outings are the test case. The marks sit on the meals chart so you can look at the following one to three days. The page describes the pattern and does not claim a cause. There is no `/charts` page.
-- Not in this phase: lining up repeated events and summarizing another tracker on the days before and after. Number and duration charts stay in phase 4.
+- Not in this phase: lining up repeated events and summarizing another tracker on the days before and after. Number and duration charts were built in phase 4.
 
 **Done when:** Dog ate has a meals-per-day chart, and a woods outing can be marked on it so you can see whether low-eating days follow.
 
-### Phase 4: Number and duration trackers
+### Phase 4: Number and duration trackers (done)
 
-- Number (with a unit) or duration trackers, on the same cards, detail page, and history. Share links support them too.
-- Prefill from the last entry and **Log again**. That stays the one-tap path when the last value should carry forward.
-- Charts for values and durations over time (weight, or how long), in the same place on the tracker page as the count trend. Overlays apply to these charts the same way.
-- CSV export per tracker.
+- **Number and duration trackers (built).** A number tracker stores one unit on the tracker, such as lb or °F. A duration is entered as hours, minutes, and seconds and stored as seconds. Both use the same cards, detail page, and history. Share links can log them too, without a note or a chosen time.
+- **Carry forward and Log again (built).** The value of the latest entry by `OccurredAt` is already in the form, and **Log again** records that value at the current time. The note does not carry forward. There is no Log again until a value exists. The server reads the carried value itself.
+- **Charts (built).** Values and durations over the same last 30 local days, in the same place as the count trend. Each entry is its own point. Overlays are still one other count tracker's event days, as vertical shaded bands.
+- **CSV export (built).** An owner downloads one tracker's history from the tracker page. A recorded zero is its own row.
 
 **Done when:** woods outings record how long they were, a movement like "Club mill" tracks weight over time, and re-logging last time's weight is one tap. Then decide, from real use, whether workouts need fields and sub-trackers.
 
@@ -469,7 +470,7 @@ The product stays a small, flexible way to record arbitrary events and measureme
 | Login | Email first; password optional | Magic link is the primary path. A password is set in settings after the email is confirmed. See `DESIGN.md` |
 | Time zone | Detect once at signup, then keep it | Calendar days do not follow the browser after signup. Friendly name in settings if it needs changing. Mechanism in `ARCHITECTURE.md` |
 | First use case | Dog meals | Replaces paper tick marks |
-| Second use case | Woods outings and workout progression | A woods outing is the phase 3 overlay test, and a count is enough for that. Duration, and workout weight, arrive in phase 4. |
+| Second use case | Woods outings and workout progression | A woods outing can be a count, for the phase 3 overlay, or a duration. Workout weight is a number tracker. Both shipped in phase 4. |
 | Tracker kinds | Count first, then number and duration | Fields and sub-trackers deferred until real use demands them |
 | Interface | Calm mobile-first notebook | Cards with name, icon, optional accent, summary, and a one-tap log. Recognizable icons and soft cards, with less on screen than a family calendar. |
 | Tracker icon | Optional, in phase 2 | Built-in picker of clear icons or emoji. Default is the tally mark. Name stays visible. Uploads stay a later idea. Moved out of later ideas so the first tracker is recognizable on its card. |
@@ -477,7 +478,7 @@ The product stays a small, flexible way to record arbitrary events and measureme
 | Log button | Short label, still one tap | Default "+ Log". The dog card can say "+ Ate". Logan Motrin can say "Gave Motrin". Same quick-log and 15-minute undo as the earlier "+1" label. Independent of summary display. |
 | Summary display | Times today, Done today, or Last occurrence | Stored as `times`, `done`, or `last`. Presentation of the same timestamped entries. Default `times`. Shipped after phase 2. Done today does not cap entries per day. Last occurrence crosses midnight. An empty tracker says "Never logged". See Summary display. |
 | Zero vs unlogged | Different states | A recorded zero is deliberate. No entries and no recorded zero means nothing logged. Charts leave that day blank. The Times today summary says "None today" or "Nothing logged today". Done today and Last occurrence do not treat the zero as an entry. |
-| Analysis | Daily count chart, then overlay | The count line chart is on the tracker page: last 30 local days, including today, gaps for unlogged days, zeros for recorded none. One other count tracker's events are vertical shaded bands on that chart, one band per local day, chosen with `?overlay=` and not stored. Week and month buckets are not built. Number and duration charts are phase 4. Event-relative summaries are a later idea, not a statistics feature. Patterns, not causes. There is no `/charts` page. |
+| Analysis | Daily count chart, then overlay, then value charts | The count line chart is on the tracker page: last 30 local days, including today, gaps for unlogged days, zeros for recorded none. Number and duration charts use that same window and keep each entry as its own point. One other count tracker's events are vertical shaded bands on any of those charts, one band per local day, chosen with `?overlay=` and not stored. Week and month buckets are not built. Event-relative summaries are a later idea, not a statistics feature. Patterns, not causes. There is no `/charts` page. |
 | Ads | AdSense with a certified consent platform, after launch | No home-made consent banner. No ads on share, login, or settings |
 | Start without account | Later idea | Share links cover most of the need for now |
 | Install | Manifest + icons; phone offer on home and dashboard; no service worker through phase 5 | Verified on a phone at first deploy. Not a store app. A small worker arrives with later offline logging |

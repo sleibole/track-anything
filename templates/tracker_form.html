@@ -21,6 +21,24 @@
       Name
       <input type="text" name="name" value="{{.Name}}" required maxlength="60" placeholder="Dog ate" {{if not .Tracker}}autofocus{{end}}>
     </label>
+    <div data-kind-picker>
+      <fieldset>
+        <legend>What you record</legend>
+        {{if .KindLocked}}<input type="hidden" name="kind" value="{{.Kind}}">{{end}}
+        {{range .Kinds}}
+        <label>
+          <input type="radio" name="kind" value="{{.Value}}"{{if eq .Value $.Data.Kind}} checked{{end}}{{if $.Data.KindLocked}} disabled{{end}}>
+          {{.Label}}
+        </label>
+        {{end}}
+      </fieldset>
+      {{if .KindLocked}}<small>Once something is logged, this stays as it is.</small>{{end}}
+      <label data-unit-field>
+        Unit
+        <input type="text" name="unit" value="{{.Unit}}" maxlength="16" placeholder="lb" aria-describedby="unit-help">
+        <small id="unit-help">For a number, such as lb, kg, or °F.</small>
+      </label>
+    </div>
     <fieldset class="picker">
       <legend>Icon</legend>
       {{range .Icons}}

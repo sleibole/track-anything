@@ -9,12 +9,16 @@ import (
 // undo recent entries on that one tracker. Nothing else is reachable through them.
 
 type sharePage struct {
-	Card    trackerCard
-	Token   string
-	Today   todayState
-	ZeroNew bool
-	Entries []entryView
-	Error   string
+	Card        trackerCard
+	Token       string
+	Today       todayState
+	ZeroNew     bool
+	Entries     []entryView
+	NumberValue string
+	Hours       string
+	Minutes     string
+	Seconds     string
+	Error       string
 }
 
 func (p sharePage) Tracker() Tracker { return p.Card.Tracker }
@@ -53,6 +57,10 @@ func shareURL(t Tracker) string {
 }
 
 func (a *app) renderShare(w http.ResponseWriter, r *http.Request, status int, t Tracker, loc *time.Location, msg string) {
+	a.renderShareForm(w, r, status, t, loc, msg, false)
+}
+
+func (a *app) renderShareForm(w http.ResponseWriter, r *http.Request, status int, t Tracker, loc *time.Location, msg string, posted bool) {
 	now := a.now()
 	today, err := a.loadToday(t, loc, now)
 	if err != nil {
@@ -72,6 +80,17 @@ func (a *app) renderShare(w http.ResponseWriter, r *http.Request, status int, t 
 		Entries: entryViews(t, today.Entries, loc, now, nil, nil, false),
 		Error:   msg,
 	}
+	if posted {
+		p.NumberValue = r.PostFormValue("number")
+		p.Hours = r.PostFormValue("hours")
+		p.Minutes = r.PostFormValue("minutes")
+		p.Seconds = r.PostFormValue("seconds")
+	} else {
+		p.NumberValue = card.CarryValue
+		p.Hours = card.CarryHours
+		p.Minutes = card.CarryMinutes
+		p.Seconds = card.CarrySeconds
+	}
 	a.render(w, r, status, "share.html", p)
 }
 
@@ -89,7 +108,40 @@ func (a *app) handleShareQuickLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := a.now()
-	e := Entry{TrackerID: t.ID, OccurredAt: now.UTC(), ViaLink: true, CreatedAt: now}
+	e, msg, err := a.quickEntry(t, now, nil, true)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if msg != "" {
+		a.renderShare(w, r, http.StatusUnprocessableEntity, t, loc, msg)
+		return
+	}
+	if err := a.logEntry(&e, loc); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, shareURL(t), http.StatusSeeOther)
+}
+
+// handleShareLogEntry logs a number or duration at the current time.
+// A share link cannot choose the time or add a note. The value is read from the form.
+func (a *app) handleShareLogEntry(w http.ResponseWriter, r *http.Request) {
+	t, loc, ok := a.sharePost(w, r)
+	if !ok {
+		return
+	}
+	if t.IsCount() {
+		a.renderShare(w, r, http.StatusUnprocessableEntity, t, loc, "A count tracker doesn't take a value.")
+		return
+	}
+	number, duration, msg := readEntryValue(r, t)
+	if msg != "" {
+		a.renderShareForm(w, r, http.StatusUnprocessableEntity, t, loc, msg, true)
+		return
+	}
+	now := a.now()
+	e := Entry{TrackerID: t.ID, OccurredAt: now.UTC(), ViaLink: true, Number: number, DurationSec: duration, CreatedAt: now}
 	if err := a.logEntry(&e, loc); err != nil {
 		a.serverError(w, r, err)
 		return
@@ -100,6 +152,10 @@ func (a *app) handleShareQuickLog(w http.ResponseWriter, r *http.Request) {
 func (a *app) handleShareZero(w http.ResponseWriter, r *http.Request) {
 	t, loc, ok := a.sharePost(w, r)
 	if !ok {
+		return
+	}
+	if !t.IsCount() {
+		a.renderShare(w, r, http.StatusUnprocessableEntity, t, loc, "Only a count tracker can be recorded as none.")
 		return
 	}
 	now := a.now()

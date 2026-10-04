@@ -74,7 +74,8 @@ type Tracker struct {
 	Accent         string  // empty means none; see trackerAccents
 	LogLabel       string  // empty means "+ Log"
 	SummaryDisplay string  `gorm:"not null;default:times"` // "times", "done", or "last". Empty means times.
-	Kind           string  `gorm:"not null;default:count"`
+	Kind           string  `gorm:"not null;default:count"` // count, number, or duration
+	Unit           string  // number trackers only, such as "lb" or "°F". Not a per-entry choice.
 	ShareToken     *string `gorm:"uniqueIndex"` // nil = no share link
 	Position       int
 	ArchivedAt     *time.Time // archiving also clears ShareToken
@@ -104,9 +105,21 @@ type Entry struct {
 	RecordedByID *uint     // nil when logged through a share link
 	ViaLink      bool
 	Note         string
+	Number       *float64  // number trackers
+	DurationSec  *int      // duration trackers, whole seconds
 	CreatedAt    time.Time // drives the undo window
 	UpdatedAt    time.Time
 }
+
+const (
+	kindCount    = "count"
+	kindNumber   = "number"
+	kindDuration = "duration"
+)
+
+func (t Tracker) IsCount() bool    { return t.Kind == "" || t.Kind == kindCount }
+func (t Tracker) IsNumber() bool   { return t.Kind == kindNumber }
+func (t Tracker) IsDuration() bool { return t.Kind == kindDuration }
 
 // RecordedZero is a deliberate "none" for one local calendar day. It is not an event.
 // No entries and no RecordedZero for a day means nothing was logged.

@@ -157,7 +157,7 @@ Do not read the browser zone. Signup already stored the account zone, and a shar
 - Changing history, the 30-day list, or the count chart to Done / Last. The chart shows a count, a recorded zero, or a gap for each local day. It does not follow this setting.
 - Hiding Record none on Done today or Last occurrence trackers.
 - A fourth summary, streaks, period progress ("2 / 3 this week"), or "3 days ago". Period progress belongs to the later recurring-tracker direction in `PLAN.md`.
-- Number and duration trackers (phase 4). When those arrive, this setting still only describes count entries until someone extends it on purpose.
+- A fourth summary mode. Number and duration trackers still use Times today, Done today, or Last occurrence. The carried value is a separate line, not a new summary display.
 - Offline logging. The optimistic line in `app.js` is still replaced by the server response. Queuing a tap while offline is a later enhancement in `PLAN.md` and `ARCHITECTURE.md`.
 
 ## Tests

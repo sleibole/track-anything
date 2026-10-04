@@ -7,6 +7,7 @@
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
   {{template "logControl" .Card}}
 
+  {{if .Tracker.IsCount}}
   {{with .Today.Zero}}
     {{if $.Data.ZeroNew}}
     <form method="post" action="/s/{{$.Data.Token}}/zeros/{{.ID}}/undo" hx-post="/s/{{$.Data.Token}}/zeros/{{.ID}}/undo" class="inline"><button type="submit" class="quiet">Undo none</button></form>
@@ -14,6 +15,15 @@
   {{else}}{{if eq .Today.Count 0}}
     <form method="post" action="/s/{{.Token}}/zero" hx-post="/s/{{.Token}}/zero" class="inline"><button type="submit" class="quiet">Record none for today</button></form>
   {{end}}{{end}}
+  {{else}}
+  <details class="log-details"{{if or .Error (not .Card.LogAgain)}} open{{end}}>
+    <summary>{{if .Tracker.IsDuration}}Log a duration{{else}}Log a value{{end}}</summary>
+    <form method="post" action="/s/{{.Token}}/entries" hx-post="/s/{{.Token}}/entries">
+      {{template "valueFields" .}}
+      <button type="submit">Log</button>
+    </form>
+  </details>
+  {{end}}
 
   <h2>Today</h2>
   <ul class="entries">

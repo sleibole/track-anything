@@ -178,10 +178,13 @@ func TestCountChartSeriesOnTrackerPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	number := owner.get(path).body
-	if strings.Contains(number, "count-chart") || strings.Contains(number, ">Trend</h2>") || strings.Contains(number, "/static/chart.js") {
-		t.Fatal("number tracker rendered a count chart")
+	if strings.Contains(number, `id="count-chart"`) || strings.Contains(number, `id="value-chart"`) || strings.Contains(number, "/static/chart.js") {
+		t.Fatal("entries without a number were plotted")
 	}
-	if !strings.Contains(number, quick) {
+	if !strings.Contains(number, ">Trend</h2>") || !strings.Contains(number, "Nothing logged in the last 30 days.") {
+		t.Fatal("number tracker lost the trend section")
+	}
+	if !strings.Contains(number, fmt.Sprintf(`action="/trackers/%d/entries"`, tr.ID)) {
 		t.Fatal("number tracker lost the log form")
 	}
 
@@ -263,7 +266,7 @@ func TestChartJSIsVendored(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("chart.js: %d", code)
 	}
-	if !strings.Contains(wrapper, "/static/chart.umd.min.js") || !strings.Contains(wrapper, "overlayBands") || !strings.Contains(wrapper, "count-overlay") {
+	if !strings.Contains(wrapper, "/static/chart.umd.min.js") || !strings.Contains(wrapper, "overlayBands") || !strings.Contains(wrapper, "count-overlay") || !strings.Contains(wrapper, "value-chart") {
 		t.Fatal("wrapper does not load the vendored build and the overlay bands")
 	}
 	for _, cdn := range []string{"cdn.", "jsdelivr", "unpkg", "cdnjs"} {

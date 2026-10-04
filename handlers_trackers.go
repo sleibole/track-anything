@@ -26,6 +26,13 @@ const (
 	timeInputLayout = "2006-01-02T15:04" // <input type="datetime-local">
 )
 
+// trackerKinds is the create/edit choice. An empty kind means count, which is what a form that omitted the field stored.
+var trackerKinds = []choice{
+	{kindCount, "Count — each log is one event"},
+	{kindNumber, "Number — a value, such as weight"},
+	{kindDuration, "Duration — how long it took"},
+}
+
 // summaryDisplays is the create/edit choice. Empty is not a value; a missing field stores times.
 var summaryDisplays = []choice{
 	{summaryTimes, "Times today — show how many times it happened today"},
@@ -66,14 +73,20 @@ func (a *app) loadToday(t Tracker, loc *time.Location, now time.Time) (todayStat
 
 // trackerCard is the home card, also used at the top of the tracker and share pages.
 type trackerCard struct {
-	Tracker  Tracker
-	Count    int
-	Summary  string
-	Zone     string // IANA name used for this summary, for the optimistic last-occurrence clock
-	Link     string // tracker page; empty on the share page
-	QuickURL string
-	UndoURL  string // set while the viewer's latest entry can still be undone
-	Back     string // where the log and undo buttons return; empty means the tracker page
+	Tracker      Tracker
+	Count        int
+	Summary      string
+	Zone         string // IANA name used for this summary, for the optimistic last-occurrence clock
+	Link         string // tracker page; empty on the share page
+	QuickURL     string
+	UndoURL      string // set while the viewer's latest entry can still be undone
+	Back         string // where the log and undo buttons return; empty means the tracker page
+	Carry        string // "Last value: 10 lb" or "Last duration: 42 min"; empty when nothing carries forward
+	CarryValue   string // number input, without the unit
+	CarryHours   string
+	CarryMinutes string
+	CarrySeconds string
+	LogAgain     bool // one tap repeats Carry; false when there is no previous value
 }
 
 // card builds a tracker's card. viewerID is nil for a share-link visitor.
@@ -88,7 +101,7 @@ func (a *app) card(t Tracker, loc *time.Location, now time.Time, viewerID *uint)
 // cardView builds a card from today's state. Last occurrence also loads the latest entry.
 func (a *app) cardView(t Tracker, s todayState, loc *time.Location, now time.Time, viewerID *uint) (trackerCard, error) {
 	var latest *Entry
-	if t.SummaryDisplay == summaryLast {
+	if t.SummaryDisplay == summaryLast || t.IsNumber() || t.IsDuration() {
 		var err error
 		latest, err = a.latestEntry(t.ID)
 		if err != nil {
@@ -138,7 +151,26 @@ func cardFor(t Tracker, s todayState, latest *Entry, now time.Time, loc *time.Lo
 	if undoable != nil {
 		c.UndoURL = entryUndoURL(t, undoable.ID, viewerID == nil)
 	}
+	applyCarry(&c, t, latest)
 	return c
+}
+
+// applyCarry fills the one-tap value from the latest entry by OccurredAt.
+// The note is not copied. A count tracker has nothing to carry.
+func applyCarry(c *trackerCard, t Tracker, latest *Entry) {
+	if latest == nil {
+		return
+	}
+	switch {
+	case t.IsNumber() && latest.Number != nil:
+		c.Carry = "Last value: " + formatMeasurement(*latest.Number, t.Unit)
+		c.CarryValue = formatNumber(*latest.Number)
+		c.LogAgain = true
+	case t.IsDuration() && latest.DurationSec != nil && *latest.DurationSec > 0:
+		c.Carry = "Last duration: " + formatDuration(*latest.DurationSec)
+		c.CarryHours, c.CarryMinutes, c.CarrySeconds = durationFields(*latest.DurationSec)
+		c.LogAgain = true
+	}
 }
 
 func entryUndoURL(t Tracker, entryID uint, viaLink bool) string {
@@ -150,11 +182,18 @@ func entryUndoURL(t Tracker, entryID uint, viaLink bool) string {
 
 type entryView struct {
 	Entry
-	Time      string // "3:04 PM" in the viewer's zone
-	TimeValue string // the owner's edit field
-	By        string // who logged it, when that isn't the viewer
-	UndoURL   string // set while it can be undone
-	Owner     bool   // show the owner's edit and delete controls
+	Time        string // "3:04 PM" in the viewer's zone
+	TimeValue   string // the owner's edit field
+	Value       string // "10 lb" or "42 min"; empty for a count
+	NumberValue string
+	Hours       string
+	Minutes     string
+	Seconds     string
+	Kind        string
+	Unit        string
+	By          string // who logged it, when that isn't the viewer
+	UndoURL     string // set while it can be undone
+	Owner       bool   // show the owner's edit and delete controls
 }
 
 // entryViews labels entries for display. emails maps user IDs to addresses; a nil map
@@ -166,7 +205,17 @@ func entryViews(t Tracker, entries []Entry, loc *time.Location, now time.Time, v
 			Entry:     e,
 			Time:      e.OccurredAt.In(loc).Format("3:04 PM"),
 			TimeValue: e.OccurredAt.In(loc).Format(timeInputLayout),
+			Kind:      t.Kind,
+			Unit:      t.Unit,
 			Owner:     owner,
+		}
+		switch {
+		case t.IsNumber() && e.Number != nil:
+			v.Value = formatMeasurement(*e.Number, t.Unit)
+			v.NumberValue = formatNumber(*e.Number)
+		case t.IsDuration() && e.DurationSec != nil && *e.DurationSec > 0:
+			v.Value = formatDuration(*e.DurationSec)
+			v.Hours, v.Minutes, v.Seconds = durationFields(*e.DurationSec)
 		}
 		if emails != nil {
 			switch {
@@ -231,6 +280,10 @@ type trackerPage struct {
 	PageURL        string        // this page, including ?overlay= when one is selected
 	NowValue       string        // default for the owner's time field
 	Note           string
+	NumberValue    string // log form; the carried value unless this render is correcting a post
+	Hours          string
+	Minutes        string
+	Seconds        string
 	Error          string
 }
 
@@ -248,12 +301,16 @@ func (a *app) trackerPage(t Tracker, role string, u *User, overlay *Tracker) (tr
 		return trackerPage{}, err
 	}
 	p := trackerPage{
-		Card:     card,
-		IsOwner:  role == roleOwner,
-		Today:    today,
-		ZeroNew:  today.Zero != nil && recent(today.Zero.CreatedAt, now),
-		NowValue: now.In(loc).Format(timeInputLayout),
-		PageURL:  trackerPageURL(t.ID, 0),
+		Card:        card,
+		IsOwner:     role == roleOwner,
+		Today:       today,
+		ZeroNew:     today.Zero != nil && recent(today.Zero.CreatedAt, now),
+		NowValue:    now.In(loc).Format(timeInputLayout),
+		PageURL:     trackerPageURL(t.ID, 0),
+		NumberValue: card.CarryValue,
+		Hours:       card.CarryHours,
+		Minutes:     card.CarryMinutes,
+		Seconds:     card.CarrySeconds,
 	}
 	if overlay != nil {
 		p.Overlay = overlay
@@ -314,30 +371,44 @@ func (a *app) trackerPage(t Tracker, role string, u *User, overlay *Tracker) (tr
 		}
 		p.History = append(p.History, h)
 	}
-	if t.Kind == "count" {
-		choices, err := visibleCountTrackers(a.db, u.ID, t.ID)
+	// Number and duration history is the days that have entries. Empty days and
+	// recorded zeros belong to count trackers.
+	if !t.IsCount() {
+		logged := p.History[:0]
+		for _, h := range p.History {
+			if len(h.Entries) > 0 {
+				logged = append(logged, h)
+			}
+		}
+		p.History = logged
+	}
+	choices, err := visibleCountTrackers(a.db, u.ID, t.ID)
+	if err != nil {
+		return p, err
+	}
+	p.OverlayChoices = choices
+	var script template.HTML
+	if t.IsCount() {
+		script, err = countChartScript(today, older, zeros, loc)
+	} else {
+		script, err = valueChartScript(append(append([]Entry{}, today.Entries...), older...), t, loc, today.Day)
+	}
+	if err != nil {
+		return p, err
+	}
+	p.ChartScript = script
+	// No primary history means no chart, even when the overlay has events.
+	if overlay != nil && script != "" {
+		days, err := a.overlayEvents(overlay, loc, today.Day)
 		if err != nil {
 			return p, err
 		}
-		p.OverlayChoices = choices
-		script, err := countChartScript(today, older, zeros, loc)
+		p.OverlayEmpty = len(days) == 0
+		embedded, err := overlayChartScript(overlay, days)
 		if err != nil {
 			return p, err
 		}
-		p.ChartScript = script
-		// No primary history means no chart, even when the overlay has events.
-		if overlay != nil && script != "" {
-			days, err := a.overlayEvents(overlay, loc, today.Day)
-			if err != nil {
-				return p, err
-			}
-			p.OverlayEmpty = len(days) == 0
-			embedded, err := overlayChartScript(overlay, days)
-			if err != nil {
-				return p, err
-			}
-			p.OverlayScript = embedded
-		}
+		p.OverlayScript = embedded
 	}
 	return p, nil
 }
@@ -372,8 +443,9 @@ func requestedOverlayID(r *http.Request) uint {
 
 // resolveOverlay loads one other count tracker the user can see.
 // The tracker's own id means no overlay. An id they cannot see is a 404.
+// The primary tracker can be a count, a number, or a duration. The overlay is still events.
 func (a *app) resolveOverlay(userID uint, primary Tracker, overlayID uint) (*Tracker, error) {
-	if primary.Kind != "count" || overlayID == 0 || overlayID == primary.ID {
+	if overlayID == 0 || overlayID == primary.ID {
 		return nil, nil
 	}
 	other, _, err := trackerForUser(a.db, userID, overlayID)
@@ -455,6 +527,20 @@ func countChartScript(today todayState, older []Entry, zeros []RecordedZero, loc
 	return template.HTML(`<script type="application/json" id="count-chart">` + string(b) + `</script>`), nil
 }
 
+// valueChartScript embeds number or duration observations for the same 30 local days
+// as the count chart. No points means the page shows a sentence instead of a chart.
+func valueChartScript(entries []Entry, t Tracker, loc *time.Location, lastDay string) (template.HTML, error) {
+	points, days, err := valuePoints(entries, t, loc, lastDay, chartDays)
+	if err != nil || len(points) == 0 {
+		return "", err
+	}
+	b, err := json.Marshal(valueChart{Kind: t.Kind, Unit: t.Unit, Days: days, Points: points})
+	if err != nil {
+		return "", err
+	}
+	return template.HTML(`<script type="application/json" id="value-chart">` + string(b) + `</script>`), nil
+}
+
 func (a *app) handleShowTracker(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	t, role, err := trackerForUser(a.db, u.ID, pathID(r, "id"))
@@ -490,6 +576,12 @@ func (a *app) renderTrackerError(w http.ResponseWriter, r *http.Request, t Track
 	}
 	p.Error = msg
 	p.Note = r.PostFormValue("note")
+	if strings.HasSuffix(r.URL.Path, "/entries") {
+		p.NumberValue = r.PostFormValue("number")
+		p.Hours = r.PostFormValue("hours")
+		p.Minutes = r.PostFormValue("minutes")
+		p.Seconds = r.PostFormValue("seconds")
+	}
 	a.render(w, r, http.StatusUnprocessableEntity, "tracker_show.html", p)
 }
 
@@ -503,10 +595,14 @@ type trackerForm struct {
 	Accent         string
 	LogLabel       string
 	SummaryDisplay string
+	Kind           string
+	Unit           string
+	KindLocked     bool // history exists, so the kind cannot change
 	Error          string
 	Icons          []choice
 	Accents        []choice
 	Summaries      []choice
+	Kinds          []choice
 	Tracker        *Tracker // set when editing
 	ShareURL       string
 	MoveHouseholds []Household // other households the owner owns; empty hides the move control
@@ -515,7 +611,10 @@ type trackerForm struct {
 }
 
 func (a *app) newTrackerForm(u *User) (trackerForm, error) {
-	f := trackerForm{Icons: trackerIcons, Accents: trackerAccents, Summaries: summaryDisplays, SummaryDisplay: summaryTimes}
+	f := trackerForm{
+		Icons: trackerIcons, Accents: trackerAccents, Summaries: summaryDisplays, SummaryDisplay: summaryTimes,
+		Kinds: trackerKinds, Kind: kindCount,
+	}
 	hs, err := ownedHouseholds(a.db, u.ID)
 	f.Households = hs
 	if len(f.Households) > 0 {
@@ -535,6 +634,11 @@ func readTrackerForm(r *http.Request, f *trackerForm) string {
 	if f.SummaryDisplay == "" {
 		f.SummaryDisplay = summaryTimes
 	}
+	f.Kind = r.PostFormValue("kind")
+	if f.Kind == "" {
+		f.Kind = kindCount
+	}
+	f.Unit = strings.TrimSpace(r.PostFormValue("unit"))
 	switch {
 	case f.Name == "":
 		return "Give the tracker a name."
@@ -548,6 +652,12 @@ func readTrackerForm(r *http.Request, f *trackerForm) string {
 		return "Pick a color from the list."
 	case !listed(summaryDisplays, f.SummaryDisplay):
 		return "Pick a summary from the list."
+	case !listed(trackerKinds, f.Kind):
+		return "Pick a kind from the list."
+	case f.Kind == kindNumber:
+		return validUnit(f.Unit)
+	case f.Unit != "":
+		return "A unit is only for a number tracker."
 	}
 	return ""
 }
@@ -604,7 +714,8 @@ func (a *app) handleCreateTracker(w http.ResponseWriter, r *http.Request) {
 		Accent:         f.Accent,
 		LogLabel:       f.LogLabel,
 		SummaryDisplay: f.SummaryDisplay,
-		Kind:           "count",
+		Kind:           f.Kind,
+		Unit:           unitForKind(f.Kind, f.Unit),
 		Position:       last + 1,
 	}
 	if err := a.db.Create(&t).Error; err != nil {
@@ -636,10 +747,16 @@ func (a *app) editForm(t Tracker) trackerForm {
 		Accent:         t.Accent,
 		LogLabel:       t.LogLabel,
 		SummaryDisplay: t.SummaryDisplay,
+		Kind:           t.Kind,
+		Unit:           t.Unit,
+		Kinds:          trackerKinds,
 		Icons:          trackerIcons,
 		Accents:        trackerAccents,
 		Summaries:      summaryDisplays,
 		Tracker:        &t,
+	}
+	if f.Kind == "" {
+		f.Kind = kindCount
 	}
 	if t.ShareToken != nil {
 		f.ShareURL = a.cfg.BaseURL + "/s/" + *t.ShareToken
@@ -689,7 +806,35 @@ func (a *app) handleEditTracker(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	f.KindLocked, err = a.trackerHasHistory(t.ID)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	a.render(w, r, http.StatusOK, "tracker_form.html", f)
+}
+
+// trackerHasHistory is true when a kind change would reinterpret something already stored.
+// Recorded zeros count: they are count-tracker history even though they are not entries.
+func (a *app) trackerHasHistory(trackerID uint) (bool, error) {
+	var n int64
+	if err := a.db.Model(&Entry{}).Where("tracker_id = ?", trackerID).Count(&n).Error; err != nil {
+		return false, err
+	}
+	if n > 0 {
+		return true, nil
+	}
+	if err := a.db.Model(&RecordedZero{}).Where("tracker_id = ?", trackerID).Count(&n).Error; err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+func unitForKind(kind, unit string) string {
+	if kind == kindNumber {
+		return unit
+	}
+	return ""
 }
 
 func (a *app) handleUpdateTracker(w http.ResponseWriter, r *http.Request) {
@@ -702,12 +847,27 @@ func (a *app) handleUpdateTracker(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	f.KindLocked, err = a.trackerHasHistory(t.ID)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	if f.Error = readTrackerForm(r, &f); f.Error != "" {
+		a.render(w, r, http.StatusUnprocessableEntity, "tracker_form.html", f)
+		return
+	}
+	currentKind := t.Kind
+	if currentKind == "" {
+		currentKind = kindCount
+	}
+	if f.KindLocked && f.Kind != currentKind {
+		f.Error = "This tracker already has history, so its kind can't change."
 		a.render(w, r, http.StatusUnprocessableEntity, "tracker_form.html", f)
 		return
 	}
 	err = a.db.Model(&t).Updates(map[string]any{
 		"name": f.Name, "icon": f.Icon, "accent": f.Accent, "log_label": f.LogLabel, "summary_display": f.SummaryDisplay,
+		"kind": f.Kind, "unit": unitForKind(f.Kind, f.Unit),
 	}).Error
 	if err != nil {
 		a.serverError(w, r, err)

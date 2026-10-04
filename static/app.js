@@ -16,6 +16,20 @@ document.querySelectorAll("form[data-autosubmit]").forEach((form) => {
   form.requestSubmit();
 });
 
+// The unit field belongs to number trackers. Hiding it is optional; the server still checks the kind.
+document.querySelectorAll("[data-kind-picker]").forEach((picker) => {
+  const sync = () => {
+    const unit = picker.querySelector("[data-unit-field]");
+    const input = unit && unit.querySelector("input");
+    const selected = picker.querySelector('input[name="kind"]:checked');
+    const number = !!(selected && selected.value === "number");
+    if (unit) unit.hidden = !number;
+    if (input) input.disabled = !number;
+  };
+  picker.addEventListener("change", sync);
+  sync();
+});
+
 // The log button updates the summary on tap. The server's page replaces it moments later.
 // If the request fails, the previous line is put back and an inline note says it was not saved.
 document.addEventListener("submit", (event) => {

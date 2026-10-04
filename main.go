@@ -289,6 +289,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /trackers/{id}/move", a.requireUser(a.handleMoveTracker))
 	mux.HandleFunc("POST /trackers/{id}/share", a.requireUser(a.handleShareOn))
 	mux.HandleFunc("POST /trackers/{id}/share/delete", a.requireUser(a.handleShareOff))
+	mux.HandleFunc("GET /trackers/{id}/export", a.requireUser(a.handleExportTracker))
 
 	mux.HandleFunc("POST /trackers/{id}/quick", a.requireUser(a.handleQuickLog))
 	mux.HandleFunc("POST /trackers/{id}/entries", a.requireUser(a.handleLogEntry))
@@ -301,6 +302,7 @@ func (a *app) routes() http.Handler {
 
 	mux.HandleFunc("GET /s/{token}", a.handleShare)
 	mux.HandleFunc("POST /s/{token}/quick", a.handleShareQuickLog)
+	mux.HandleFunc("POST /s/{token}/entries", a.handleShareLogEntry)
 	mux.HandleFunc("POST /s/{token}/zero", a.handleShareZero)
 	mux.HandleFunc("POST /s/{token}/entries/{eid}/undo", a.handleShareUndoEntry)
 	mux.HandleFunc("POST /s/{token}/zeros/{zid}/undo", a.handleShareUndoZero)

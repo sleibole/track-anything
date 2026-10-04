@@ -82,15 +82,54 @@ func (a *app) tooLateToUndo(w http.ResponseWriter, r *http.Request) {
 		"Undo works for 15 minutes after logging. An owner can still correct it from the tracker page.")
 }
 
+// quickEntry is the one-tap log. A count records now. A number or duration records
+// now and the value of the latest entry by OccurredAt. The request body is not a
+// value: a hidden field cannot replace what is carried forward.
+func (a *app) quickEntry(t Tracker, now time.Time, by *uint, viaLink bool) (Entry, string, error) {
+	e := Entry{TrackerID: t.ID, OccurredAt: now.UTC(), RecordedByID: by, ViaLink: viaLink, CreatedAt: now}
+	if t.IsCount() {
+		return e, "", nil
+	}
+	last, err := a.latestEntry(t.ID)
+	if err != nil {
+		return e, "", err
+	}
+	switch {
+	case t.IsNumber():
+		if last == nil || last.Number == nil {
+			return e, "Log a value before logging it again.", nil
+		}
+		n := *last.Number
+		e.Number = &n
+	case t.IsDuration():
+		if last == nil || last.DurationSec == nil || *last.DurationSec <= 0 {
+			return e, "Log a duration before logging it again.", nil
+		}
+		sec := *last.DurationSec
+		e.DurationSec = &sec
+	default:
+		return e, "This tracker can't be logged that way.", nil
+	}
+	return e, "", nil
+}
+
 func (a *app) handleQuickLog(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
-	t, _, err := trackerForUser(a.db, u.ID, pathID(r, "id"))
+	t, role, err := trackerForUser(a.db, u.ID, pathID(r, "id"))
 	if err != nil {
 		a.lookupError(w, r, err)
 		return
 	}
 	now := a.now()
-	e := Entry{TrackerID: t.ID, OccurredAt: now.UTC(), RecordedByID: &u.ID, CreatedAt: now}
+	e, msg, err := a.quickEntry(t, now, &u.ID, false)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if msg != "" {
+		a.renderTrackerError(w, r, t, role, msg)
+		return
+	}
 	if err := a.logEntry(&e, location(u.TimeZone)); err != nil {
 		a.serverError(w, r, err)
 		return
@@ -108,6 +147,44 @@ func parseEntryTime(v string, loc *time.Location, now time.Time) (time.Time, str
 		return t, "That time hasn't happened yet."
 	}
 	return t.UTC(), ""
+}
+
+// readEntryValue reads the value that belongs to this tracker.
+// A count takes neither a number nor a duration. The other kinds reject the wrong field
+// instead of ignoring it.
+func readEntryValue(r *http.Request, t Tracker) (number *float64, duration *int, msg string) {
+	rawNumber := strings.TrimSpace(r.PostFormValue("number"))
+	hours := strings.TrimSpace(r.PostFormValue("hours"))
+	minutes := strings.TrimSpace(r.PostFormValue("minutes"))
+	seconds := strings.TrimSpace(r.PostFormValue("seconds"))
+	hasDuration := hours != "" || minutes != "" || seconds != ""
+	switch {
+	case t.IsCount():
+		if rawNumber != "" || hasDuration {
+			return nil, nil, "A count tracker doesn't take a value."
+		}
+		return nil, nil, ""
+	case t.IsNumber():
+		if hasDuration {
+			return nil, nil, "A number tracker doesn't take a duration."
+		}
+		v, msg := parseNumber(rawNumber)
+		if msg != "" {
+			return nil, nil, msg
+		}
+		return &v, nil, ""
+	case t.IsDuration():
+		if rawNumber != "" {
+			return nil, nil, "A duration tracker doesn't take a number."
+		}
+		sec, msg := parseDurationFields(r.PostFormValue("hours"), r.PostFormValue("minutes"), r.PostFormValue("seconds"))
+		if msg != "" {
+			return nil, nil, msg
+		}
+		return nil, &sec, ""
+	default:
+		return nil, nil, "This tracker can't be logged that way."
+	}
 }
 
 func readNote(r *http.Request) (string, string) {
@@ -131,6 +208,10 @@ func (a *app) handleLogEntry(w http.ResponseWriter, r *http.Request) {
 	now := a.now()
 
 	note, msg := readNote(r)
+	number, duration, valueMsg := readEntryValue(r, t)
+	if msg == "" {
+		msg = valueMsg
+	}
 	occurred := now.UTC()
 	if v := r.PostFormValue("time"); msg == "" && role == roleOwner && v != "" {
 		occurred, msg = parseEntryTime(v, loc, now)
@@ -140,7 +221,10 @@ func (a *app) handleLogEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	e := Entry{TrackerID: t.ID, OccurredAt: occurred, RecordedByID: &u.ID, Note: note, CreatedAt: now}
+	e := Entry{
+		TrackerID: t.ID, OccurredAt: occurred, RecordedByID: &u.ID, Note: note,
+		Number: number, DurationSec: duration, CreatedAt: now,
+	}
 	if err := a.logEntry(&e, loc); err != nil {
 		a.serverError(w, r, err)
 		return
@@ -154,6 +238,10 @@ func (a *app) handleRecordZero(w http.ResponseWriter, r *http.Request) {
 	t, role, err := trackerForUser(a.db, u.ID, pathID(r, "id"))
 	if err != nil {
 		a.lookupError(w, r, err)
+		return
+	}
+	if !t.IsCount() {
+		a.renderTrackerError(w, r, t, role, "Only a count tracker can be recorded as none.")
 		return
 	}
 	loc := location(u.TimeZone)
@@ -225,6 +313,10 @@ func (a *app) handleEditEntry(w http.ResponseWriter, r *http.Request) {
 	}
 	loc := location(currentUser(r).TimeZone)
 	note, msg := readNote(r)
+	number, duration, valueMsg := readEntryValue(r, t)
+	if msg == "" {
+		msg = valueMsg
+	}
 	occurred := e.OccurredAt
 	if msg == "" {
 		occurred, msg = parseEntryTime(r.PostFormValue("time"), loc, a.now())
@@ -233,8 +325,17 @@ func (a *app) handleEditEntry(w http.ResponseWriter, r *http.Request) {
 		a.renderTrackerError(w, r, t, role, msg)
 		return
 	}
+	updates := map[string]any{"occurred_at": occurred, "note": note}
+	switch {
+	case t.IsNumber():
+		updates["number"] = *number
+		updates["duration_sec"] = nil
+	case t.IsDuration():
+		updates["duration_sec"] = *duration
+		updates["number"] = nil
+	}
 	err := a.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&e).Updates(map[string]any{"occurred_at": occurred, "note": note}).Error; err != nil {
+		if err := tx.Model(&e).Updates(updates).Error; err != nil {
 			return err
 		}
 		return tx.Where("tracker_id = ? AND day = ?", t.ID, localDay(occurred, loc)).Delete(&RecordedZero{}).Error

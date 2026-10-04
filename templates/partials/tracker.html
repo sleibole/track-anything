@@ -3,11 +3,21 @@
 {{define "logControl"}}
 <div class="log-control" data-tracker>
   <p class="tracker-summary" data-summary data-count="{{.Count}}" data-summary-display="{{.Tracker.SummaryMode}}" data-time-zone="{{.Zone}}">{{.Summary}}</p>
+  {{with .Carry}}<p class="carry">{{.}}</p>{{end}}
   <div class="log-buttons">
+    {{if .LogAgain}}
+    <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick>
+      {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
+      <button type="submit">Log again</button>
+    </form>
+    {{else if .Tracker.IsCount}}
     <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick>
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <button type="submit">{{.Tracker.Label}}</button>
     </form>
+    {{else if .Link}}
+    <a href="{{.Link}}" role="button">{{.Tracker.Label}}</a>
+    {{end}}
     {{with .UndoURL}}
     <form method="post" action="{{.}}" hx-post="{{.}}">
       {{with $.Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
@@ -34,9 +44,28 @@
 <h1 class="tracker-title{{with .Accent}} accent-{{.}}{{end}}"><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</h1>
 {{end}}
 
+{{define "valueFields"}}
+{{if .Tracker.IsNumber}}
+<label>Value
+  <span class="with-unit">
+    <input type="number" name="number" step="any" inputmode="decimal" value="{{.NumberValue}}" required>
+    <span>{{.Tracker.Unit}}</span>
+  </span>
+</label>
+{{end}}
+{{if .Tracker.IsDuration}}
+<div class="duration-fields">
+  <label>Hours <input type="number" name="hours" min="0" max="99" step="1" inputmode="numeric" value="{{.Hours}}"></label>
+  <label>Minutes <input type="number" name="minutes" min="0" max="59" step="1" inputmode="numeric" value="{{.Minutes}}"></label>
+  <label>Seconds <input type="number" name="seconds" min="0" max="59" step="1" inputmode="numeric" value="{{.Seconds}}"></label>
+</div>
+{{end}}
+{{end}}
+
 {{define "entry"}}
 <li class="entry">
   <span class="entry-time">{{.Time}}</span>
+  {{with .Value}}<span class="entry-value">— {{.}}</span>{{end}}
   {{with .Note}}<span class="entry-note">{{.}}</span>{{end}}
   {{if .By}}<small class="muted">{{if .ViaLink}}via share link{{else}}by {{.By}}{{end}}</small>{{end}}
   {{with .UndoURL}}
@@ -49,6 +78,21 @@
     <summary>Edit</summary>
     <form method="post" action="/entries/{{.ID}}" hx-post="/entries/{{.ID}}">
       <label>When <input type="datetime-local" name="time" value="{{.TimeValue}}" required></label>
+      {{if eq .Kind "number"}}
+      <label>Value
+        <span class="with-unit">
+          <input type="number" name="number" step="any" inputmode="decimal" value="{{.NumberValue}}" required>
+          <span>{{.Unit}}</span>
+        </span>
+      </label>
+      {{end}}
+      {{if eq .Kind "duration"}}
+      <div class="duration-fields">
+        <label>Hours <input type="number" name="hours" min="0" max="99" step="1" inputmode="numeric" value="{{.Hours}}"></label>
+        <label>Minutes <input type="number" name="minutes" min="0" max="59" step="1" inputmode="numeric" value="{{.Minutes}}"></label>
+        <label>Seconds <input type="number" name="seconds" min="0" max="59" step="1" inputmode="numeric" value="{{.Seconds}}"></label>
+      </div>
+      {{end}}
       <label>Note <input type="text" name="note" value="{{.Note}}" maxlength="500"></label>
       <button type="submit">Save</button>
     </form>

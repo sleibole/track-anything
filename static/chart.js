@@ -3,11 +3,20 @@
 
 (function () {
   function bootCountChart() {
-    const dataEl = document.getElementById("count-chart");
-    const canvas = document.getElementById("count-chart-canvas");
-    if (!dataEl || !canvas) return;
+    const canvas = document.getElementById("trend-canvas");
+    const countEl = document.getElementById("count-chart");
+    const valueEl = document.getElementById("value-chart");
+    if (!canvas || (!countEl && !valueEl)) return;
+    const draw = function () {
+      const next = document.getElementById("trend-canvas");
+      const nextCount = document.getElementById("count-chart");
+      const nextValue = document.getElementById("value-chart");
+      if (!next) return;
+      if (nextCount) drawCountChart(next, nextCount);
+      else if (nextValue) drawValueChart(next, nextValue);
+    };
     if (window.Chart) {
-      drawCountChart(canvas, dataEl);
+      draw();
       return;
     }
     if (!window.__chartJsLoading) {
@@ -23,18 +32,14 @@
         document.head.appendChild(script);
       });
     }
-    window.__chartJsLoading.then(function () {
-      const next = document.getElementById("count-chart-canvas");
-      const nextData = document.getElementById("count-chart");
-      if (next && nextData) drawCountChart(next, nextData);
-    }).catch(function () {});
+    window.__chartJsLoading.then(draw).catch(function () {});
   }
 
   if (!window.__countChartBound) {
     window.__countChartBound = true;
     document.addEventListener("htmx:beforeSwap", function () {
       if (!window.Chart) return;
-      const canvas = document.getElementById("count-chart-canvas");
+      const canvas = document.getElementById("trend-canvas");
       const existing = canvas && window.Chart.getChart(canvas);
       if (existing) existing.destroy();
     });
@@ -66,8 +71,9 @@
       for (const day of overlay.days) {
         const i = indexByDay[day.day];
         if (i === undefined) continue;
-        const center = scale.getPixelForValue(i);
-        const slot = slotWidth(scale, i, series.length);
+        const xValue = series[i].x === undefined || series[i].x === null ? i : series[i].x;
+        const center = scale.getPixelForValue(xValue);
+        const slot = series[i].x === undefined ? slotWidth(scale, i, series.length) : Math.abs(scale.getPixelForValue(xValue + 0.5) - scale.getPixelForValue(xValue - 0.5));
         const width = Math.max(3, Math.min(8, slot * 0.35));
         bands.push({ i: i, center: center, width: width, day: day });
       }
@@ -114,6 +120,10 @@
         return;
       }
       if (type !== "mousemove" && type !== "click" && type !== "touchstart") return;
+      if (opts.value) {
+        showValueTip(chart, args, opts, tip);
+        return;
+      }
       const scale = chart.scales.x;
       const area = chart.chartArea;
       if (!scale || !area) return;
@@ -143,10 +153,7 @@
       if (hit) lines.push(overlayText(opts.overlay, hit));
       tip.textContent = lines.join("\n");
       tip.hidden = false;
-      const parent = chart.canvas.parentElement;
-      const maxLeft = Math.max(0, parent.clientWidth - tip.offsetWidth - 4);
-      tip.style.left = Math.min(Math.max(0, ev.x + 10), maxLeft) + "px";
-      tip.style.top = Math.min(Math.max(0, ev.y - tip.offsetHeight - 8), Math.max(0, parent.clientHeight - tip.offsetHeight)) + "px";
+      placeTip(chart, tip, ev);
     },
   };
 
@@ -181,6 +188,103 @@
     if (!hit.times || hit.times.length === 0) return overlay.name + " — " + hit.label;
     if (hit.times.length === 1) return overlay.name + " — " + hit.label + ", " + hit.times[0];
     return overlay.name + " — " + hit.label + ", " + hit.times.join(", ");
+  }
+
+  function showValueTip(chart, args, opts, tip) {
+    const ev = args.event;
+    const area = chart.chartArea;
+    if (!area || ev.x < area.left || ev.x > area.right || ev.y < area.top || ev.y > area.bottom) {
+      tip.hidden = true;
+      return;
+    }
+    const point = nearestPoint(chart, ev.x, ev.y);
+    const band = bandAt(chart, opts, ev.x);
+    if (!point && !band) {
+      tip.hidden = true;
+      return;
+    }
+    const lines = [];
+    if (point) {
+      lines.push(point.label || point.day);
+      if (point.text) lines.push(point.text);
+      const hit = overlayHit(opts.overlay, point.day);
+      if (hit) lines.push(overlayText(opts.overlay, hit));
+    } else {
+      lines.push(overlayText(opts.overlay, band));
+    }
+    tip.textContent = lines.join("\n");
+    tip.hidden = false;
+    placeTip(chart, tip, ev);
+  }
+
+  function nearestPoint(chart, x, y) {
+    const meta = chart.getDatasetMeta(0);
+    const data = chart.data.datasets[0] && chart.data.datasets[0].data;
+    if (!meta || !meta.data || !data) return null;
+    let best = null;
+    let bestD = 28;
+    meta.data.forEach(function (pt, i) {
+      const d = Math.hypot(pt.x - x, pt.y - y);
+      if (d <= bestD) {
+        bestD = d;
+        best = data[i];
+      }
+    });
+    return best;
+  }
+
+  function bandAt(chart, opts, x) {
+    const scale = chart.scales.x;
+    const series = (opts && opts.series) || [];
+    if (!scale || !opts || !opts.overlay) return null;
+    let best = null;
+    let bestD = 10;
+    series.forEach(function (day, i) {
+      const hit = overlayHit(opts.overlay, day.day);
+      if (!hit) return;
+      const xValue = day.x === undefined || day.x === null ? i : day.x;
+      const d = Math.abs(scale.getPixelForValue(xValue) - x);
+      if (d <= bestD) {
+        bestD = d;
+        best = hit;
+      }
+    });
+    return best;
+  }
+
+  function placeTip(chart, tip, ev) {
+    const parent = chart.canvas.parentElement;
+    const maxLeft = Math.max(0, parent.clientWidth - tip.offsetWidth - 4);
+    tip.style.left = Math.min(Math.max(0, ev.x + 10), maxLeft) + "px";
+    tip.style.top = Math.min(Math.max(0, ev.y - tip.offsetHeight - 8), Math.max(0, parent.clientHeight - tip.offsetHeight)) + "px";
+  }
+
+  // Chart.js would otherwise pick a step in raw seconds, which formats as
+  // "8 min 20 sec". A round step keeps the axis on 10 min, 15 min, 30 min, 1 hr.
+  function durationStep(max) {
+    const steps = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 28800];
+    if (!(max > 0)) return 60;
+    const target = max / 4;
+    let step = steps[0];
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i] <= target) step = steps[i];
+      else break;
+    }
+    return step;
+  }
+
+  function formatDuration(sec) {
+    sec = Math.round(sec);
+    if (sec < 0) sec = 0;
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const parts = [];
+    if (h) parts.push(h + " hr");
+    if (m) parts.push(m + " min");
+    if (s) parts.push(s + " sec");
+    if (!parts.length) parts.push("0 sec");
+    return parts.join(" ");
   }
 
   function countText(n) {
@@ -301,6 +405,110 @@
           y: {
             beginAtZero: true,
             ticks: { color: muted, font: { family: font }, precision: 0 },
+            grid: { color: grid },
+            border: { display: false },
+          },
+        },
+      },
+    });
+  }
+
+  function drawValueChart(canvas, dataEl) {
+    if (!window.Chart) return;
+    const existing = window.Chart.getChart(canvas);
+    if (existing) existing.destroy();
+
+    let chartData;
+    try {
+      chartData = JSON.parse(dataEl.textContent);
+    } catch {
+      return;
+    }
+    const points = chartData && chartData.points;
+    const days = chartData && chartData.days;
+    if (!Array.isArray(points) || points.length === 0 || !Array.isArray(days)) return;
+
+    const overlay = readOverlay();
+    const hasBands = !!(overlay && overlay.days.length > 0);
+    const duration = chartData.kind === "duration";
+    const primary = cssVar("--pico-primary", "#0172ad");
+    const muted = cssVar("--pico-muted-color", "#5c6b7a");
+    const grid = cssVar("--pico-muted-border-color", "rgba(128, 128, 128, 0.35)");
+    const font = getComputedStyle(document.body).fontFamily;
+    const narrow = canvas.parentElement && canvas.parentElement.clientWidth < 520;
+    const tooltip = {
+      callbacks: {
+        title: function (items) {
+          const raw = items[0] && items[0].raw;
+          return (raw && raw.label) || "";
+        },
+        label: function (item) {
+          return (item.raw && item.raw.text) || "";
+        },
+      },
+    };
+    if (hasBands) tooltip.enabled = false;
+
+    new window.Chart(canvas, {
+      type: "line",
+      plugins: hasBands ? [overlayBands] : [],
+      data: {
+        datasets: [
+          {
+            label: duration ? "Duration" : "Value",
+            data: points,
+            tension: 0,
+            borderColor: primary,
+            backgroundColor: primary,
+            pointBackgroundColor: primary,
+            pointBorderColor: primary,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            borderWidth: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        layout: { padding: { top: hasBands && overlay.mark ? 18 : 12, right: 8, bottom: 4, left: 4 } },
+        interaction: { mode: "nearest", intersect: true },
+        plugins: {
+          legend: { display: false },
+          tooltip: tooltip,
+          overlayBands: { overlay: overlay, series: days, value: true },
+        },
+        scales: {
+          x: {
+            type: "linear",
+            min: 0,
+            max: days.length,
+            grid: { display: false },
+            ticks: {
+              color: muted,
+              font: { family: font },
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: narrow ? 5 : 8,
+              stepSize: 1,
+              callback: function (value) {
+                const i = Math.round(value);
+                if (Math.abs(value - i) > 0.001 || i < 0 || i >= days.length) return "";
+                return days[i].label;
+              },
+            },
+          },
+          y: {
+            beginAtZero: duration,
+            ticks: {
+              color: muted,
+              font: { family: font },
+              stepSize: duration ? durationStep(Math.max.apply(null, points.map(function (p) { return p.y; }))) : undefined,
+              callback: function (value) {
+                return duration ? formatDuration(value) : value;
+              },
+            },
             grid: { color: grid },
             border: { display: false },
           },

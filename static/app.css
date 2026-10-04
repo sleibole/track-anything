@@ -495,12 +495,48 @@ html.install-prompt .install-actions [data-install-action] {
   margin: 0;
 }
 
-.log-buttons form:first-child {
+.log-buttons > :first-child {
   flex: 1;
 }
 
-.log-buttons form:first-child button {
+.log-buttons > :first-child button,
+.log-buttons > :first-child a {
   width: 100%;
+  margin: 0;
+}
+
+.carry {
+  margin: -0.25rem 0 0.75rem;
+  color: var(--pico-muted-color);
+}
+
+.with-unit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.with-unit input {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.duration-fields {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.duration-fields label {
+  flex: 1;
+}
+
+.entry-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.export {
+  margin-top: 1.25rem;
+  font-size: 0.9rem;
 }
 
 .log-details {
