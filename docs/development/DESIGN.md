@@ -50,10 +50,10 @@ Order on a phone:
 
 1. Today's logging control: the summary line, then the log button, then a small form with an optional note. The summary is the same line as on the card. Owners also see a time field, set to now, for backfill. Members don't see it.
 2. Today's entries. Each one can be undone while it is recent. An owner can edit the time or note in place, or delete with confirmation.
-3. History.
-4. The trend. A count tracker shows a line of the last 30 local days once any of those days has a count or a recorded zero. Otherwise one sentence says nothing was logged in that window. The heading is Trend. Weight and duration arrive in phase 4. There is no overlay on this page.
+3. The trend. A count tracker shows a line of the last 30 local days once any of those days has a count or a recorded zero. Otherwise one sentence says nothing was logged in that window. The heading is Trend. Weight and duration arrive in phase 4. There is no overlay on this page.
+4. History.
 
-On a wider screen, history and the trend may sit beside the logging column. They do not move above it. Logging does not require scrolling past a chart.
+On a wider screen, the trend and history may sit beside the logging column, with the trend above history. They do not move above the log control. Logging does not require scrolling past a chart.
 
 **Record none** is a quiet text action, not a second primary button. It marks today as a recorded zero when today has no events yet. On a Times today summary, "None today" and "Nothing logged today" stay visually distinct. Done today stays "Not done today" for both, because a recorded zero is not an entry. Last occurrence does not move. History still shows none and nothing logged as different rows. The today-list's empty sentence ("Nothing logged yet") is separate from the summary line, including "Never logged".
 
@@ -88,15 +88,15 @@ Choose the chart from the tracker's data:
 
 A recorded zero is a zero. A day with nothing logged is a gap, not a zero.
 
-The historical count chart is on the tracker page. It is a line of events per day for the last 30 local days, oldest at the left, including today. A recorded zero is a point at zero. A day with nothing logged is a gap in the line, not a zero. If none of those days has a count or a recorded zero, the page says so in one sentence and does not draw a chart. Week and month, and number and duration charts, are not on the page yet.
+The historical count chart is on the tracker page, under the heading Trend. It is a line of events per day for the last 30 local days, oldest at the left, including today. A recorded zero is a point at zero. A day with nothing logged is a gap in the line, not a zero. If none of those days has a count or a recorded zero, the page says "Nothing logged in the last 30 days." and does not draw a chart. Week and month views are not on the page. Number and duration charts are phase 4.
 
-Overlaying another tracker comes after that, on the phase 3 charts view, and is not built. Events from the second tracker would sit on the first tracker's time series as a marker, an annotation, or a shaded vertical region. Which of those is still open (`PLAN.md`). Woods outings on the meals chart are the reference. The page describes the chart and does not claim a cause. On a phone the chart follows the overlay controls. On a wider screen it can sit beside them.
+Overlaying another tracker is not built, and there is no separate charts page. Those events would sit on this same trend as a marker, an annotation, or a shaded vertical region. Which of those is still open (`PLAN.md`). Woods outings on the meals chart are the reference. The page would describe what is drawn and would not claim a cause.
 
 ### Icon and accent
 
 The create and edit forms offer a small picker. It contains a curated handful of clear Tabler icons — a paw, a pill, trees, a barbell — and a few emoji. It is not the whole Tabler set, not a free-text emoji field, and not an upload. The tally-mark icon is selected by default. The owner can change the icon or the accent later.
 
-Show the icon on the home card, the tracker header, and every control that picks a tracker, including the phase 3 overlay picker. The name stays beside it. Color and icon help recognition. They are not the only way to identify a tracker.
+Show the icon on the home card, the tracker header, and every control that picks a tracker. The overlay picker will do the same when overlays are built. The name stays beside it. Color and icon help recognition. They are not the only way to identify a tracker.
 
 Uploading an icon is a later idea.
 
@@ -179,10 +179,10 @@ When ads exist, they stay out of share, login, and settings pages, and out of th
 
 ## Responsive behavior
 
-Design the narrow screen first. There is still one web layout and no native app. Home-screen install is a manifest, specified in `ARCHITECTURE.md`. Offline logging, later, keeps this same log button.
+Design the narrow screen first. There is still one web layout and no native app. On a phone, the logged-out home and the dashboard show a short offer to add the app to the device home screen. It can be dismissed. The manifest is specified in `ARCHITECTURE.md`. Offline logging, later, keeps this same log button.
 
-On a phone, tracker cards stack, and the logging control is the first content on a tracker page. History and trends follow, so reviewing is a scroll down the same page.
+On a phone, tracker cards stack, and the logging control is the first content on a tracker page. The trend follows, then history, so reviewing is a scroll down the same page.
 
-On a wider screen, focused forms stay narrow and centered. A tracker page may place history and trends beside the logging column, inside the normal content width. A chart does not take the place of the log control.
+On a wider screen, focused forms stay narrow and centered. A tracker page may place the trend and history beside the logging column, with the trend above history, inside the normal content width. A chart does not take the place of the log control.
 
 Forms and cards use the width they have, with the page margins Pico already applies.

@@ -40,7 +40,7 @@ If the answer is yes for dog meals, yes for recording a woods outing, and eventu
 
 - Do not become a full fitness platform.
 - Do not become a medical diagnostic product, or an analytics product that computes causes. Charts are for looking. A pattern is not a diagnosis.
-- Do not add a frontend framework or a product-analytics stack in order to draw charts. Chart.js on the existing pages is enough (`ARCHITECTURE.md`). Operational metrics for the server are collected in Prometheus; that is specified in `ARCHITECTURE.md` and is not a charting tool.
+- Do not add a frontend framework or a product-analytics stack in order to draw charts. Chart.js on the existing pages is enough (`ARCHITECTURE.md`). A Prometheus scrape for the server is a later idea in `ARCHITECTURE.md`. It is not a charting tool, and it is not in the app.
 - Do not become a habit-coaching or gamification platform unless real users clearly demand it. A later idea may attach an optional schedule to an ordinary tracker. That idea does not make Track Anything a calendar, a todo list, or a habit tracker, and it is not part of the phases below. See Later ideas.
 - Do not add a tracker kind to answer a different question about the same events. How many times, whether it happened today, and when it last happened are a summary display on an ordinary tracker. See Summary display.
 - Do not sacrifice the one-tap tracking experience for generic configurability.
@@ -153,7 +153,7 @@ A calm, mobile-first tracking notebook. Logging is fast, review is easy, and the
 
 **Home.** Trackers stay grouped by household. Each one is a card with its name, icon, optional accent, a summary, and one logging button. The summary follows that tracker's summary display. Millie ate, set to Times today, reads "2 times today". McGill Big 3, set to Done today, reads "Done today". Logan Motrin, set to Last occurrence, reads "Last: 6:42 AM". The button records the current time in one tap, then offers **Undo**. The button's words are the log label, which is separate from the summary. Before that setting existed, phase 2 showed the Times today wording on every card.
 
-**Tracker detail.** Today's logging control and today's entries come first. History and trends follow. Correcting a mistake sits on the entry. Anyone who can log can undo an entry or a recorded zero from the last 15 minutes. Only an owner can choose when a new entry happened, edit the time or note, delete an older entry, mark an earlier day as none, or clear an older recorded zero. On a phone the logging action stays first. On a wider screen, history and charts can sit beside that column. They never sit above it.
+**Tracker detail.** Today's logging control and today's entries come first. The trend follows, then history. Correcting a mistake sits on the entry. Anyone who can log can undo an entry or a recorded zero from the last 15 minutes. Only an owner can choose when a new entry happened, edit the time or note, delete an older entry, mark an earlier day as none, or clear an older recorded zero. On a phone the logging action stays first. On a wider screen, the trend and history can sit beside that column, with the trend above history. They never sit above the log control.
 
 **History.** Dated entries, with the time they happened. "None" (a recorded zero) and "Nothing logged" are different rows. That distinction matters for the dog: a day with no meals is data, and a day nobody wrote down is a gap.
 
@@ -175,7 +175,7 @@ That last step is the event-relative view under Later ideas. It is not part of t
 
 Chart.js draws the charts. It fits the server-rendered pages and HTMX, so visualization does not need a frontend framework. How it is loaded is in `ARCHITECTURE.md`. Layout is in `DESIGN.md`.
 
-Charts stay secondary to recording. The log control comes first, a trend never sits above it, and logging works if the chart does not load. The historical chart lives on the tracker page, below the log control or beside it on a wide screen. The overlay view comes only after that chart exists: controls first on a phone, the chart beside them on a wide screen.
+Charts stay secondary to recording. The log control comes first, a trend never sits above it, and logging works if the chart does not load. The historical chart lives on the tracker page, below the log control or beside it on a wide screen. An overlay is not built. When it is, the marks go on that same chart. There is no separate charts page.
 
 - **Historical chart.** One tracker over time. Counts are events per day, week, or month (meals per day). Numbers are a value over time (workout weight). Durations are length over time. A recorded zero is drawn as zero. A day with nothing logged is left blank. The count chart, per day for the last 30 local days, is on the tracker page. Week and month buckets are not built. Number and duration charts are phase 4, in the same place.
 - **Overlay.** Events from another tracker you can see, drawn on that historical chart. A woods outing can appear as a marker, an annotation, or a shaded vertical region. Which treatment is still open. The picker shows the icon and the name. Dog eating and woods outings, in Reference use cases, are the test case: you look at the one to three days after an outing. The page describes what is on the chart and never claims a cause.
@@ -241,7 +241,7 @@ Undo and delete recompute the line from the entries that remain. Removing the on
 
 ## Installable web app
 
-Home-screen install is part of the first version because it is just static files. Phases 0–5 ship no service worker, so a deploy does not leave stale cached pages. Add a minimal worker only if a real phone lacks the install option, and that fallback does not cache pages. The later offline-logging enhancement is when a caching worker is planned: it stores the shell and enough of the already loaded trackers to log, and while online it prefers the network. The install option only appears over HTTPS, so it is verified on trackanything.io after the phase 2 deploy.
+Home-screen install is part of the first version because it is just static files. A phone sees a short offer on the logged-out home and the dashboard: a button when the browser can install, otherwise the Share or browser-menu steps. Phases 0–5 ship no service worker, so a deploy does not leave stale cached pages. Add a minimal worker only if a real phone lacks the install option, and that fallback does not cache pages. The later offline-logging enhancement is when a caching worker is planned: it stores the shell and enough of the already loaded trackers to log, and while online it prefers the network. The install option only appears over HTTPS, so it is verified on trackanything.io after the phase 2 deploy.
 
 ## Business model
 
@@ -325,7 +325,7 @@ Not in this follow-on: deleting a household, demoting an owner, an owner leaving
 
 Basic time series first. A related event on that chart only after the single-tracker chart exists. Event-relative summaries stay a later idea.
 
-- **Count chart (built).** Chart.js line of counts per local day, on the tracker page after today's logging and history (beside that column on a wide screen). The range is the last 30 local days, including today. Unlogged days are gaps. Recorded zeros are zeros. Chart.js loads for that trend and is not required to log. Week and month aggregation are not built.
+- **Count chart (built).** Chart.js line of counts per local day, on the tracker page after today's logging and before history (beside that column on a wide screen, still above history). The range is the last 30 local days, including today. Unlogged days are gaps. Recorded zeros are zeros. Chart.js loads for that trend and is not required to log. Week and month aggregation are not built.
 - **Overlays (not built).** Overlay events from another tracker you can see on that chart: a marker, annotation, or shaded region (treatment still open). The picker shows each tracker's icon and name. Dog meals and woods outings are the test case. The marks sit on the meals chart so you can look at the following one to three days. The page describes the pattern and does not claim a cause.
 - Not in this phase: lining up repeated events and summarizing another tracker on the days before and after.
 
@@ -480,7 +480,7 @@ The product stays a small, flexible way to record arbitrary events and measureme
 | Analysis | Daily count chart, then overlay | The count line chart is on the tracker page: last 30 local days, including today, gaps for unlogged days, zeros for recorded none. Week and month buckets, overlays, and number and duration charts are not built. Event-relative summaries are a later idea, not a statistics feature. Patterns, not causes. |
 | Ads | AdSense with a certified consent platform, after launch | No home-made consent banner. No ads on share, login, or settings |
 | Start without account | Later idea | Share links cover most of the need for now |
-| Install | Manifest + icons; no service worker through phase 5 | Verified on a phone at first deploy. Not a store app. A small worker arrives with later offline logging |
+| Install | Manifest + icons; phone offer on home and dashboard; no service worker through phase 5 | Verified on a phone at first deploy. Not a store app. A small worker arrives with later offline logging |
 | Offline logging | Later, primary log action only | Outside phases 0–5. Previously loaded trackers, one tap, local queue, automatic idempotent sync. The tap time is when it happened. See Later ideas |
 | First public deploy | End of phase 2 | Backups live from the start. Email relay and backup method are picked before deploy, not before building |
 | Server metrics | Not built | A Prometheus scrape is a later idea, not part of the current app and not required for the first deploy. The intended shape is in `ARCHITECTURE.md` under Metrics |

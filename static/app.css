@@ -286,6 +286,67 @@ button.quiet:hover {
   color: var(--pico-color);
 }
 
+/* Hidden until app.js decides this phone should see the home-screen offer. */
+.install-hint {
+  display: none;
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
+}
+
+html.install-offer .install-hint {
+  display: block;
+}
+
+@media (display-mode: standalone) {
+  html.install-offer .install-hint {
+    display: none;
+  }
+}
+
+.install-hint p {
+  display: none;
+  margin-bottom: 0.75rem;
+}
+
+html.install-ios .install-hint [data-install-ios],
+html.install-menu .install-hint [data-install-menu],
+html.install-browser .install-hint [data-install-browser],
+html.install-prompt .install-hint [data-install-prompt] {
+  display: block;
+}
+
+.install-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.install-actions button {
+  width: auto;
+  margin: 0;
+}
+
+.install-actions [data-install-action] {
+  display: none;
+}
+
+html.install-prompt .install-actions [data-install-action] {
+  display: inline-block;
+}
+
+.install-hint button.quiet {
+  padding: 0.4rem 0.2rem;
+}
+
+.install-hint button.quiet:focus-visible {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
+}
+
 .page-head {
   display: flex;
   align-items: center;
@@ -624,7 +685,7 @@ button.quiet:hover {
   height: 100%;
 }
 
-/* Wide screens: history and the trend sit beside the logging column, never above it. */
+/* Wide screens: the trend, then history, sit beside the logging column, never above it. */
 @media (min-width: 1024px) {
   .tracker-page {
     display: grid;

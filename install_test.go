@@ -68,8 +68,63 @@ func TestLayoutLinksInstallAssets(t *testing.T) {
 			t.Errorf("%s: status %d", href, code)
 		}
 	}
-	if !strings.Contains(body, `name="apple-mobile-web-app-capable"`) {
-		t.Error("layout missing apple-mobile-web-app-capable")
+	for _, meta := range []string{`name="mobile-web-app-capable"`, `name="apple-mobile-web-app-capable"`} {
+		if !strings.Contains(body, meta) {
+			t.Errorf("layout missing %s", meta)
+		}
+	}
+}
+
+func TestHomeScreenOffer(t *testing.T) {
+	ts := newTestServer(t)
+	home := ts.browser(t).get("/")
+	for _, want := range []string{
+		`data-install-hint`,
+		`data-install-ios`,
+		"Tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>",
+		`data-install-menu`,
+		"Install app",
+		`data-install-browser`,
+		"open this page in Safari or Chrome",
+		`data-install-action`,
+		`data-install-dismiss`,
+	} {
+		if !strings.Contains(home.body, want) {
+			t.Errorf("logged-out home missing %q", want)
+		}
+	}
+
+	dash := ts.browser(t).signup("install@example.com", "").body
+	if !strings.Contains(dash, "Your trackers") || !strings.Contains(dash, `data-install-hint`) {
+		t.Fatal("dashboard missing the home-screen offer")
+	}
+
+	loggedIn := ts.browser(t)
+	loggedIn.signup("install-settings@example.com", "")
+	for _, page := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{"login", "/login", ts.browser(t).get("/login").body},
+		{"settings", "/settings", loggedIn.get("/settings").body},
+	} {
+		if strings.Contains(page.body, `data-install-hint`) {
+			t.Errorf("%s includes the home-screen offer", page.name)
+		}
+	}
+
+	script := ts.browser(t).get("/static/app.js").body
+	for _, want := range []string{
+		"beforeinstallprompt",
+		"install-dismissed",
+		"display-mode: standalone",
+		"data-install-dismiss",
+		"data-install-action",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("app.js missing %q", want)
+		}
 	}
 }
 

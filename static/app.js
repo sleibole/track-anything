@@ -202,4 +202,91 @@ window.onTurnstileLoad = function () {
 
 document.addEventListener("htmx:afterSettle", (event) => {
   renderTurnstile(event.detail?.target || document);
+  syncInstallHint();
 });
+
+// Home-screen install. The manifest makes the site installable; this offer
+// tells a phone how. iOS has no install dialog, so the line names Share.
+// Other phones get the browser menu, unless the browser offers its own prompt.
+const installModes = ["install-ios", "install-menu", "install-browser", "install-prompt"];
+let installPrompt = null;
+
+function installDismissed() {
+  try {
+    return localStorage.getItem("install-dismissed") === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberInstallDismissed() {
+  try {
+    localStorage.setItem("install-dismissed", "1");
+  } catch {
+    // A private session can refuse storage. The offer still closes for this page.
+  }
+}
+
+function phoneLike() {
+  return window.matchMedia("(pointer: coarse)").matches;
+}
+
+function standaloneApp() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function isIos() {
+  if (/iPad|iPhone|iPod/.test(navigator.userAgent)) return true;
+  // iPadOS reports itself as a Mac, and a real Mac has no touch points.
+  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+}
+
+function inAppBrowser() {
+  return /Instagram|FBAN|FBAV|FB_IAB|Line\/|Snapchat|TikTok|BytedanceWebview|LinkedInApp|Twitter/i.test(navigator.userAgent);
+}
+
+function clearInstallOffer() {
+  document.documentElement.classList.remove("install-offer", ...installModes);
+}
+
+function syncInstallHint() {
+  if (!document.querySelector("[data-install-hint]") || !phoneLike() || standaloneApp() || installDismissed()) {
+    clearInstallOffer();
+    return;
+  }
+  let mode = "install-menu";
+  if (installPrompt) mode = "install-prompt";
+  else if (inAppBrowser()) mode = "install-browser";
+  else if (isIos()) mode = "install-ios";
+  const root = document.documentElement;
+  for (const name of installModes) root.classList.toggle(name, name === mode);
+  root.classList.add("install-offer");
+}
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  if (!document.querySelector("[data-install-hint]") || !phoneLike() || standaloneApp() || installDismissed()) return;
+  event.preventDefault();
+  installPrompt = event;
+  syncInstallHint();
+});
+
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  rememberInstallDismissed();
+  clearInstallOffer();
+});
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-install-dismiss]")) {
+    rememberInstallDismissed();
+    clearInstallOffer();
+    return;
+  }
+  if (!event.target.closest("[data-install-action]") || !installPrompt) return;
+  const prompt = installPrompt;
+  installPrompt = null;
+  prompt.prompt();
+  prompt.userChoice.finally(() => syncInstallHint());
+});
+
+syncInstallHint();

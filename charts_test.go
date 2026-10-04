@@ -57,8 +57,11 @@ func TestCountChartSeriesOnTrackerPage(t *testing.T) {
 	if !strings.Contains(empty.body, quick) || !strings.Contains(empty.body, `method="post"`) {
 		t.Fatal("log form is not a plain post")
 	}
-	if logAt, trendAt := strings.Index(empty.body, `data-quick`), strings.Index(empty.body, ">Trend</h2>"); logAt < 0 || trendAt < logAt {
-		t.Fatal("trend is not after the log control")
+	logAt := strings.Index(empty.body, `data-quick`)
+	trendAt := strings.Index(empty.body, ">Trend</h2>")
+	historyAt := strings.Index(empty.body, ">History</h2>")
+	if logAt < 0 || trendAt < logAt || historyAt < trendAt {
+		t.Fatal("trend is not between the log control and history")
 	}
 
 	// The suite never executes JavaScript. The log post still has to save.

@@ -2,7 +2,7 @@
 
 How the tracker setting in `PLAN.md` (Summary display), `DESIGN.md` (Home, Tracker detail, Focused forms, Recording), and `ARCHITECTURE.md` (`Tracker.SummaryDisplay`, the create/edit routes, and the Summary display test bullet) was built. Those documents decide the behavior. This one says where the code lives.
 
-**Done.** The order of work below is in the app, and `make test` covers the cases under Tests. The sections from Data through Optimistic update describe that finished change.
+**Done.** The order of work below is in the app, and `make test` covers the cases under Tests. The sections from Data through Optimistic update describe that finished change. The count chart on the tracker page arrived later. It does not use this setting. See `PLAN.md`.
 
 This is a presentation setting on an existing count tracker. Do not add a tracker kind, a new table, or a limit of one entry per day.
 
@@ -154,7 +154,7 @@ Do not read the browser zone. Signup already stored the account zone, and a shar
 
 - New values of `Kind`. No medication, habit, or feeding tracker. Done today is a summary line, not a kind, and it does not change what an entry stores.
 - Rejecting a second entry on a Done today tracker. Both rows are stored.
-- Changing history, the 30-day list, or future charts to Done / Last.
+- Changing history, the 30-day list, or the count chart to Done / Last. The chart shows a count, a recorded zero, or a gap for each local day. It does not follow this setting.
 - Hiding Record none on Done today or Last occurrence trackers.
 - A fourth summary, streaks, period progress ("2 / 3 this week"), or "3 days ago". Period progress belongs to the later recurring-tracker direction in `PLAN.md`.
 - Number and duration trackers (phase 4). When those arrive, this setting still only describes count entries until someone extends it on purpose.

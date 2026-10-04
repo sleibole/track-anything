@@ -1,0 +1,13 @@
+{{/* Phone-only offer to add the app to the home screen. app.js chooses which line to show. */}}
+{{define "installHint"}}
+<aside class="install-hint" data-install-hint>
+  <p data-install-ios>Add Track Anything to your home screen. Tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</p>
+  <p data-install-menu>Add Track Anything to your home screen. Open the browser menu and tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
+  <p data-install-browser>To add Track Anything to your home screen, open this page in Safari or Chrome.</p>
+  <p data-install-prompt>Add Track Anything to your home screen.</p>
+  <div class="install-actions">
+    <button type="button" data-install-action>Add to Home Screen</button>
+    <button type="button" class="quiet" data-install-dismiss>Not now</button>
+  </div>
+</aside>
+{{end}}

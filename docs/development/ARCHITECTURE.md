@@ -20,7 +20,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 
 | Concern | Choice | Notes |
 | --- | --- | --- |
-| Language | Go (latest stable, 1.22+) | Needed for method + wildcard routing in `net/http` |
+| Language | Go 1.27 | `go.mod` requires 1.27. Method and wildcard routing use `net/http` |
 | HTTP routing | `net/http` `ServeMux` | Patterns like `GET /trackers/{id}` |
 | Templates | `html/template` | Auto-escaping, layouts via `{{block}}` / `{{template}}` |
 | Static files and templates | `embed` | Ship a single binary |
@@ -52,7 +52,9 @@ track-anything/
 ├── main.go             # config, load .env, open DB, migrate, build mux, start server
 ├── db.go               # GORM setup, AutoMigrate, SQLite pragmas, one-time data backfills
 ├── models.go           # structs below
-├── days.go             # day boundaries, per-day counts, undo window, summaries
+├── days.go             # day boundaries, per-day counts, the count-chart series, undo window, summaries
+├── timezones.go        # friendly time-zone names for settings
+├── icons.go            # embedded Tabler SVGs and the tracker icon allow-list
 ├── access.go           # trackerForUser, trackerForShareToken, archivedTrackerForOwner, household lookups
 ├── auth.go             # signup, login, logout, magic links, email verification, sessions
 ├── turnstile.go        # Siteverify check for signup, login, and change password
@@ -70,7 +72,13 @@ track-anything/
 ├── middleware.go       # request logging, panic recovery, security headers
 ├── templates/
 │   ├── layout.html     # ad and consent scripts live here, outside any HTMX swap target
+│   ├── home.html       # logged-out homepage
 │   ├── dashboard.html
+│   ├── signup.html
+│   ├── login.html
+│   ├── login_sent.html
+│   ├── login_link.html
+│   ├── settings.html
 │   ├── tracker_show.html
 │   ├── tracker_form.html # new and edit, plus the share link and archive
 │   ├── share.html      # what a share-link visitor sees
@@ -78,10 +86,11 @@ track-anything/
 │   ├── join.html       # invitation confirm page
 │   ├── verify.html     # email confirmation; GET does not consume the token
 │   ├── message.html    # 404, 403, and other one-line answers
-│   └── partials/       # fragments shared by pages: card, log control, entry
+│   └── partials/       # fragments shared by pages: card, log control, entry, Turnstile, home-screen offer
 ├── icons/              # Tabler SVGs we use, inlined by the icon template func
 ├── static/
 │   ├── htmx.min.js
+│   ├── app.js             # optimistic log line, idle refresh, Turnstile remount
 │   ├── chart.umd.min.js   # Chart.js 4.5.1 UMD, MIT. Loaded only by chart.js
 │   ├── chart.js           # draws the embedded count series
 │   ├── pico.min.css
@@ -359,7 +368,7 @@ POST   /join/{token}                          join as a member
 GET    /trackers/new              new tracker form (household, icon, accent, log label, summary display)
 GET    /trackers/{id}/edit        edit form, share link controls, archive (owner)
 POST   /trackers                  create tracker
-GET    /trackers/{id}             tracker page: log control and today's entries first, then history, then the count trend when any of the last 30 local days was logged
+GET    /trackers/{id}             tracker page: log control and today's entries first, then the count trend when any of the last 30 local days was logged, then history
 POST   /trackers/{id}             rename, icon, accent, log label, summary display (owner)
 POST   /trackers/{id}/archive     archive; clears the share link (owner)
 POST   /trackers/{id}/restore     restore an archived tracker, sharing stays off (owner)
@@ -445,9 +454,9 @@ The count trend is on `GET /trackers/{id}`. Number charts, duration charts, and 
 
 Each day is `{day, label, count}`. `day` is `YYYY-MM-DD`. `label` is `Jan 2`, for the axis. `count` is a number when that day was logged, including `0` for a recorded zero, and `null` when nothing was logged. The day stays in the series either way, so the axis does not close up around a gap. `json.Marshal` escapes `<`, `>`, and `&`. The page embeds that JSON in `<script type="application/json" id="count-chart">`.
 
-`static/chart.js` is on the page only when that element is present. It loads the vendored Chart.js 4.5.1 UMD build (`static/chart.umd.min.js`, MIT) from `/static` and draws a line. `spanGaps` is false, so a null breaks the line. A point is drawn at zero, so a recorded zero is not an empty stretch. The chart does not animate, because the page refreshes in place. If every day in the window is a gap, the page says "Nothing logged in the last 30 days." and does not load Chart.js. The log form is a normal POST and does not use either script. Home, share, and other pages do not load them.
+`static/chart.js` is included in the tracker content only when that element is present. It loads the vendored Chart.js 4.5.1 UMD build (`static/chart.umd.min.js`, MIT) from `/static` and draws a line. `spanGaps` is false, so a null breaks the line. A point is drawn at zero, so a recorded zero is not an empty stretch. The chart does not animate. After an HTMX swap, including the 30-second refresh and a log, the wrapper destroys the previous chart and draws the new series. If every day in the window is a gap, the page says "Nothing logged in the last 30 days." and does not load Chart.js. The log form is a normal POST and does not use either script. Home, the share page, and a tracker whose kind is not `count` do not include the trend. The series is only rendered by `GET /trackers/{id}` after `trackerForUser`, so someone who cannot see the tracker gets a 404 and no chart data.
 
-The overlay page, when it exists, will load Chart.js when a second tracker's events are placed on that series. How the mark is drawn is still open (`PLAN.md`). The handler would supply the second tracker's dates on the same axis.
+Overlays are not built, and `GET /charts` is not registered. When an overlay is added, it uses this same series on the tracker page. The handler would supply the second tracker's dates on the same axis. How the mark is drawn is still open (`PLAN.md`).
 
 ## Security
 
@@ -479,7 +488,8 @@ Set on connect:
 ## Installable web app
 
 - `manifest.webmanifest` with `name`, `start_url: "/"`, `display: "standalone"`, and 192 and 512 icons. The 512 icon is also the maskable icon; the artwork has safe-zone padding.
-- Apple touch icon and `apple-mobile-web-app-capable`, since iOS uses Share → Add to Home Screen.
+- Apple touch icon, `apple-mobile-web-app-capable`, and `mobile-web-app-capable`. iOS still adds the icon from Share → Add to Home Screen.
+- The logged-out home and the dashboard include a short offer on a phone. When the browser fires `beforeinstallprompt`, the offer is an Add to Home Screen button that opens the browser's install dialog. On iPhone and iPad it names Share, then Add to Home Screen. Other phones point at the browser menu (Install app or Add to Home screen). A page opened inside another app's browser says to open Safari or Chrome. The offer is not shown on a computer, when the app is already open from the home screen, or after Not now. Not now is remembered in `localStorage` on that device. Login, settings, tracker pages, and share pages do not include it.
 - No service worker through phase 5, so deploys do not leave stale CSS and JS. Add a minimal worker only if the install option is missing on a real phone, and that fallback does not cache pages. The later offline-logging worker is specified under Offline logging. While online it prefers the network, so a deploy still reaches the new pages.
 - The manifest is served as `application/manifest+json`.
 
@@ -588,11 +598,11 @@ What the suite has to pin down:
 - **Icons and accents.** An empty icon renders as the tally mark and an empty accent adds none. A picker value is stored. A value outside the allow-list is rejected. The name is present wherever the icon is.
 - **Recorded zeros.** Marking today as none does not increment the count. An event that day deletes the mark. A day with neither is absent from the per-day series. A recorded zero is present as zero. A member or share link can undo a mark from the last 15 minutes. Clearing an older mark, or marking an earlier day, is owner-only, and a member's attempt changes nothing.
 - **Time.** "Today" and per-day grouping follow the viewer's stored time zone (or the household owner's on share pages), not the browser's current zone. DST changes don't double-count or skip a day.
-- **Charts.** The count chart's embedded series is the last 30 local days ending today, in the viewer's zone. It matches per-day counts, uses null for an unlogged day, and uses zero for a recorded zero. The tracker page's log form does not require Chart.js. Overlay data, and number and duration charts, join this suite when they are built. Event-relative alignment is not part of this suite until that later idea is built.
+- **Charts.** The count chart's embedded series is the last 30 local days ending today, in the viewer's stored zone, including across a daylight-saving change. It matches per-day counts, uses null for an unlogged day, and uses zero for a recorded zero. A household member sees that series. Someone who cannot see the tracker gets a 404 and no series, and a logged-out request is sent to login. Home and the share page do not include the chart. `GET /charts` is not a route. A tracker whose kind is not `count` does not render the trend. The tracker page's log form does not require Chart.js. Overlay data, and number and duration charts, join this suite when they are built. Event-relative alignment is not part of this suite until that later idea is built.
 - **Values (phase 4).** Number and duration entries, prefill from the last entry, **Log again**.
 - **Deletion (phase 5).** Permanent tracker delete removes the tracker and its entries, owner only, with confirmation.
 - **Ads and billing (phase 5).** No ad markup for ad-free users, users in the grace period, or on share/login/settings pages. The Paddle webhook rejects bad signatures and old timestamps, applies an event once even if delivered twice, ignores an older event arriving after a newer one, finds the user through `custom_data`, and sets and clears the plan. Tests build the `Paddle-Signature` header the way Paddle does, against a test secret, and the portal handler talks to a stub API URL.
-- **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes.
+- **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes. The logged-out home and the dashboard include the home-screen offer. Login and settings do not.
 - **Offline logging (later).** A repeated sync with the same client id inserts one entry and returns it again on retry. `OccurredAt` is the tap time sent with that id. `CreatedAt` is the sync, and the undo window uses it. A member or share-link log that omits the client id still stores the server's current time. The cached snapshot is enough to show the tracker name, icon, and log button. History and charts are not required for the log tap.
 - **Health.** `GET /healthz` needs no session. It returns 200 `ok` when `SELECT 1` succeeds, and 503 with no database error text when that query fails. The failure is logged.
 - **Metrics.** Not built. No test requests `/metrics`.

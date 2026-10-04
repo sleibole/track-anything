@@ -37,6 +37,21 @@
   </section>
 
   <div class="tracker-side">
+  {{if eq .Tracker.Kind "count"}}
+  <section class="tracker-trend">
+    <h2>Trend</h2>
+    {{if .ChartScript}}
+    <p class="muted">Count per day. A gap is a day with nothing logged.</p>
+    <div class="chart-frame">
+      <canvas id="count-chart-canvas" role="img" aria-label="Count per day for the last 30 days. A gap is a day with nothing logged. Zero is a recorded none."></canvas>
+    </div>
+    {{.ChartScript}}
+    <script src="/static/chart.js"></script>
+    {{else}}
+    <p class="muted">Nothing logged in the last 30 days.</p>
+    {{end}}
+  </section>
+  {{end}}
   <section class="tracker-history">
     <h2>History</h2>
     {{range .History}}
@@ -58,21 +73,6 @@
     </div>
     {{end}}
   </section>
-  {{if eq .Tracker.Kind "count"}}
-  <section class="tracker-trend">
-    <h2>Trend</h2>
-    {{if .ChartScript}}
-    <p class="muted">Count per day. A gap is a day with nothing logged.</p>
-    <div class="chart-frame">
-      <canvas id="count-chart-canvas" role="img" aria-label="Count per day for the last 30 days. A gap is a day with nothing logged. Zero is a recorded none."></canvas>
-    </div>
-    {{.ChartScript}}
-    <script src="/static/chart.js"></script>
-    {{else}}
-    <p class="muted">Nothing logged in the last 30 days.</p>
-    {{end}}
-  </section>
-  {{end}}
   </div>
 </div>
 {{end}}
