@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -215,21 +216,27 @@ type historyDay struct {
 }
 
 type trackerPage struct {
-	Card        trackerCard
-	IsOwner     bool
-	Today       todayState
-	ZeroNew     bool
-	Entries     []entryView
-	History     []historyDay
-	ChartScript template.HTML // daily count series; empty when there is nothing to plot
-	NowValue    string        // default for the owner's time field
-	Note        string
-	Error       string
+	Card           trackerCard
+	IsOwner        bool
+	Today          todayState
+	ZeroNew        bool
+	Entries        []entryView
+	History        []historyDay
+	ChartScript    template.HTML // daily count series; empty when there is nothing to plot
+	OverlayScript  template.HTML // overlay days; empty when no overlay is drawn
+	OverlayChoices []Tracker     // other count trackers this person can see
+	Overlay        *Tracker      // selected overlay; nil means none
+	OverlayID      uint          // 0 when none; safe to compare in the template
+	OverlayEmpty   bool          // selected overlay has no events in the chart window
+	PageURL        string        // this page, including ?overlay= when one is selected
+	NowValue       string        // default for the owner's time field
+	Note           string
+	Error          string
 }
 
 func (p trackerPage) Tracker() Tracker { return p.Card.Tracker }
 
-func (a *app) trackerPage(t Tracker, role string, u *User) (trackerPage, error) {
+func (a *app) trackerPage(t Tracker, role string, u *User, overlay *Tracker) (trackerPage, error) {
 	loc := location(u.TimeZone)
 	now := a.now()
 	today, err := a.loadToday(t, loc, now)
@@ -246,6 +253,12 @@ func (a *app) trackerPage(t Tracker, role string, u *User) (trackerPage, error) 
 		Today:    today,
 		ZeroNew:  today.Zero != nil && recent(today.Zero.CreatedAt, now),
 		NowValue: now.In(loc).Format(timeInputLayout),
+		PageURL:  trackerPageURL(t.ID, 0),
+	}
+	if overlay != nil {
+		p.Overlay = overlay
+		p.OverlayID = overlay.ID
+		p.PageURL = trackerPageURL(t.ID, overlay.ID)
 	}
 
 	first, err := time.ParseInLocation(dayLayout, today.Day, loc)
@@ -302,13 +315,113 @@ func (a *app) trackerPage(t Tracker, role string, u *User) (trackerPage, error) 
 		p.History = append(p.History, h)
 	}
 	if t.Kind == "count" {
+		choices, err := visibleCountTrackers(a.db, u.ID, t.ID)
+		if err != nil {
+			return p, err
+		}
+		p.OverlayChoices = choices
 		script, err := countChartScript(today, older, zeros, loc)
 		if err != nil {
 			return p, err
 		}
 		p.ChartScript = script
+		// No primary history means no chart, even when the overlay has events.
+		if overlay != nil && script != "" {
+			days, err := a.overlayEvents(overlay, loc, today.Day)
+			if err != nil {
+				return p, err
+			}
+			p.OverlayEmpty = len(days) == 0
+			embedded, err := overlayChartScript(overlay, days)
+			if err != nil {
+				return p, err
+			}
+			p.OverlayScript = embedded
+		}
 	}
 	return p, nil
+}
+
+func trackerPageURL(id, overlayID uint) string {
+	u := fmt.Sprintf("/trackers/%d", id)
+	if overlayID == 0 {
+		return u
+	}
+	return fmt.Sprintf("%s?overlay=%d", u, overlayID)
+}
+
+// requestedOverlayID reads ?overlay= from this request, or from the page a
+// non-GET was submitted from. Zero means none.
+func requestedOverlayID(r *http.Request) uint {
+	if id := parseID(r.URL.Query().Get("overlay")); id != 0 {
+		return id
+	}
+	if r.Method == http.MethodGet {
+		return 0
+	}
+	raw := r.Header.Get("HX-Current-URL")
+	if raw == "" {
+		raw = r.Referer()
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return 0
+	}
+	return parseID(u.Query().Get("overlay"))
+}
+
+// resolveOverlay loads one other count tracker the user can see.
+// The tracker's own id means no overlay. An id they cannot see is a 404.
+func (a *app) resolveOverlay(userID uint, primary Tracker, overlayID uint) (*Tracker, error) {
+	if primary.Kind != "count" || overlayID == 0 || overlayID == primary.ID {
+		return nil, nil
+	}
+	other, _, err := trackerForUser(a.db, userID, overlayID)
+	if err != nil {
+		return nil, err
+	}
+	if other.Kind != "count" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &other, nil
+}
+
+// overlayEvents loads the overlay tracker's events in the chart window.
+// The window is chartWindow, the same range chartSeries draws.
+func (a *app) overlayEvents(overlay *Tracker, loc *time.Location, lastDay string) ([]overlayDay, error) {
+	start, end, err := chartWindow(lastDay, loc, chartDays)
+	if err != nil {
+		return nil, err
+	}
+	var entries []Entry
+	err = a.db.Where("tracker_id = ? AND occurred_at >= ? AND occurred_at < ?", overlay.ID, start, end).
+		Order("occurred_at, id").Find(&entries).Error
+	if err != nil {
+		return nil, err
+	}
+	times := make([]time.Time, len(entries))
+	for i, e := range entries {
+		times[i] = e.OccurredAt
+	}
+	return overlayDays(times, loc, lastDay, chartDays)
+}
+
+func overlayMark(icon string) string {
+	if listed(trackerIcons, icon) && isEmoji(icon) {
+		return icon
+	}
+	return ""
+}
+
+func overlayChartScript(t *Tracker, days []overlayDay) (template.HTML, error) {
+	if days == nil {
+		days = []overlayDay{}
+	}
+	b, err := json.Marshal(overlayChart{Name: t.Name, Mark: overlayMark(t.Icon), Days: days})
+	if err != nil {
+		return "", err
+	}
+	return template.HTML(`<script type="application/json" id="count-overlay">` + string(b) + `</script>`), nil
 }
 
 // countChartScript embeds the daily count series for the chartDays local days
@@ -349,7 +462,12 @@ func (a *app) handleShowTracker(w http.ResponseWriter, r *http.Request) {
 		a.lookupError(w, r, err)
 		return
 	}
-	p, err := a.trackerPage(t, role, u)
+	overlay, err := a.resolveOverlay(u.ID, t, requestedOverlayID(r))
+	if err != nil {
+		a.lookupError(w, r, err)
+		return
+	}
+	p, err := a.trackerPage(t, role, u, overlay)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -360,7 +478,12 @@ func (a *app) handleShowTracker(w http.ResponseWriter, r *http.Request) {
 // renderTrackerError shows the tracker page again with a message above the log form.
 func (a *app) renderTrackerError(w http.ResponseWriter, r *http.Request, t Tracker, role, msg string) {
 	u := currentUser(r)
-	p, err := a.trackerPage(t, role, u)
+	overlay, err := a.resolveOverlay(u.ID, t, requestedOverlayID(r))
+	if err != nil {
+		a.lookupError(w, r, err)
+		return
+	}
+	p, err := a.trackerPage(t, role, u, overlay)
 	if err != nil {
 		a.serverError(w, r, err)
 		return

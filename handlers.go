@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"gorm.io/gorm"
@@ -85,8 +86,31 @@ func redirectBack(w http.ResponseWriter, r *http.Request, fallback string) {
 	to := fallback
 	if back := r.PostFormValue("back"); back != "" {
 		to = safeNext(back)
+	} else if kept := samePageOverlay(r, fallback); kept != "" {
+		to = kept
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
+// samePageOverlay keeps ?overlay= when a post returns to the tracker page it came from.
+// Only a numeric overlay id is copied. The choice is not stored on the tracker.
+func samePageOverlay(r *http.Request, fallback string) string {
+	raw := r.Header.Get("HX-Current-URL")
+	if raw == "" {
+		raw = r.Referer()
+	}
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Path != fallback {
+		return ""
+	}
+	id := parseID(u.Query().Get("overlay"))
+	if id == 0 {
+		return ""
+	}
+	return fallback + "?overlay=" + strconv.FormatUint(uint64(id), 10)
 }
 
 func (a *app) handleHome(w http.ResponseWriter, r *http.Request) {

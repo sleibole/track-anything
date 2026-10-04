@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -182,4 +183,70 @@ func chartHasData(series []chartDay) bool {
 		}
 	}
 	return false
+}
+
+// chartWindow is the n local days ending on lastDay.
+// start is local midnight of the first day. end is local midnight after lastDay.
+// Both are absolute instants, for queries. chartSeries uses the same last day and n,
+// so the axis and an overlay query share one range.
+func chartWindow(lastDay string, loc *time.Location, n int) (start, end time.Time, err error) {
+	last, err := time.ParseInLocation(dayLayout, lastDay, loc)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	if n < 1 {
+		return time.Time{}, time.Time{}, fmt.Errorf("chart window %d", n)
+	}
+	return last.AddDate(0, 0, -(n - 1)).UTC(), last.AddDate(0, 0, 1).UTC(), nil
+}
+
+// overlayDay is one local day on the overlay tracker that has at least one event.
+// It is a mark on the count chart's axis, not a second series. Times are clock
+// strings in the viewer's zone, oldest first. A recorded zero is not an event.
+type overlayDay struct {
+	Day   string   `json:"day"`
+	Label string   `json:"label"`
+	Times []string `json:"times,omitempty"`
+}
+
+// overlayChart is the overlay JSON embedded beside the count series.
+type overlayChart struct {
+	Name string       `json:"name"`
+	Mark string       `json:"mark,omitempty"` // emoji icon, when the tracker uses one
+	Days []overlayDay `json:"days"`
+}
+
+// overlayDays groups event times onto the same local days as chartSeries.
+// Days with no events are left out. Several events on one local day are one day.
+// Times outside the window are ignored.
+func overlayDays(events []time.Time, loc *time.Location, lastDay string, n int) ([]overlayDay, error) {
+	start, end, err := chartWindow(lastDay, loc, n)
+	if err != nil {
+		return nil, err
+	}
+	byDay := map[string][]time.Time{}
+	for _, t := range events {
+		if t.Before(start) || !t.Before(end) {
+			continue
+		}
+		day := localDay(t, loc)
+		byDay[day] = append(byDay[day], t)
+	}
+	first := start.In(loc)
+	days := make([]overlayDay, 0, len(byDay))
+	for i := range n {
+		date := first.AddDate(0, 0, i)
+		day := date.Format(dayLayout)
+		times := byDay[day]
+		if len(times) == 0 {
+			continue
+		}
+		slices.SortFunc(times, func(a, b time.Time) int { return a.Compare(b) })
+		clocks := make([]string, len(times))
+		for j, t := range times {
+			clocks[j] = t.In(loc).Format("3:04 PM")
+		}
+		days = append(days, overlayDay{Day: day, Label: date.Format("Jan 2"), Times: clocks})
+	}
+	return days, nil
 }

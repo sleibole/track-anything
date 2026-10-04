@@ -338,6 +338,126 @@ func TestChartSeriesDSTDoesNotSkipOrRepeatDays(t *testing.T) {
 	}
 }
 
+func TestOverlayDaysShareTheChartWindow(t *testing.T) {
+	la := location("America/Los_Angeles")
+	at := func(s string) time.Time {
+		v, err := time.ParseInLocation("2006-01-02 15:04", s, la)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	events := []time.Time{
+		at("2026-06-12 18:00"), // one day before a 5-day window ending the 17th
+		at("2026-06-15 15:30"),
+		at("2026-06-15 09:00"), // same local day, earlier
+		at("2026-06-18 08:00"), // after the window
+	}
+	series, err := chartSeries(events, []string{"2026-06-14"}, la, "2026-06-17", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	days, err := overlayDays(events, la, "2026-06-17", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(days) != 1 {
+		t.Fatalf("days %+v", days)
+	}
+	if days[0].Day != "2026-06-15" || days[0].Label != "Jun 15" {
+		t.Fatalf("day %+v", days[0])
+	}
+	if len(days[0].Times) != 2 || days[0].Times[0] != "9:00 AM" || days[0].Times[1] != "3:30 PM" {
+		t.Fatalf("times %+v", days[0].Times)
+	}
+	start, end, err := chartWindow("2026-06-17", la, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if localDay(start, la) != series[0].Day || localDay(end.Add(-time.Second), la) != series[len(series)-1].Day {
+		t.Fatalf("window %s–%s, series %s–%s", localDay(start, la), localDay(end.Add(-time.Second), la), series[0].Day, series[len(series)-1].Day)
+	}
+	// A recorded zero is not an overlay event. Passing no times leaves that day unmarked.
+	zerosOnly, err := overlayDays(nil, la, "2026-06-17", 5)
+	if err != nil || len(zerosOnly) != 0 {
+		t.Fatalf("zeros %+v err %v", zerosOnly, err)
+	}
+
+	for _, last := range []string{"2026-03-20", "2026-11-05", "2026-06-17"} {
+		full, err := chartSeries(nil, nil, la, last, chartDays)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w0, w1, err := chartWindow(last, la, chartDays)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if localDay(w0, la) != full[0].Day || localDay(w1.Add(-time.Second), la) != full[len(full)-1].Day {
+			t.Fatalf("%s window %s–%s series %s–%s", last, localDay(w0, la), localDay(w1.Add(-time.Second), la), full[0].Day, full[len(full)-1].Day)
+		}
+	}
+}
+
+func TestOverlayDaysUseLocationAndDST(t *testing.T) {
+	la := location("America/Los_Angeles")
+	instant := time.Date(2026, 6, 15, 6, 30, 0, 0, time.UTC)
+	if localDay(instant, time.UTC) == localDay(instant, la) {
+		t.Fatal("fixture is the same calendar day in both zones")
+	}
+	utc, err := overlayDays([]time.Time{instant}, time.UTC, "2026-06-15", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pacific, err := overlayDays([]time.Time{instant}, la, "2026-06-14", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(utc) != 1 || utc[0].Day != "2026-06-15" || utc[0].Times[0] != "6:30 AM" {
+		t.Fatalf("utc %+v", utc)
+	}
+	if len(pacific) != 1 || pacific[0].Day != "2026-06-14" || pacific[0].Times[0] != "11:30 PM" {
+		t.Fatalf("pacific %+v", pacific)
+	}
+
+	at := func(s string) time.Time {
+		v, err := time.ParseInLocation("2006-01-02 15:04", s, la)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	spring, err := overlayDays([]time.Time{
+		at("2026-03-07 23:30"),
+		at("2026-03-08 00:30"),
+		at("2026-03-08 03:30"),
+	}, la, "2026-03-20", chartDays)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spring) != 2 || spring[0].Day != "2026-03-07" || spring[1].Day != "2026-03-08" {
+		t.Fatalf("spring %+v", spring)
+	}
+	if len(spring[0].Times) != 1 || spring[0].Times[0] != "11:30 PM" {
+		t.Fatalf("march 7 %+v", spring[0])
+	}
+	if len(spring[1].Times) != 2 || spring[1].Times[0] != "12:30 AM" || spring[1].Times[1] != "3:30 AM" {
+		t.Fatalf("march 8 %+v", spring[1])
+	}
+
+	pdt := time.Date(2026, 11, 1, 8, 15, 0, 0, time.UTC) // 01:15 PDT
+	pst := time.Date(2026, 11, 1, 9, 15, 0, 0, time.UTC) // 01:15 PST
+	fall, err := overlayDays([]time.Time{pst, pdt}, la, "2026-11-05", chartDays)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fall) != 1 || fall[0].Day != "2026-11-01" || len(fall[0].Times) != 2 {
+		t.Fatalf("fall %+v", fall)
+	}
+	if fall[0].Times[0] != "1:15 AM" || fall[0].Times[1] != "1:15 AM" {
+		t.Fatalf("fall times %+v", fall[0].Times)
+	}
+}
+
 func assertConsecutiveDays(t *testing.T, series []chartDay, loc *time.Location) {
 	t.Helper()
 	if len(series) == 0 {

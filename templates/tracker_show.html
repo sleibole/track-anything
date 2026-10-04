@@ -1,7 +1,7 @@
 {{define "title"}}{{.Data.Tracker.Name}} · Track Anything{{end}}
 {{define "content"}}
 {{with .Data}}
-{{template "autoRefresh" (printf "/trackers/%d" .Tracker.ID)}}
+{{template "autoRefresh" .PageURL}}
 <div class="tracker-page">
   <section class="tracker-log">
     <div class="page-head">
@@ -40,12 +40,28 @@
   {{if eq .Tracker.Kind "count"}}
   <section class="tracker-trend">
     <h2>Trend</h2>
+    {{if .OverlayChoices}}
+    <details class="overlay-picker">
+      <summary>Show events from
+        {{if .Overlay}}<span class="tracker-icon">{{trackerIcon .Overlay.Icon}}</span> {{.Overlay.Name}}{{else}}None{{end}}
+      </summary>
+      <ul>
+        <li><a href="/trackers/{{.Tracker.ID}}" hx-get="/trackers/{{.Tracker.ID}}" hx-target="#content" hx-swap="innerHTML show:none" hx-push-url="true"{{if not .Overlay}} aria-current="page"{{end}}>None</a></li>
+        {{range .OverlayChoices}}
+        <li><a href="/trackers/{{$.Data.Tracker.ID}}?overlay={{.ID}}" hx-get="/trackers/{{$.Data.Tracker.ID}}?overlay={{.ID}}" hx-target="#content" hx-swap="innerHTML show:none" hx-push-url="true"{{if eq .ID $.Data.OverlayID}} aria-current="page"{{end}}><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</a></li>
+        {{end}}
+      </ul>
+    </details>
+    {{end}}
     {{if .ChartScript}}
-    <p class="muted">Count per day. A gap is a day with nothing logged.</p>
+    <p class="muted">Count per day. A gap is a day with nothing logged.{{if and .Overlay (not .OverlayEmpty)}} Shaded bands mark {{.Overlay.Name}} events on those days.{{end}}</p>
+    {{if .OverlayEmpty}}<p class="muted">No {{.Overlay.Name}} events in the last 30 days.</p>{{end}}
     <div class="chart-frame">
-      <canvas id="count-chart-canvas" role="img" aria-label="Count per day for the last 30 days. A gap is a day with nothing logged. Zero is a recorded none."></canvas>
+      <canvas id="count-chart-canvas" role="img" aria-label="Count per day for the last 30 days. A gap is a day with nothing logged. Zero is a recorded none.{{if .Overlay}} Shaded bands mark {{.Overlay.Name}} events.{{end}}"></canvas>
+      {{if .Overlay}}<p class="chart-tip" hidden></p>{{end}}
     </div>
     {{.ChartScript}}
+    {{.OverlayScript}}
     <script src="/static/chart.js"></script>
     {{else}}
     <p class="muted">Nothing logged in the last 30 days.</p>

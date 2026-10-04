@@ -50,7 +50,7 @@ Order on a phone:
 
 1. Today's logging control: the summary line, then the log button, then a small form with an optional note. The summary is the same line as on the card. Owners also see a time field, set to now, for backfill. Members don't see it.
 2. Today's entries. Each one can be undone while it is recent. An owner can edit the time or note in place, or delete with confirmation.
-3. The trend. A count tracker shows a line of the last 30 local days once any of those days has a count or a recorded zero. Otherwise one sentence says nothing was logged in that window. The heading is Trend. Weight and duration arrive in phase 4. There is no overlay on this page.
+3. The trend. A count tracker shows a line of the last 30 local days once any of those days has a count or a recorded zero. Otherwise one sentence says nothing was logged in that window. The heading is Trend. A quiet control under the heading can mark one other tracker's events on that line. Weight and duration arrive in phase 4.
 4. History.
 
 On a wider screen, the trend and history may sit beside the logging column, with the trend above history. They do not move above the log control. Logging does not require scrolling past a chart.
@@ -90,13 +90,15 @@ A recorded zero is a zero. A day with nothing logged is a gap, not a zero.
 
 The historical count chart is on the tracker page, under the heading Trend. It is a line of events per day for the last 30 local days, oldest at the left, including today. A recorded zero is a point at zero. A day with nothing logged is a gap in the line, not a zero. If none of those days has a count or a recorded zero, the page says "Nothing logged in the last 30 days." and does not draw a chart. Week and month views are not on the page. Number and duration charts are phase 4.
 
-Overlaying another tracker is not built, and there is no separate charts page. Those events would sit on this same trend as a marker, an annotation, or a shaded vertical region. Which of those is still open (`PLAN.md`). Woods outings on the meals chart are the reference. The page would describe what is drawn and would not claim a cause.
+One other tracker can be drawn on that same trend. The control sits with the Trend heading: **Show events from**, closed until opened, with **None** and each other count tracker the person can see. Each choice shows that tracker's icon and name. Choosing one reloads this page with `?overlay=`. Choosing **None** removes it. The choice is not saved.
+
+An overlay day is a narrow translucent vertical band across the plot, in Pico's primary color at low opacity, so it stays visible in light and dark and stays quieter than the count line. A short cap at the top of the band marks the day. The band is not a duration. Several events on one local day are one band. Hover or tap names the overlay tracker and the local date, and lists the times when there are more than one. If the overlay has no events in the window, the count line stays and the page says "No Woods run events in the last 30 days." An overlay does not draw a chart when the primary tracker has nothing logged in the window. The page describes the bands and does not claim a cause. There is no separate charts page. Woods outings on the meals chart are the reference.
 
 ### Icon and accent
 
 The create and edit forms offer a small picker. It contains a curated handful of clear Tabler icons — a paw, a pill, trees, a barbell — and a few emoji. It is not the whole Tabler set, not a free-text emoji field, and not an upload. The tally-mark icon is selected by default. The owner can change the icon or the accent later.
 
-Show the icon on the home card, the tracker header, and every control that picks a tracker. The overlay picker will do the same when overlays are built. The name stays beside it. Color and icon help recognition. They are not the only way to identify a tracker.
+Show the icon on the home card, the tracker header, and every control that picks a tracker, including the overlay picker. The name stays beside it. Color and icon help recognition. They are not the only way to identify a tracker.
 
 Uploading an icon is a later idea.
 

@@ -56,6 +56,20 @@ func ownedHouseholds(db *gorm.DB, userID uint) ([]Household, error) {
 	return hs, err
 }
 
+// visibleCountTrackers returns active count trackers the user can see, except skipID.
+// Archived trackers and other kinds are left out. Order is name, then id.
+func visibleCountTrackers(db *gorm.DB, userID, skipID uint) ([]Tracker, error) {
+	var trackers []Tracker
+	err := db.Table("trackers").
+		Select("trackers.*").
+		Joins("JOIN household_members ON household_members.household_id = trackers.household_id").
+		Where("household_members.user_id = ? AND trackers.archived_at IS NULL AND trackers.kind = ? AND trackers.id <> ?",
+			userID, "count", skipID).
+		Order("trackers.name, trackers.id").
+		Find(&trackers).Error
+	return trackers, err
+}
+
 // householdForUser returns a household and the user's role in it.
 func householdForUser(db *gorm.DB, userID, householdID uint) (Household, string, error) {
 	var h Household

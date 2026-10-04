@@ -685,6 +685,60 @@ html.install-prompt .install-actions [data-install-action] {
   height: 100%;
 }
 
+.overlay-picker {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+}
+
+.overlay-picker summary {
+  color: var(--pico-muted-color);
+  cursor: pointer;
+}
+
+.overlay-picker summary .tracker-icon,
+.overlay-picker a .tracker-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  margin-right: 0.15rem;
+}
+
+.overlay-picker ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.35rem 0 0;
+}
+
+.overlay-picker li {
+  margin: 0.15rem 0;
+}
+
+.overlay-picker a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.overlay-picker a[aria-current="page"] {
+  font-weight: 600;
+}
+
+.chart-tip {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  margin: 0;
+  padding: 0.2rem 0.45rem;
+  max-width: 16rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: pre-line;
+  color: var(--pico-color);
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+}
+
 /* Wide screens: the trend, then history, sit beside the logging column, never above it. */
 @media (min-width: 1024px) {
   .tracker-page {
