@@ -408,11 +408,78 @@ html.install-prompt .install-actions [data-install-action] {
 }
 
 .household-group h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
   font-size: 1.1rem;
+}
+
+.household-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
 }
 
 .household-group h2 a {
   text-decoration: none;
+}
+
+/* Hidden until reorder.js runs, so a page without the script has no dead control. */
+button.drag-handle {
+  display: none;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--pico-muted-color);
+  line-height: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+html[data-reorder] button.drag-handle {
+  display: inline-flex;
+}
+
+button.drag-handle:is(:hover, :focus, :active) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--pico-color);
+}
+
+button.drag-handle:focus-visible {
+  outline: var(--pico-outline-width) solid var(--pico-primary-focus);
+  outline-offset: 2px;
+}
+
+button.drag-handle .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  vertical-align: 0;
+}
+
+html[data-reordering],
+html[data-reordering] * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-reorder-item].is-dragging {
+  opacity: 0.72;
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
 }
 
 .new-household,
@@ -455,6 +522,26 @@ html.install-prompt .install-actions [data-install-action] {
 
 .tracker-card {
   margin-bottom: 1rem;
+}
+
+.tracker-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
+
+.tracker-card-head .tracker-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.tracker-card-head:has(.drag-handle) .tracker-name {
+  padding-top: 0.35rem;
+}
+
+.tracker-card-head .drag-handle {
+  margin-top: -0.15rem;
+  margin-left: -0.45rem;
 }
 
 .tracker-card[class*="accent-"] {

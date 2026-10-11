@@ -29,8 +29,11 @@
 {{end}}
 
 {{define "card"}}
-<article class="tracker-card{{with .Tracker.Accent}} accent-{{.}}{{end}}">
-  <a href="{{.Link}}" class="tracker-name"><span class="tracker-icon">{{trackerIcon .Tracker.Icon}}</span> {{.Tracker.Name}}</a>
+<article class="tracker-card{{with .Tracker.Accent}} accent-{{.}}{{end}}"{{if .Reorder}} data-reorder-item data-id="{{.Tracker.ID}}"{{end}}>
+  <div class="tracker-card-head">
+    {{if .Reorder}}<button type="button" class="drag-handle" data-drag-handle aria-label="Drag to reorder this tracker">{{icon "grip-vertical"}}</button>{{end}}
+    <a href="{{.Link}}" class="tracker-name"><span class="tracker-icon">{{trackerIcon .Tracker.Icon}}</span> {{.Tracker.Name}}</a>
+  </div>
   {{template "logControl" .}}
 </article>
 {{end}}

@@ -153,7 +153,13 @@ func (a *app) handleCreateHousehold(w http.ResponseWriter, r *http.Request) {
 		if err := tx.Create(&h).Error; err != nil {
 			return err
 		}
-		return tx.Create(&HouseholdMember{HouseholdID: h.ID, UserID: u.ID, Role: roleOwner}).Error
+		pos, err := nextMemberPosition(tx, u.ID)
+		if err != nil {
+			return err
+		}
+		return tx.Create(&HouseholdMember{
+			HouseholdID: h.ID, UserID: u.ID, Role: roleOwner, Position: pos,
+		}).Error
 	})
 	if errors.Is(err, errNameTaken) {
 		a.renderDashboardError(w, r, u, name, "You already have a household with that name.")
@@ -378,7 +384,12 @@ func (a *app) handleJoin(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	m := HouseholdMember{HouseholdID: h.ID, UserID: u.ID, Role: roleMember}
+	pos, err := nextMemberPosition(a.db, u.ID)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	m := HouseholdMember{HouseholdID: h.ID, UserID: u.ID, Role: roleMember, Position: pos}
 	if err := a.db.Where(HouseholdMember{HouseholdID: h.ID, UserID: u.ID}).Attrs(m).FirstOrCreate(&m).Error; err != nil {
 		a.serverError(w, r, err)
 		return

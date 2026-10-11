@@ -85,6 +85,7 @@ document.addEventListener("htmx:sendError", restoreUnsavedLog);
 // Tracker pages refresh themselves (the autoRefresh partial). Skip it while the tab is
 // hidden, a form field has focus, a details section is open, or a request is in flight.
 window.trackerIdle = function () {
+  if (document.documentElement.dataset.reordering === "1") return false;
   if (document.visibilityState !== "visible") return false;
   const content = document.getElementById("content");
   if (!content || content.querySelector("details[open], .htmx-request")) return false;

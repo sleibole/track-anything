@@ -189,6 +189,7 @@ func TestMembersCantManageHousehold(t *testing.T) {
 		fmt.Sprintf("/households/%d/members/%d/delete", h.ID, ownerID),
 		fmt.Sprintf("/households/%d/members/%d/owner", h.ID, ts.user(t, "member@example.com").ID),
 		fmt.Sprintf("/households/%d", h.ID),
+		fmt.Sprintf("/households/%d/order", h.ID),
 	} {
 		if r := member.post(path, nil); r.status != http.StatusForbidden {
 			t.Errorf("member POST %s: %d", path, r.status)

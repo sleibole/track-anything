@@ -119,6 +119,8 @@ Household names do not have to be unique across people. You cannot own two whose
 | Invite members, remove members, promote a member to owner, regenerate the invite link | Yes | No | No |
 | Rename the household | Yes | No | No |
 | Move a tracker to another household they own | Yes | No | No |
+| Reorder trackers in a household | Yes | No | No |
+| Reorder the households on their own dashboard | Yes | Yes | No |
 | Leave the household | No | Yes | No |
 
 Any logged-in user can create a new household and becomes its owner.

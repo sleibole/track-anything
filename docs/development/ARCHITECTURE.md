@@ -14,7 +14,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 - **Do not optimize for hypothetical scale** before the product has users. Exactly one instance, because of SQLite.
 - **Direct Go dependencies:** GORM, `github.com/glebarez/sqlite`, and `golang.org/x/crypto`. Everything else is the standard library, vendored static files, or HTTP calls. Prometheus is not a dependency. See Metrics.
 - **No public API, and no offline mode through phase 5.** Basic offline logging is a later enhancement: a small cache and a browser queue around the existing log action. The app stays server-rendered. See Offline logging.
-- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js (`static/chart.umd.min.js`) draws the count trend and the charts page. A small `static/chart.js` loads that file only when a page contains a chart. Logging does not use either script. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password include a Cloudflare Turnstile widget. The form is still a normal POST. The server rejects the action when the token does not verify. The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
+- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js (`static/chart.umd.min.js`) draws the count trend and the charts page. A small `static/chart.js` loads that file only when a page contains a chart. Logging does not use either script. Dashboard reorder is the same kind of enhancement: `static/reorder.js` loads with the dashboard, drag handles stay hidden without it, and logging still works. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password include a Cloudflare Turnstile widget. The form is still a normal POST. The server rejects the action when the token does not verify. The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
 
 ## Stack
 
@@ -93,6 +93,7 @@ track-anything/
 ├── static/
 │   ├── htmx.min.js
 │   ├── app.js             # optimistic log line, idle refresh, Turnstile remount
+│   ├── reorder.js         # dashboard drag-and-drop; posts the new order
 │   ├── chart.umd.min.js   # Chart.js 4.5.1 UMD, MIT. Loaded only by chart.js
 │   ├── chart.js           # draws the embedded series and overlay bands on the tracker page and /charts
 │   ├── pico.min.css
@@ -191,6 +192,7 @@ type HouseholdMember struct {
     HouseholdID uint   `gorm:"primaryKey"`
     UserID      uint   `gorm:"primaryKey;index"`
     Role        string `gorm:"not null"` // "owner" or "member"
+    Position    int    // this person's dashboard order. Not shared with other members.
     CreatedAt   time.Time
 }
 
@@ -205,7 +207,7 @@ type Tracker struct {
     Kind           string     `gorm:"not null;default:count"` // "count", "number", or "duration"
     Unit           string     // number trackers only: "kg", "lb". At most 16 characters. Empty for the other kinds.
     ShareToken     *string    `gorm:"uniqueIndex"` // nil = no share link
-    Position       int
+    Position       int        // order within the household. Lower comes first. Shared by everyone who can see it.
     ArchivedAt     *time.Time // archived trackers are hidden; archiving also clears ShareToken
     CreatedAt      time.Time
     UpdatedAt      time.Time
@@ -355,7 +357,9 @@ POST   /settings/password         set or change, only after the email is verifie
 POST   /settings/verify           resend the confirmation email
 
 POST   /households                            create a household; the creator is its owner
+POST   /households/order                      reorder the signed-in user's households. Repeated `id`, exactly their memberships. 204, or 409 when the set does not match
 GET    /households/{hid}                      members, invite link, trackers; owners also see a collapsed archived list
+POST   /households/{hid}/order                reorder that household's active trackers (owner). Repeated `id`, exactly those trackers. Does not move one to another household. 204, or 409 when the set does not match
 POST   /households/{hid}                      rename (owner)
 POST   /households/{hid}/leave                leave as a regular member; refused for owners
 POST   /households/{hid}/invite               turn on or regenerate the invite link (owner)
@@ -604,6 +608,7 @@ What the suite has to pin down:
 
 - **Accounts.** Signup does not store a password. Password login works after the email is confirmed and a password is set in settings. A password or session created before that confirmation does not survive the verification link or the first magic link. Magic link (works once, fails when expired or reused, stored only as a hash), logout, session expiry, session IDs stored only as a hash, rate limits, email case-insensitivity. Turnstile: production config requires both keys and development can omit them; a successful Siteverify response allows signup, login, and password change; a missing token, `success: false`, a network error, a malformed response, and a non-200 response reject the action. CSRF and rate limits still apply. The suite does not call Cloudflare.
 - **Households.** A new user gets a "My trackers" household as owner. The phase 1 backfill gives each user without a household a "My trackers" household as owner, and running it twice creates nothing new. Invite link joins as member; a regenerated or disabled link fails. Owners can remove members and promote members to owner; members can't. Removing an owner, including yourself, is refused and nothing changes. When two households on the dashboard share a name, the one someone else created shows that person's email in its heading. A name that matches nothing else shows no email.
+- **Order.** The dashboard lists a person's households by `HouseholdMember.Position`, then household id, and the trackers in a household by `Tracker.Position`, then id. The household page uses that same tracker order. A startup backfill gives rows that were never ordered the sequence the dashboard already showed: membership `created_at`, then household id, and tracker `position`, then id. It does not rewrite a saved order, and running it twice changes nothing. A new household is appended to that person's list. Joining one appends it too. A new tracker is appended to its household. An owner can reorder the active trackers; a member is refused and nothing changes; someone who cannot see the household gets a 404. The posted ids have to be exactly the current active trackers, so a tracker cannot move to another household and a stale list changes nothing. Posting the same order again is safe. Archived trackers stay after the visible list. Each person can reorder their own households. That does not change anyone else's positions. A list that is not exactly their memberships changes nothing.
 - **Household organization.** Creating a household makes the creator its owner. Owners can rename one, including a personal "My trackers". Members can't, and an empty or too-long name is rejected with nothing changed. Creating or renaming so the trimmed, case-insensitive name matches another household that person owns is rejected and nothing changes. "Family" and " family " cannot both be owned by one person. Another user can own "Family". Belonging to someone else's "Family" does not block owning your own. Renaming a household to its own current name is allowed. When two households on the same dashboard share a name under that comparison, the one someone else created shows its creator's email. A name that matches nothing else shows no email. Moving a tracker between two households the user owns keeps the same tracker id, every entry, and every recorded zero, and it creates no copies. An active share link keeps its token and still opens the tracker after the move. The move does not turn the link off or replace it. Moving into a household where the user is only a member, or one they can't see, is refused and nothing changes. A member of the old household who isn't in the new one gets a 404 for the tracker and its entries afterward. A member of the destination can see and log it. A regular member can leave, and their row is gone. An owner posting to the leave route is refused and nothing changes. Leaving one household leaves the user's personal household and other memberships as they were.
 - **Archive and restore.** Archiving hides the tracker from the dashboard, makes its tracker page and entry routes 404, and clears its share link. The owner's household page lists it under archived trackers; a member's doesn't. Restore brings it back with its entries and with sharing off. Members can't archive or restore.
 - **Permissions.** For every owner-only route, a member gets refused and nothing changes. Non-members get 404 for trackers, entries, and households.
@@ -638,6 +643,7 @@ What the suite has to pin down:
 | Archive | `ArchivedAt` plus clearing `ShareToken` | Restore leaves sharing off. Permanent delete is phase 5 |
 | Phase 1 households | One-time idempotent backfill after `AutoMigrate` | No request-time fallback. Deleted once existing databases have run it |
 | Household organization | Existing `Household`, `HouseholdMember`, and `Tracker.HouseholdID` | Shipped after phase 2. No new tables or columns. One owner cannot have two names that match after trim and case folding. Move updates `HouseholdID` in one transaction, requires owner on both sides, and keeps `ShareToken`. Member-only leave. No household deletion, owner leave, demotion, or transfer |
+| Dashboard order | `Tracker.Position` and `HouseholdMember.Position` | Tracker order is shared and owner-only. Group order is per person. Drag handles post the new order. The database is the source of truth. New rows append |
 | Persistence | SQLite, one shared database | Database per user rejected: migrations, backups, and sharing all get worse |
 | Dependencies | GORM, pure-Go SQLite, `x/crypto` | No Paddle SDK. No Prometheus client. No server-side queue |
 | Metrics | Not built | A Prometheus scrape is a later idea, not part of the running app |

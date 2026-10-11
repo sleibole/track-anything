@@ -63,21 +63,22 @@ type HouseholdMember struct {
 	HouseholdID uint   `gorm:"primaryKey"`
 	UserID      uint   `gorm:"primaryKey;index"`
 	Role        string `gorm:"not null"` // roleOwner or roleMember
+	Position    int    // this member's dashboard order; lower comes first. Not shared.
 	CreatedAt   time.Time
 }
 
 type Tracker struct {
 	ID             uint
-	HouseholdID    uint    `gorm:"index;not null"`
-	Name           string  `gorm:"not null"`
-	Icon           string  // empty means the tally mark; see trackerIcons
-	Accent         string  // empty means none; see trackerAccents
-	LogLabel       string  // empty means "+ Log"
-	SummaryDisplay string  `gorm:"not null;default:times"` // "times", "done", or "last". Empty means times.
-	Kind           string  `gorm:"not null;default:count"` // count, number, or duration
-	Unit           string  // number trackers only, such as "lb" or "°F". Not a per-entry choice.
-	ShareToken     *string `gorm:"uniqueIndex"` // nil = no share link
-	Position       int
+	HouseholdID    uint       `gorm:"index;not null"`
+	Name           string     `gorm:"not null"`
+	Icon           string     // empty means the tally mark; see trackerIcons
+	Accent         string     // empty means none; see trackerAccents
+	LogLabel       string     // empty means "+ Log"
+	SummaryDisplay string     `gorm:"not null;default:times"` // "times", "done", or "last". Empty means times.
+	Kind           string     `gorm:"not null;default:count"` // count, number, or duration
+	Unit           string     // number trackers only, such as "lb" or "°F". Not a per-entry choice.
+	ShareToken     *string    `gorm:"uniqueIndex"` // nil = no share link
+	Position       int        // order within the household; lower comes first. Shared.
 	ArchivedAt     *time.Time // archiving also clears ShareToken
 	CreatedAt      time.Time
 	UpdatedAt      time.Time

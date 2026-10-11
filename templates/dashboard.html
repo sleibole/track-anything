@@ -1,3 +1,7 @@
+{{define "scripts"}}
+<script src="/static/reorder.js" defer></script>
+{{end}}
+
 {{define "content"}}
 {{template "autoRefresh" "/"}}
 <div class="page-head">
@@ -5,17 +9,24 @@
   <a href="/trackers/new" role="button" class="secondary outline">{{icon "plus"}} New tracker</a>
 </div>
 {{template "installHint"}}
+<div class="households" data-reorder-list data-reorder-url="/households/order">
 {{range .Data.Groups}}
-<section class="household-group">
+<section class="household-group" data-reorder-item data-id="{{.Household.ID}}">
   <h2>
-    <a href="/households/{{.Household.ID}}">{{.Household.Name}}</a>
-    {{with .CreatedBy}}<small class="muted">{{.}}</small>{{end}}
+    <button type="button" class="drag-handle" data-drag-handle aria-label="Drag to reorder this household">{{icon "grip-vertical"}}</button>
+    <span class="household-heading">
+      <a href="/households/{{.Household.ID}}">{{.Household.Name}}</a>
+      {{with .CreatedBy}}<small class="muted">{{.}}</small>{{end}}
+    </span>
   </h2>
+  <div {{if .IsOwner}}data-reorder-list data-reorder-url="/households/{{.Household.ID}}/order"{{end}}>
   {{range .Cards}}{{template "card" .}}{{else}}
   <p class="muted">{{if .IsOwner}}No trackers yet. <a href="/trackers/new">Create one</a> to start logging.{{else}}No trackers here yet.{{end}}</p>
   {{end}}
+  </div>
 </section>
 {{end}}
+</div>
 <details class="new-household"{{if .Data.Error}} open{{end}}>
   <summary>New household</summary>
   {{with .Data.Error}}<p role="alert" class="error">{{.}}</p>{{end}}

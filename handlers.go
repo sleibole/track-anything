@@ -144,7 +144,7 @@ func (g householdGroup) IsOwner() bool { return g.Role == roleOwner }
 
 func (a *app) dashboard(u *User) ([]householdGroup, error) {
 	var members []HouseholdMember
-	if err := a.db.Where("user_id = ?", u.ID).Order("created_at, household_id").Find(&members).Error; err != nil {
+	if err := a.db.Where("user_id = ?", u.ID).Order("position, household_id").Find(&members).Error; err != nil {
 		return nil, err
 	}
 	loc := location(u.TimeZone)
@@ -165,6 +165,7 @@ func (a *app) dashboard(u *User) ([]householdGroup, error) {
 				return nil, err
 			}
 			c.Back = "/"
+			c.Reorder = m.Role == roleOwner
 			g.Cards = append(g.Cards, c)
 		}
 		groups = append(groups, g)

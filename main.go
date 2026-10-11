@@ -271,7 +271,9 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /settings/verify", a.requireUser(a.handleSettingsVerify))
 
 	mux.HandleFunc("POST /households", a.requireUser(a.handleCreateHousehold))
+	mux.HandleFunc("POST /households/order", a.requireUser(a.handleReorderHouseholds))
 	mux.HandleFunc("GET /households/{hid}", a.requireUser(a.handleHousehold))
+	mux.HandleFunc("POST /households/{hid}/order", a.requireUser(a.handleReorderTrackers))
 	mux.HandleFunc("POST /households/{hid}", a.requireUser(a.handleRenameHousehold))
 	mux.HandleFunc("POST /households/{hid}/leave", a.requireUser(a.handleLeaveHousehold))
 	mux.HandleFunc("POST /households/{hid}/invite", a.requireUser(a.handleInviteOn))

@@ -38,6 +38,8 @@ Cards stack in a single column. They do not tile into a dense grid. On a wide sc
 
 Each group's heading is the household name, and usually nothing else. When two households on the page have the same name, after trimming surrounding whitespace and ignoring case, the one someone else created adds that person's email in quieter text, so a partner's "My trackers" doesn't look like your own. Your own households never carry your email, and you cannot own two that match that way. "My trackers" is just the default name for a personal household. It does not suggest a shared family space.
 
+A small drag handle sits on each heading and, in a household you own, on each tracker card. Dragging a card reorders it inside that household. Dragging a heading moves the whole group. The handle is the only drag target, so the log button still works as a button. A household you only belong to has no tracker handles. The order of the groups on your dashboard is yours. Someone else's dashboard does not follow it.
+
 Below the groups, a quiet **New household** action (a `<details>` element, closed by default) opens one name field and a **Create** button. A name that matches another household you already own, after trimming surrounding whitespace and ignoring case, stays on the form with an error and creates nothing. Creating one lands on the new household's page, where the invite link is. Home does not turn into a household admin screen.
 
 The header's global **New tracker** keeps its household picker. Starting from a household page is still the preferred path, because it opens the form already set to that household.
@@ -188,7 +190,7 @@ Logged out: **Log in** and **Sign up** in the header. Logged in: **Charts**, set
 
 Tabler instead of Font Awesome: an icon font or a JavaScript loader is the wrong trade here, and Font Awesome's CC BY license was a worse fit.
 
-Chrome icons, the ones the app itself uses: `tallymarks` (the brand mark, also the app icon and the default tracker icon), `plus`, `arrow-back-up` (undo), `trash`, `pencil`, `chart-line`, `settings`, `share`, `users`, `archive`, `calendar`, `link`, `logout`. Form labels add `mail` (email), `lock` (password), `lock-check` (confirm password), and `timezone`.
+Chrome icons, the ones the app itself uses: `tallymarks` (the brand mark, also the app icon and the default tracker icon), `plus`, `arrow-back-up` (undo), `trash`, `pencil`, `chart-line`, `settings`, `share`, `users`, `archive`, `calendar`, `link`, `logout`, `grip-vertical` (reorder). Form labels add `mail` (email), `lock` (password), `lock-check` (confirm password), and `timezone`.
 
 The tracker picker is a separate handful, described under **Screens**. Copy in a Tabler SVG when it joins that picker. Emoji in the picker are text, not SVGs. Do not offer the whole Tabler set, and do not accept an uploaded icon in the first version.
 
