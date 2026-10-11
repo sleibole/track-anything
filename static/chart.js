@@ -45,7 +45,6 @@
     });
     document.addEventListener("htmx:afterSettle", bootCountChart);
   }
-  bootCountChart();
 
   function cssVar(name, fallback) {
     const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -559,4 +558,6 @@
       },
     });
   }
+
+  bootCountChart();
 })();
