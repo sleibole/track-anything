@@ -399,7 +399,7 @@ func (a *app) trackerPage(t Tracker, role string, u *User, overlay *Tracker) (tr
 	p.ChartScript = script
 	// No primary history means no chart, even when the overlay has events.
 	if overlay != nil && script != "" {
-		days, err := a.overlayEvents(overlay, loc, today.Day)
+		days, err := a.overlayEvents(overlay, loc, today.Day, chartDays)
 		if err != nil {
 			return p, err
 		}
@@ -459,9 +459,9 @@ func (a *app) resolveOverlay(userID uint, primary Tracker, overlayID uint) (*Tra
 }
 
 // overlayEvents loads the overlay tracker's events in the chart window.
-// The window is chartWindow, the same range chartSeries draws.
-func (a *app) overlayEvents(overlay *Tracker, loc *time.Location, lastDay string) ([]overlayDay, error) {
-	start, end, err := chartWindow(lastDay, loc, chartDays)
+// The window is chartWindow for n local days, the same range the primary series uses.
+func (a *app) overlayEvents(overlay *Tracker, loc *time.Location, lastDay string, n int) ([]overlayDay, error) {
+	start, end, err := chartWindow(lastDay, loc, n)
 	if err != nil {
 		return nil, err
 	}
@@ -475,7 +475,7 @@ func (a *app) overlayEvents(overlay *Tracker, loc *time.Location, lastDay string
 	for i, e := range entries {
 		times[i] = e.OccurredAt
 	}
-	return overlayDays(times, loc, lastDay, chartDays)
+	return overlayDays(times, loc, lastDay, n)
 }
 
 func overlayMark(icon string) string {
@@ -499,8 +499,7 @@ func overlayChartScript(t *Tracker, days []overlayDay) (template.HTML, error) {
 // countChartScript embeds the daily count series for the chartDays local days
 // ending today, oldest first. History is the previous historyDays and does not
 // include today. An empty result means every day in the window is a gap, so the
-// page shows a sentence instead of a chart. json.Marshal escapes <, >, and &,
-// so the series cannot close the script element.
+// page shows a sentence instead of a chart.
 func countChartScript(today todayState, older []Entry, zeros []RecordedZero, loc *time.Location) (template.HTML, error) {
 	events := make([]time.Time, 0, len(today.Entries)+len(older))
 	for _, e := range today.Entries {
@@ -516,7 +515,14 @@ func countChartScript(today todayState, older []Entry, zeros []RecordedZero, loc
 	if today.Zero != nil {
 		zeroDays = append(zeroDays, today.Day)
 	}
-	series, err := chartSeries(events, zeroDays, loc, today.Day, chartDays)
+	return embedCountChart(events, zeroDays, loc, today.Day, chartDays)
+}
+
+// embedCountChart is the count series for n local days ending on lastDay.
+// An empty result means every day in the window is a gap. json.Marshal escapes
+// <, >, and &, so the series cannot close the script element.
+func embedCountChart(events []time.Time, zeroDays []string, loc *time.Location, lastDay string, n int) (template.HTML, error) {
+	series, err := chartSeries(events, zeroDays, loc, lastDay, n)
 	if err != nil || !chartHasData(series) {
 		return "", err
 	}
@@ -530,7 +536,12 @@ func countChartScript(today todayState, older []Entry, zeros []RecordedZero, loc
 // valueChartScript embeds number or duration observations for the same 30 local days
 // as the count chart. No points means the page shows a sentence instead of a chart.
 func valueChartScript(entries []Entry, t Tracker, loc *time.Location, lastDay string) (template.HTML, error) {
-	points, days, err := valuePoints(entries, t, loc, lastDay, chartDays)
+	return embedValueChart(entries, t, loc, lastDay, chartDays)
+}
+
+// embedValueChart is one point per entry over n local days. No points means no chart.
+func embedValueChart(entries []Entry, t Tracker, loc *time.Location, lastDay string, n int) (template.HTML, error) {
+	points, days, err := valuePoints(entries, t, loc, lastDay, n)
 	if err != nil || len(points) == 0 {
 		return "", err
 	}

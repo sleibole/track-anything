@@ -263,6 +263,8 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /verify/{token}", a.handleVerifyUse)
 	mux.HandleFunc("POST /logout", a.handleLogout)
 
+	mux.HandleFunc("GET /charts", a.requireUser(a.handleCharts))
+
 	mux.HandleFunc("GET /settings", a.requireUser(a.handleSettings))
 	mux.HandleFunc("POST /settings/timezone", a.requireUser(a.handleSettingsTimeZone))
 	mux.HandleFunc("POST /settings/password", a.requireUser(a.handleSettingsPassword))

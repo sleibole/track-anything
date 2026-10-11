@@ -200,6 +200,68 @@ func chartWindow(lastDay string, loc *time.Location, n int) (start, end time.Tim
 	return last.AddDate(0, 0, -(n - 1)).UTC(), last.AddDate(0, 0, 1).UTC(), nil
 }
 
+// chartSpan is one preset window on the charts page.
+// Thirty and ninety days are counts of local days, the same shape as the tracker trend.
+// Six months and one year are calendar offsets from the last day, then every local day
+// in between, including the last day. Week and month buckets are not presets.
+type chartSpan struct {
+	Key    string
+	Label  string // "Last 90 days"
+	Phrase string // "the last 90 days", for the sentences under the chart
+}
+
+const (
+	chartSpan30 = "30d"
+	chartSpan90 = "90d"
+	chartSpan6M = "6m"
+	chartSpan1Y = "1y"
+)
+
+var chartSpanChoices = []chartSpan{
+	{Key: chartSpan30, Label: "Last 30 days", Phrase: "the last 30 days"},
+	{Key: chartSpan90, Label: "Last 90 days", Phrase: "the last 90 days"},
+	{Key: chartSpan6M, Label: "Last 6 months", Phrase: "the last 6 months"},
+	{Key: chartSpan1Y, Label: "Last year", Phrase: "the last year"},
+}
+
+// chartSpanByKey resolves a range query. An empty key is the 30-day default.
+// An unknown key is not a span.
+func chartSpanByKey(key string) (chartSpan, bool) {
+	if key == "" {
+		key = chartSpan30
+	}
+	for _, s := range chartSpanChoices {
+		if s.Key == key {
+			return s, true
+		}
+	}
+	return chartSpan{}, false
+}
+
+// Days is how many local days the span covers, ending on last.
+// last is local midnight. Six months and one year use AddDate, then count
+// calendar days, so a daylight-saving change does not skip or repeat a day.
+func (s chartSpan) Days(last time.Time) int {
+	switch s.Key {
+	case chartSpan90:
+		return 90
+	case chartSpan6M:
+		return inclusiveLocalDays(last.AddDate(0, -6, 0), last)
+	case chartSpan1Y:
+		return inclusiveLocalDays(last.AddDate(-1, 0, 0), last)
+	default:
+		return chartDays
+	}
+}
+
+func inclusiveLocalDays(start, last time.Time) int {
+	n := 0
+	for d := start; !d.After(last); d = d.AddDate(0, 0, 1) {
+		n++
+	}
+	return n
+}
+
 // overlayDay is one local day on the overlay tracker that has at least one event.
 // It is a mark on the count chart's axis, not a second series. Times are clock
 // strings in the viewer's zone, oldest first. A recorded zero is not an event.

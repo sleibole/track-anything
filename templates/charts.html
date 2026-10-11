@@ -1,0 +1,63 @@
+{{define "title"}}Charts · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<div class="chart-explore">
+  <div class="page-head">
+    <h1>Charts</h1>
+  </div>
+  {{if not .Trackers}}
+  <p class="muted">No trackers yet. <a href="/trackers/new">Create one</a> to start logging.</p>
+  {{else}}
+  <div class="chart-controls">
+    <details class="overlay-picker">
+      <summary>Tracker
+        {{if .Primary}}<span class="tracker-icon">{{trackerIcon .Primary.Icon}}</span> {{.Primary.Name}}{{else}}Choose{{end}}
+      </summary>
+      <ul>
+        {{range .Trackers}}
+        <li><a href="{{$.Data.HrefTracker .ID}}" hx-get="{{$.Data.HrefTracker .ID}}" hx-target="#content" hx-swap="innerHTML show:none" hx-push-url="true"{{if eq .ID $.Data.PrimaryID}} aria-current="page"{{end}}><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</a></li>
+        {{end}}
+      </ul>
+    </details>
+    <details class="overlay-picker">
+      <summary>Show events from
+        {{if .Overlay}}<span class="tracker-icon">{{trackerIcon .Overlay.Icon}}</span> {{.Overlay.Name}}{{else}}None{{end}}
+      </summary>
+      <ul>
+        <li><a href="{{.HrefOverlay 0}}" hx-get="{{.HrefOverlay 0}}" hx-target="#content" hx-swap="innerHTML show:none" hx-push-url="true"{{if not .Overlay}} aria-current="page"{{end}}>None</a></li>
+        {{range .OverlayChoices}}
+        <li><a href="{{$.Data.HrefOverlay .ID}}" hx-get="{{$.Data.HrefOverlay .ID}}" hx-target="#content" hx-swap="innerHTML show:none" hx-push-url="true"{{if eq .ID $.Data.OverlayID}} aria-current="page"{{end}}><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</a></li>
+        {{end}}
+      </ul>
+    </details>
+    <details class="overlay-picker">
+      <summary>Range {{.Span.Label}}</summary>
+      <ul>
+        {{range .Spans}}
+        <li><a href="{{$.Data.HrefSpan .Key}}" hx-get="{{$.Data.HrefSpan .Key}}" hx-target="#content" hx-swap="innerHTML show:none" hx-push-url="true"{{if eq .Key $.Data.Span.Key}} aria-current="page"{{end}}>{{.Label}}</a></li>
+        {{end}}
+      </ul>
+    </details>
+  </div>
+  {{if not .Primary}}
+  <p class="muted">Choose a tracker to see its history.</p>
+  {{else}}
+  <h2 class="tracker-title"><span class="tracker-icon">{{trackerIcon .Primary.Icon}}</span> {{.Primary.Name}}</h2>
+  {{if .ChartScript}}
+  <p class="muted">{{.ChartNote}}</p>
+  {{if .OverlayNote}}<p class="muted">{{.OverlayNote}}</p>{{end}}
+  <div class="chart-frame">
+    <canvas id="trend-canvas" role="img" aria-label="{{.Aria}}"></canvas>
+    <p class="chart-tip" hidden></p>
+  </div>
+  {{.ChartScript}}
+  {{.OverlayScript}}
+  <script src="/static/chart.js"></script>
+  {{else}}
+  <p class="muted">{{.EmptyNote}}</p>
+  {{end}}
+  {{end}}
+  {{end}}
+</div>
+{{end}}
+{{end}}

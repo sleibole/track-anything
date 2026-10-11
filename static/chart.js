@@ -1,5 +1,5 @@
-// Draws the count trend from the series the server embedded.
-// Loaded only on a tracker page that has a chart. Logging does not use this file.
+// Draws a count, number, or duration chart from the series the server embedded.
+// Loaded only when a tracker page or the charts page has a chart. Logging does not use this file.
 
 (function () {
   function bootCountChart() {
@@ -113,13 +113,13 @@
     },
     afterEvent: function (chart, args, opts) {
       const tip = chart.canvas.parentElement && chart.canvas.parentElement.querySelector(".chart-tip");
-      if (!tip || !opts || !opts.overlay) return;
+      if (!tip || !opts) return;
       const type = args.event.type;
       if (type === "mouseout" || type === "mouseleave") {
         tip.hidden = true;
         return;
       }
-      if (type !== "mousemove" && type !== "click" && type !== "touchstart") return;
+      if (type !== "mousemove" && type !== "click" && type !== "touchstart" && type !== "touchmove") return;
       if (opts.value) {
         showValueTip(chart, args, opts, tip);
         return;
@@ -132,10 +132,9 @@
         tip.hidden = true;
         return;
       }
-      const raw = scale.getValueForPixel(ev.x);
-      const index = Math.round(raw);
       const series = opts.series || [];
-      if (index < 0 || index >= series.length) {
+      const index = dayUnderPointer(scale, ev.x, series, opts.overlay);
+      if (index < 0) {
         tip.hidden = true;
         return;
       }
@@ -156,6 +155,35 @@
       placeTip(chart, tip, ev);
     },
   };
+
+  // Half of a 44px touch target. A year of days is about one pixel wide, so the
+  // column under the pointer is not a target a person can hit.
+  const fingerPx = 22;
+
+  // A logged day or an overlay day within a finger's width wins. Otherwise the
+  // day column under the pointer, which is wide enough to aim at on a short range.
+  function dayUnderPointer(scale, x, series, overlay) {
+    const n = series.length;
+    if (!scale || n === 0) return -1;
+    let best = -1;
+    let bestD = fingerPx;
+    for (let i = 0; i < n; i++) {
+      const day = series[i];
+      const logged = day.count !== null && day.count !== undefined;
+      if (!logged && !overlayHit(overlay, day.day)) continue;
+      const d = Math.abs(scale.getPixelForValue(i) - x);
+      if (d <= bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    if (best >= 0) return best;
+    const raw = scale.getValueForPixel(x);
+    if (typeof raw !== "number" || !isFinite(raw)) return -1;
+    const index = Math.round(raw);
+    if (index < 0 || index >= n) return -1;
+    return index;
+  }
 
   function slotWidth(scale, index, n) {
     if (n < 2) return 16;
@@ -233,23 +261,34 @@
     return best;
   }
 
+  // A band is only a few pixels wide. A tap within a finger's width of that day still counts.
   function bandAt(chart, opts, x) {
     const scale = chart.scales.x;
     const series = (opts && opts.series) || [];
-    if (!scale || !opts || !opts.overlay) return null;
+    if (!scale || !opts || !opts.overlay || series.length === 0) return null;
     let best = null;
-    let bestD = 10;
-    series.forEach(function (day, i) {
-      const hit = overlayHit(opts.overlay, day.day);
-      if (!hit) return;
-      const xValue = day.x === undefined || day.x === null ? i : day.x;
-      const d = Math.abs(scale.getPixelForValue(xValue) - x);
+    let bestD = fingerPx;
+    for (let i = 0; i < series.length; i++) {
+      const hit = overlayHit(opts.overlay, series[i].day);
+      if (!hit) continue;
+      const at = series[i].x === undefined || series[i].x === null ? i : series[i].x;
+      const d = Math.abs(scale.getPixelForValue(at) - x);
       if (d <= bestD) {
         bestD = d;
         best = hit;
       }
-    });
-    return best;
+    }
+    if (best) return best;
+    const raw = scale.getValueForPixel(x);
+    const index = series[0].x === undefined || series[0].x === null ? Math.round(raw) : Math.floor(raw);
+    if (index < 0 || index >= series.length) return null;
+    return overlayHit(opts.overlay, series[index].day);
+  }
+
+  function pointRadius(n) {
+    if (n > 120) return 0;
+    if (n > 40) return 2;
+    return 4;
   }
 
   function placeTip(chart, tip, ev) {
@@ -342,11 +381,13 @@
 
     const overlay = readOverlay();
     const hasBands = !!(overlay && overlay.days.length > 0);
+    const dayTip = !!(canvas.parentElement && canvas.parentElement.querySelector(".chart-tip"));
     const primary = cssVar("--pico-primary", "#0172ad");
     const muted = cssVar("--pico-muted-color", "#5c6b7a");
     const grid = cssVar("--pico-muted-border-color", "rgba(128, 128, 128, 0.35)");
     const font = getComputedStyle(document.body).fontFamily;
     const narrow = canvas.parentElement && canvas.parentElement.clientWidth < 520;
+    const radius = pointRadius(series.length);
     const tooltip = {
       callbacks: {
         label: function (item) {
@@ -354,14 +395,14 @@
         },
       },
     };
-    if (hasBands) {
-      // One tip covers the count and the band, including a band on a gap day.
+    if (hasBands || dayTip) {
+      // One tip covers the day's count and, when present, the band. A tap near that day is enough.
       tooltip.enabled = false;
     }
 
     new window.Chart(canvas, {
       type: "line",
-      plugins: hasBands ? [overlayBands] : [],
+      plugins: hasBands || dayTip ? [overlayBands] : [],
       data: {
         labels: labels,
         datasets: [
@@ -374,8 +415,8 @@
             backgroundColor: primary,
             pointBackgroundColor: primary,
             pointBorderColor: primary,
-            pointRadius: 4,
-            pointHoverRadius: 6,
+            pointRadius: radius,
+            pointHoverRadius: radius === 0 ? 4 : 6,
             borderWidth: 2,
           },
         ],
@@ -430,6 +471,7 @@
 
     const overlay = readOverlay();
     const hasBands = !!(overlay && overlay.days.length > 0);
+    const dayTip = !!(canvas.parentElement && canvas.parentElement.querySelector(".chart-tip"));
     const duration = chartData.kind === "duration";
     const primary = cssVar("--pico-primary", "#0172ad");
     const muted = cssVar("--pico-muted-color", "#5c6b7a");
@@ -447,11 +489,12 @@
         },
       },
     };
-    if (hasBands) tooltip.enabled = false;
+    if (hasBands || dayTip) tooltip.enabled = false;
+    const radius = pointRadius(points.length);
 
     new window.Chart(canvas, {
       type: "line",
-      plugins: hasBands ? [overlayBands] : [],
+      plugins: hasBands || dayTip ? [overlayBands] : [],
       data: {
         datasets: [
           {
@@ -462,8 +505,8 @@
             backgroundColor: primary,
             pointBackgroundColor: primary,
             pointBorderColor: primary,
-            pointRadius: 4,
-            pointHoverRadius: 6,
+            pointRadius: radius,
+            pointHoverRadius: radius === 0 ? 4 : 6,
             borderWidth: 2,
           },
         ],

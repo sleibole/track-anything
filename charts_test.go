@@ -188,8 +188,12 @@ func TestCountChartSeriesOnTrackerPage(t *testing.T) {
 		t.Fatal("number tracker lost the log form")
 	}
 
-	if r := owner.get("/charts"); r.status != http.StatusNotFound {
-		t.Fatalf("/charts: %d", r.status)
+	charts := owner.get("/charts")
+	if charts.status != http.StatusOK || strings.Contains(charts.body, "count-chart") || strings.Contains(charts.body, `data-quick`) {
+		t.Fatal("charts page plotted a series or offered logging before a tracker was chosen")
+	}
+	if !strings.Contains(charts.body, "Choose a tracker") {
+		t.Fatal("charts page did not ask for a tracker")
 	}
 }
 

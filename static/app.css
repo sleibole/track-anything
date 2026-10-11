@@ -775,6 +775,54 @@ html.install-prompt .install-actions [data-install-action] {
   border-radius: var(--pico-border-radius);
 }
 
+/* Charts page: the same trend, with room to look. Selectors stack until the page is wide. */
+.chart-explore {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chart-explore .chart-frame {
+  height: 20rem;
+}
+
+.chart-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 0 1.25rem;
+}
+
+.chart-controls .overlay-picker {
+  margin: 0;
+}
+
+.chart-controls .overlay-picker summary {
+  padding: 0.35rem 0;
+}
+
+.chart-controls .overlay-picker a {
+  min-height: 2.75rem;
+  padding: 0.35rem 0;
+}
+
+@media (min-width: 720px) {
+  .chart-controls {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.5rem 1.75rem;
+  }
+
+  .chart-controls .overlay-picker {
+    flex: 1 1 12rem;
+    min-width: 0;
+  }
+
+  .chart-explore .chart-frame {
+    height: 28rem;
+  }
+}
+
 /* Wide screens: the trend, then history, sit beside the logging column, never above it. */
 @media (min-width: 1024px) {
   .tracker-page {

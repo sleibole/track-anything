@@ -509,3 +509,138 @@ func TestTrackerIconFallsBackToTallyMarks(t *testing.T) {
 		}
 	}
 }
+
+func TestChartSpans(t *testing.T) {
+	if _, ok := chartSpanByKey("week"); ok {
+		t.Fatal("unknown range was accepted")
+	}
+	def, ok := chartSpanByKey("")
+	if !ok || def.Key != chartSpan30 || def.Days(time.Time{}) != chartDays {
+		t.Fatalf("default %+v ok %v", def, ok)
+	}
+	d30, ok30 := chartSpanByKey("30d")
+	d90, ok90 := chartSpanByKey("90d")
+	d6, ok6 := chartSpanByKey("6m")
+	d1, ok1 := chartSpanByKey("1y")
+	if !ok30 || !ok90 || !ok6 || !ok1 {
+		t.Fatal("preset missing")
+	}
+	la := location("America/Los_Angeles")
+	last := time.Date(2026, 10, 10, 0, 0, 0, 0, la)
+	if d30.Days(last) != 30 || d90.Days(last) != 90 {
+		t.Fatalf("30 %d 90 %d", d30.Days(last), d90.Days(last))
+	}
+
+	six, err := chartSeries(nil, nil, la, "2026-10-10", d6.Days(last))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConsecutiveDays(t, six, la)
+	if six[0].Day != last.AddDate(0, -6, 0).Format(dayLayout) || six[len(six)-1].Day != "2026-10-10" {
+		t.Fatalf("6m %s–%s len %d", six[0].Day, six[len(six)-1].Day, len(six))
+	}
+	year, err := chartSeries(nil, nil, la, "2026-10-10", d1.Days(last))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConsecutiveDays(t, year, la)
+	if year[0].Day != "2025-10-10" || year[len(year)-1].Day != "2026-10-10" {
+		t.Fatalf("1y %s–%s len %d", year[0].Day, year[len(year)-1].Day, len(year))
+	}
+
+	// The leap day sits inside the year ending 10 March 2024 and is listed once.
+	leapLast := time.Date(2024, 3, 10, 0, 0, 0, 0, la)
+	leap, err := chartSeries(nil, nil, la, "2024-03-10", d1.Days(leapLast))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConsecutiveDays(t, leap, la)
+	seenLeap := 0
+	for _, d := range leap {
+		if d.Day == "2024-02-29" {
+			seenLeap++
+		}
+	}
+	if leap[0].Day != "2023-03-10" || seenLeap != 1 {
+		t.Fatalf("leap window starts %s, feb 29 seen %d", leap[0].Day, seenLeap)
+	}
+
+	at := func(s string) time.Time {
+		v, err := time.ParseInLocation("2006-01-02 15:04", s, la)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	// Six months ending 1 June 2026 includes the spring-forward day.
+	springLast := time.Date(2026, 6, 1, 0, 0, 0, 0, la)
+	springEvents := []time.Time{at("2026-03-07 23:30"), at("2026-03-08 00:30"), at("2026-03-08 03:30")}
+	spring, err := chartSeries(springEvents, nil, la, "2026-06-01", d6.Days(springLast))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConsecutiveDays(t, spring, la)
+	var march7, march8 *int
+	seen := map[string]int{}
+	for _, d := range spring {
+		seen[d.Day]++
+		if d.Day == "2026-03-07" {
+			march7 = d.Count
+		}
+		if d.Day == "2026-03-08" {
+			march8 = d.Count
+		}
+	}
+	if seen["2026-03-08"] != 1 || march7 == nil || *march7 != 1 || march8 == nil || *march8 != 2 {
+		t.Fatalf("spring seen %d march7 %v march8 %v", seen["2026-03-08"], march7, march8)
+	}
+	springBands, err := overlayDays(springEvents, la, "2026-06-01", d6.Days(springLast))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(springBands) != 2 || springBands[0].Day != "2026-03-07" || springBands[1].Day != "2026-03-08" || len(springBands[1].Times) != 2 {
+		t.Fatalf("spring bands %+v", springBands)
+	}
+	if springBands[1].Times[0] != "12:30 AM" || springBands[1].Times[1] != "3:30 AM" {
+		t.Fatalf("spring times %+v", springBands[1].Times)
+	}
+
+	// One year ending 20 November 2026 includes the fall-back hour.
+	pdt := time.Date(2026, 11, 1, 8, 15, 0, 0, time.UTC) // 01:15 PDT
+	pst := time.Date(2026, 11, 1, 9, 15, 0, 0, time.UTC) // 01:15 PST
+	fallLast := time.Date(2026, 11, 20, 0, 0, 0, 0, la)
+	fall, err := chartSeries([]time.Time{pdt, pst}, []string{"2026-11-02"}, la, "2026-11-20", d1.Days(fallLast))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConsecutiveDays(t, fall, la)
+	var nov1, nov2, nov3 *int
+	seen = map[string]int{}
+	for _, d := range fall {
+		seen[d.Day]++
+		switch d.Day {
+		case "2026-11-01":
+			nov1 = d.Count
+		case "2026-11-02":
+			nov2 = d.Count
+		case "2026-11-03":
+			nov3 = d.Count
+		}
+	}
+	if seen["2026-11-01"] != 1 || nov1 == nil || *nov1 != 2 {
+		t.Fatalf("nov 1 seen %d count %v", seen["2026-11-01"], nov1)
+	}
+	if nov2 == nil || *nov2 != 0 {
+		t.Fatalf("nov 2 recorded zero %v", nov2)
+	}
+	if nov3 != nil {
+		t.Fatalf("nov 3 gap plotted as %v", nov3)
+	}
+	fallBands, err := overlayDays([]time.Time{pdt, pst}, la, "2026-11-20", d1.Days(fallLast))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fallBands) != 1 || fallBands[0].Day != "2026-11-01" || len(fallBands[0].Times) != 2 {
+		t.Fatalf("fall bands %+v", fallBands)
+	}
+}

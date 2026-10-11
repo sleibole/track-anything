@@ -88,17 +88,33 @@ Choose the chart from the tracker's data:
 
 A recorded zero is a zero. A day with nothing logged is a gap, not a zero.
 
-The historical chart is on the tracker page, under the heading Trend. The count chart is a line of events per day for the last 30 local days, oldest at the left, including today. A recorded zero is a point at zero. A day with nothing logged is a gap in the line, not a zero. A number chart and a duration chart use that same window. Each entry is its own point, so two weights on one day stay two points. The duration axis is labeled in words, such as "45 min". If the window has nothing to plot, the page says "Nothing logged in the last 30 days." and does not draw a chart. Week and month views are not on the page.
+The historical chart on the tracker page sits under the heading Trend. The count chart is a line of events per day for the last 30 local days, oldest at the left, including today. A recorded zero is a point at zero. A day with nothing logged is a gap in the line, not a zero. A number chart and a duration chart use that same window. Each entry is its own point, so two weights on one day stay two points. The duration axis is labeled in words, such as "45 min". If the window has nothing to plot, the page says "Nothing logged in the last 30 days." and does not draw a chart. Week and month views are not on the page.
 
 One other tracker can be drawn on that same trend. The control sits with the Trend heading: **Show events from**, closed until opened, with **None** and each other count tracker the person can see. Each choice shows that tracker's icon and name. Choosing one reloads this page with `?overlay=`. Choosing **None** removes it. The choice is not saved.
 
-An overlay day is a narrow translucent vertical band across the plot, in Pico's primary color at low opacity, so it stays visible in light and dark and stays quieter than the primary line. A short cap at the top of the band marks the day. The band is not a duration and not a second measurement. Several events on one local day are one band. Hover or tap names the overlay tracker and the local date, and lists the times when there are more than one. If the overlay has no events in the window, the primary chart stays and the page says "No Woods run events in the last 30 days." An overlay does not draw a chart when the primary tracker has nothing logged in the window. The page describes the bands and does not claim a cause. There is no separate charts page. Woods outings on the meals chart are the reference. The same bands sit on a weight or duration chart.
+An overlay day is a narrow translucent vertical band across the plot, in Pico's primary color at low opacity, so it stays visible in light and dark and stays quieter than the primary line. A short cap at the top of the band marks the day. The band is not a duration and not a second measurement. Several events on one local day are one band. Hover or tap names the overlay tracker and the local date, and lists the times when there are more than one. If the overlay has no events in the window, the primary chart stays and the page says "No Woods run events in the last 30 days." An overlay does not draw a chart when the primary tracker has nothing logged in the window. The page describes the bands and does not claim a cause. Woods outings on the meals chart are the reference. The same bands sit on a weight or duration chart.
+
+### Charts
+
+Charts is a separate screen for looking at one tracker. Home stays the logging page, and the tracker page keeps the Trend section above. The header link is the word Charts, for a logged-in user only.
+
+The screen is three selectors and one chart:
+
+- **Tracker.** Each tracker the person can see, with its icon and name. Choose one. Until then, one sentence asks for a tracker. Archived trackers and trackers they cannot see are not in the list.
+- **Show events from.** None, or one other count tracker, with its icon and name. The tracker being charted is not in this list. Choosing one reloads the page with `overlay` in the query. None removes it.
+- **Range.** Last 30 days, Last 90 days, Last 6 months, Last year. Last 30 days is the default. The choice is `range` in the query. There is no custom date field and no week or month bucket control.
+
+The chart is the same Chart.js drawing as the tracker trend, and it is taller, because this page is for looking. A count is still one point per local day: a gap is nothing logged, and zero is a recorded none. A number or a duration is still one point per entry. Bands, tooltips, and the empty sentences match the trend, with the range named in the sentence ("No Woods run events in the last 90 days."). A tap or hover on a day shows that day's count and, when a band is there, the overlay name, date, and times. The page does not draw a line through the gaps, and it does not add a trend line, an average, or a claim about cause.
+
+Nothing on this screen is saved. The address is the view. Copy it or reload it and the same chart comes back. There is no dashboard of cards and no saved layout.
+
+On a phone the three selectors stack, and the chart uses the width of the page. On a wider screen the selectors sit in a row above the chart, and the chart uses the full content width, which is more room than the trend beside the log control. There is no separate desktop layout.
 
 ### Icon and accent
 
 The create and edit forms offer a small picker. It contains a curated handful of clear Tabler icons — a paw, a pill, trees, a barbell — and a few emoji. It is not the whole Tabler set, not a free-text emoji field, and not an upload. The tally-mark icon is selected by default. The owner can change the icon or the accent later.
 
-Show the icon on the home card, the tracker header, and every control that picks a tracker, including the overlay picker. The name stays beside it. Color and icon help recognition. They are not the only way to identify a tracker.
+Show the icon on the home card, the tracker header, and every control that picks a tracker, including the overlay picker and the Charts selectors. The name stays beside it. Color and icon help recognition. They are not the only way to identify a tracker.
 
 Uploading an icon is a later idea.
 
@@ -164,7 +180,7 @@ Offline logging is a later enhancement (`PLAN.md`). The log button stays one tap
 
 ## Navigation
 
-Logged out: **Log in** and **Sign up** in the header. Logged in: settings and log out. The brand mark links home. Icon-only controls in the header need an accessible name (settings, log out).
+Logged out: **Log in** and **Sign up** in the header. Logged in: **Charts**, settings, and log out. Charts is one text link. The brand mark links home, which stays the logging page. Icon-only controls in the header need an accessible name (settings, log out).
 
 ## Icons
 
@@ -184,8 +200,8 @@ When ads exist, they stay out of share, login, and settings pages, and out of th
 
 Design the narrow screen first. There is still one web layout and no native app. On a phone, the logged-out home and the dashboard show a short offer to add the app to the device home screen. It can be dismissed. The manifest is specified in `ARCHITECTURE.md`. Offline logging, later, keeps this same log button.
 
-On a phone, tracker cards stack, and the logging control is the first content on a tracker page. The trend follows, then history, so reviewing is a scroll down the same page.
+On a phone, tracker cards stack, and the logging control is the first content on a tracker page. The trend follows, then history, so reviewing is a scroll down the same page. On Charts, the selectors stack and the chart fills the width. A tap on a day shows the count and any overlay for that day.
 
-On a wider screen, focused forms stay narrow and centered. A tracker page may place the trend and history beside the logging column, with the trend above history, inside the normal content width. A chart does not take the place of the log control.
+On a wider screen, focused forms stay narrow and centered. A tracker page may place the trend and history beside the logging column, with the trend above history, inside the normal content width. A chart does not take the place of the log control. On Charts the selectors can sit in one row, and the chart uses the full content width, taller than the tracker-page trend.
 
 Forms and cards use the width they have, with the page margins Pico already applies.

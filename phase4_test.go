@@ -392,8 +392,9 @@ func TestValueChartsAndOverlay(t *testing.T) {
 	if home := owner.get("/").body; strings.Contains(home, "value-chart") || strings.Contains(home, "/static/chart.js") {
 		t.Fatal("home loaded a chart")
 	}
-	if r := owner.get("/charts"); r.status != http.StatusNotFound {
-		t.Fatalf("/charts: %d", r.status)
+	charts := owner.get("/charts")
+	if charts.status != http.StatusOK || strings.Contains(charts.body, "value-chart") || strings.Contains(charts.body, "count-chart") {
+		t.Fatalf("charts page plotted before a tracker was chosen: %d", charts.status)
 	}
 }
 

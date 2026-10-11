@@ -14,7 +14,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 - **Do not optimize for hypothetical scale** before the product has users. Exactly one instance, because of SQLite.
 - **Direct Go dependencies:** GORM, `github.com/glebarez/sqlite`, and `golang.org/x/crypto`. Everything else is the standard library, vendored static files, or HTTP calls. Prometheus is not a dependency. See Metrics.
 - **No public API, and no offline mode through phase 5.** Basic offline logging is a later enhancement: a small cache and a browser queue around the existing log action. The app stays server-rendered. See Offline logging.
-- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js (`static/chart.umd.min.js`) draws the count trend. A small `static/chart.js` loads that file only when the tracker page contains a chart. Logging does not use either script. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password include a Cloudflare Turnstile widget. The form is still a normal POST. The server rejects the action when the token does not verify. The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
+- **JavaScript is an enhancement.** Forms use `POST` and work without it. HTMX upgrades the same forms. Chart.js (`static/chart.umd.min.js`) draws the count trend and the charts page. A small `static/chart.js` loads that file only when a page contains a chart. Logging does not use either script. There is no React, Vue, SPA, or second charting stack. Signup, login, and change password include a Cloudflare Turnstile widget. The form is still a normal POST. The server rejects the action when the token does not verify. The later offline log path is the same kind of enhancement: without the script, the button is an ordinary POST and nothing is queued.
 
 ## Stack
 
@@ -32,7 +32,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 | Password hashing | `golang.org/x/crypto/bcrypt` | |
 | Email (magic links) | `net/smtp` to a transactional email relay | In development, links are logged to the console instead of sent |
 | Frontend | HTMX (vendored `htmx.min.js`) | Served from `/static`, no CDN |
-| Charts | Chart.js 4.5.1, vendored `chart.umd.min.js` | Count, number, and duration trends on the tracker page. One overlay is vertical bands from a small plugin in `chart.js`. Loaded only when that chart is present. Logging does not depend on it. |
+| Charts | Chart.js 4.5.1, vendored `chart.umd.min.js` | Count, number, and duration charts on the tracker page and on `GET /charts`. One overlay is vertical bands from a small plugin in `chart.js`. Loaded only when that chart is present. Logging does not depend on it. |
 | CSS | Pico.css (vendored `pico.min.css`) | Classless-first, minimal custom CSS. Visual rules are in `DESIGN.md` |
 | Icons | Tabler, individual SVGs vendored and embedded | MIT. Inlined so `stroke="currentColor"` follows Pico, including dark mode. A tracker's own icon is an allow-listed Tabler name or emoji. |
 | Payments | Not built | Paddle is the planned merchant of record for phase 5. There is no billing code |
@@ -52,7 +52,7 @@ track-anything/
 ├── main.go             # config, load .env, open DB, migrate, build mux, start server
 ├── db.go               # GORM setup, AutoMigrate, SQLite pragmas, one-time data backfills
 ├── models.go           # structs below
-├── days.go             # day boundaries, per-day counts, the count-chart series, overlay days, undo window, summaries
+├── days.go             # day boundaries, per-day counts, the count-chart series, chart ranges, overlay days, undo window, summaries
 ├── timezones.go        # friendly time-zone names for settings
 ├── icons.go            # embedded Tabler SVGs and the tracker icon allow-list
 ├── access.go           # trackerForUser, trackerForShareToken, archivedTrackerForOwner, household lookups
@@ -64,6 +64,7 @@ track-anything/
 ├── settings.go         # time zone, password, resend verification
 ├── ratelimit.go        # in-memory fixed-window limiter and trusted client IP
 ├── handlers.go         # health check, dashboard, shared handler helpers
+├── handlers_charts.go  # GET /charts: one tracker, optional overlay, a preset range
 ├── handlers_trackers.go # create, edit, archive, restore, share link, tracker page
 ├── handlers_entries.go  # log, undo, owner corrections, recorded zeros
 ├── handlers_households.go # create, rename, leave, members, invite link, join, archived trackers
@@ -74,6 +75,7 @@ track-anything/
 │   ├── layout.html     # ad and consent scripts live here, outside any HTMX swap target
 │   ├── home.html       # logged-out homepage
 │   ├── dashboard.html
+│   ├── charts.html       # one tracker over a chosen range, optional overlay bands
 │   ├── signup.html
 │   ├── login.html
 │   ├── login_sent.html
@@ -92,7 +94,7 @@ track-anything/
 │   ├── htmx.min.js
 │   ├── app.js             # optimistic log line, idle refresh, Turnstile remount
 │   ├── chart.umd.min.js   # Chart.js 4.5.1 UMD, MIT. Loaded only by chart.js
-│   ├── chart.js           # draws the embedded count series and overlay bands
+│   ├── chart.js           # draws the embedded series and overlay bands on the tracker page and /charts
 │   ├── pico.min.css
 │   ├── app.css
 │   ├── manifest.webmanifest
@@ -392,7 +394,7 @@ POST   /s/{token}/zero            record none for today via the link. Count trac
 POST   /s/{token}/entries/{eid}/undo  undo a recent entry via the link
 POST   /s/{token}/zeros/{zid}/undo    undo a recent recorded zero via the link
 
-GET    /charts                    not registered. Overlays are `?overlay=` on the tracker page
+GET    /charts                    one tracker over a preset range, optional overlay. Query: `tracker`, `overlay`, `range` (`30d` default, `90d`, `6m`, `1y`). Not stored. An id the user cannot see is a 404
 
 GET    /billing                   not registered; upgrade, portal, and webhook are phase 5
 
@@ -447,7 +449,7 @@ A tracker icon is not looked up the same way. `Icon` is either empty (render the
 
 ## Charts
 
-The trend is on `GET /trackers/{id}`. A count is events per day. A number or duration is one point per entry, not a daily sum, over the same 30 local days. There is no `/charts` route. One overlay is `?overlay=` on this same page. Event-relative alignment is a later idea in `PLAN.md` and is not computed here.
+The trend is on `GET /trackers/{id}`. A count is events per day. A number or duration is one point per entry, not a daily sum, over the same 30 local days. One overlay is `?overlay=` on this same page. `GET /charts` draws that same chart for a longer preset range. Event-relative alignment is a later idea in `PLAN.md` and is not computed here.
 
 `chartSeries` in `days.go` builds the series from `countsByDay`, so a day's count means the same thing as a history row. The window is the `chartDays` (30) local days ending today, in the viewer's stored zone, oldest first. History stays the previous `historyDays` and does not include today. Week and month views are not built; a later one should bucket these days instead of counting events a second way.
 
@@ -459,7 +461,11 @@ An overlay is one other active count tracker the viewer can see. The picker list
 
 `chartWindow` is the same 30 local days as `chartSeries`, in the viewer's zone. Overlay events are loaded with that range and grouped by `overlayDays`. A recorded zero is not an event. Several events on one local day are one `overlayDay`, with clock times oldest first. The page embeds that beside the series as `<script type="application/json" id="count-overlay">` (`name`, optional emoji `mark`, `days`). JavaScript does not decide who can see a tracker.
 
-`chart.js` draws the bands with a small Chart.js plugin, behind the primary line. Each band is a narrow vertical strip in Pico's primary color, mixed toward transparent, with a short cap at the top. It spans the plot and does not use a second dataset. On a value chart the band sits at the middle of that local day, still narrow, so it does not read as a duration. An emoji icon is drawn above a band when the bands are far enough apart. Hover and tap show the overlay name, the local date, and the times. When the overlay has no events in the window, the chart stays and the page says "No Woods run events in the last 30 days." When the primary series has nothing to plot, that sentence stays "Nothing logged in the last 30 days." and no chart or overlay JSON is rendered. `GET /charts` is not registered.
+`chart.js` draws the bands with a small Chart.js plugin, behind the primary line. Each band is a narrow vertical strip in Pico's primary color, mixed toward transparent, with a short cap at the top. It spans the plot and does not use a second dataset. On a value chart the band sits at the middle of that local day, still narrow, so it does not read as a duration. An emoji icon is drawn above a band when the bands are far enough apart. Hover and tap show the overlay name, the local date, and the times. A count chart with a tip element uses the day's column for that tap, so the count and the band for the same local day are both in the tip. When the overlay has no events in the window, the chart stays and the page says "No Woods run events in the last 30 days." When the primary series has nothing to plot, that sentence stays "Nothing logged in the last 30 days." and no chart or overlay JSON is rendered.
+
+`GET /charts` reuses `chartSeries`, `valuePoints`, `overlayDays`, and the same JSON elements. The handler is `handleCharts`. It does not load the tracker page's history or log form. `visibleTrackers` lists active trackers for the primary picker. The overlay picker is `visibleCountTrackers`, which already skips the primary, archived trackers, other kinds, and trackers the user cannot see. `tracker` and `overlay` both go through `trackerForUser`. A non-numeric overlay id means no overlay, matching the tracker page. A non-numeric or unknown primary id, an archived tracker, an overlay that is not a count, or an unknown `range` is a 404 with no name and no dates. The primary's own id as `overlay` means no overlay.
+
+The range is a `chartSpan`. Empty or `30d` is `chartDays` (30). `90d` is 90 local days. `6m` and `1y` are `AddDate` offsets from local midnight today, then every local day through today, so a daylight-saving change does not skip or repeat a day. Count charts stay one point per day at every range. The sentences name the range ("Nothing logged in the last 6 months.", "No Woods run events in the last year."). The chart frame on this page is taller than the tracker trend. The choice is not stored. There is no dashboard table and no widget grid.
 
 ## CSV export
 
@@ -607,7 +613,7 @@ What the suite has to pin down:
 - **Icons and accents.** An empty icon renders as the tally mark and an empty accent adds none. A picker value is stored. A value outside the allow-list is rejected. The name is present wherever the icon is.
 - **Recorded zeros.** Marking today as none does not increment the count. An event that day deletes the mark. A day with neither is absent from the per-day series. A recorded zero is present as zero. A member or share link can undo a mark from the last 15 minutes. Clearing an older mark, or marking an earlier day, is owner-only, and a member's attempt changes nothing.
 - **Time.** "Today" and per-day grouping follow the viewer's stored time zone (or the household owner's on share pages), not the browser's current zone. DST changes don't double-count or skip a day.
-- **Charts.** The count chart's embedded series is the last 30 local days ending today, in the viewer's stored zone, including across a daylight-saving change. It matches per-day counts, uses null for an unlogged day, and uses zero for a recorded zero. A number or duration chart uses that same window and zone, keeps each observation, and does not sum a day. A household member sees that series. Someone who cannot see the tracker gets a 404 and no series, and a logged-out request is sent to login. Home and the share page do not include the chart. `GET /charts` is not a route. The tracker page's log form does not require Chart.js. An overlay uses that same window and zone on every kind. The picker omits this tracker, archived trackers, other kinds, and trackers the viewer cannot see. One local day with several events is one band. An inaccessible overlay id returns 404 and no name or dates. No overlay leaves the series as it was. An overlay with no events in the window keeps the chart and says so. A primary tracker with nothing to plot does not draw a chart just because the overlay has events. Event-relative alignment is not part of this suite until that later idea is built.
+- **Charts.** The count chart's embedded series is the last 30 local days ending today, in the viewer's stored zone, including across a daylight-saving change. It matches per-day counts, uses null for an unlogged day, and uses zero for a recorded zero. A number or duration chart uses that same window and zone, keeps each observation, and does not sum a day. A household member sees that series. Someone who cannot see the tracker gets a 404 and no series, and a logged-out request is sent to login. Home and the share page do not include the chart. The tracker page's log form does not require Chart.js. An overlay uses that same window and zone on every kind. The picker omits this tracker, archived trackers, other kinds, and trackers the viewer cannot see. One local day with several events is one band. An inaccessible overlay id returns 404 and no name or dates. No overlay leaves the series as it was. An overlay with no events in the window keeps the chart and says so. A primary tracker with nothing to plot does not draw a chart just because the overlay has events. `GET /charts` requires a session. Its pickers list only active trackers the user can see, and the overlay list is count trackers other than the primary. Inaccessible, archived, and non-count overlay ids are 404s with no name and no dates. The primary cannot overlay itself. Ranges are 30 days (the default), 90 days, 6 months, and 1 year. An unknown range is a 404. The viewer's stored zone groups the days. A 6-month or 1-year window that crosses a daylight-saving change does not skip or repeat a local day. A recorded zero stays zero and a missing day stays missing. Overlay events use that same window, and several events on one local day are one band. An overlay with no events keeps the primary chart. The tracker page trend stays 30 days, and logging on home is unchanged. The charts URL is the only state. Event-relative alignment is not part of this suite until that later idea is built.
 - **Values.** Creating a count, number, or duration tracker. An invalid kind is rejected. A number requires a unit and rejects a duration. A duration rejects a number and a unit. A kind change is allowed before any entry or recorded zero, and refused after, with nothing rewritten. An owner and a member can log a number. A member's time is now. A share link can log a number or duration now, without storing a note. Malformed numbers, NaN, and infinities are rejected. A duration is stored as seconds and shown in words. History shows the value with its unit, or the formatted duration. The latest `OccurredAt` prefills the next value. A backfilled older entry does not. The note does not carry forward. **Log again** stores that value at now, is absent until a value exists, and ignores a client-supplied replacement. Undo still deletes it. The count chart's zero-versus-gap behavior is unchanged. Logging does not require Chart.js.
 - **CSV.** Count, number, and duration exports. Commas, quotes, and newlines in a note stay inside one field. A recorded zero is a `recorded_zero` row. A member is refused. Someone who cannot see the tracker gets a 404 and no rows. Timestamps and values match the stored history.
 - **Deletion (phase 5).** Permanent tracker delete removes the tracker and its entries, owner only, with confirmation.
@@ -623,7 +629,7 @@ What the suite has to pin down:
 | --- | --- | --- |
 | Implementation | Go web app | One binary, standard library where it is enough |
 | Frontend | Go templates + HTMX + Pico.css | No SPA. Forms work without JavaScript |
-| Charts | Chart.js 4.5.1, vendored | JSON embedded by the server for the daily count line, the value or duration points, and, when chosen, one overlay's event days. Bands are a small plugin in `chart.js`. Loaded only when that chart is on the page. Logging works without it. The overlay is not stored. No `/charts` route. No frontend framework. |
+| Charts | Chart.js 4.5.1, vendored | JSON embedded by the server for the daily count line, the value or duration points, and, when chosen, one overlay's event days. Bands are a small plugin in `chart.js`. Loaded only when that chart is on the page. Logging works without it. The overlay is not stored. `GET /charts` reuses that JSON for one tracker and a preset range (`30d`, `90d`, `6m`, `1y`), with the choice in the query string. No saved dashboards. No frontend framework. |
 | Tracker icon | Optional allow-listed string | Empty renders the tally mark. Emoji are text. A removed picker name falls back to the tally mark. |
 | Summary display | `times`, `done`, or `last` on `Tracker` | Empty and the column default are `times`. Presentation only. Wording in `PLAN.md`. Shipped after phase 2. |
 | Schedules and reminders | Not specified | Later product direction in `PLAN.md`. No schema, notification channel, or routes until that direction is ready to build. |
