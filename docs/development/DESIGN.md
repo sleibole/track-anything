@@ -7,7 +7,7 @@ This is a small, practical guide, not a formal design system. Pico.css supplies 
 ## Visual language
 
 - **Calm notebook, mobile-first.** Fast to log, easy to review, and the same card pattern for the dog's meals now and a workout measurement later. A family calendar is loose inspiration for recognizable icons, soft colors, and approachable cards. Keep each screen less crowded than that: one primary action, the name always readable, no illustrated scenes, and no gradients.
-- **Pico, classless-first.** Reach for Pico's elements before adding classes. Keep `app.css` small.
+- **Pico's class build.** `pico.min.css` styles elements and classes such as `container`, `outline`, and `secondary`. Custom classes in `app.css` cover what Pico does not. Keep `app.css` small.
 - **Pico's color, including dark mode.** Pico is the only UI palette. The brand blue is Pico's primary (`#0172ad` in the install theme color). The app icon is Tabler tally marks on that blue. A tracker may add one optional accent from a small built-in set of soft tints, on its card and icon only. The accent helps recognition and is never the only label. It has to stay clear in light and dark. Chrome icons use `currentColor` so they follow text color, including dark mode and button hover.
 - **Obvious in a glance.** No decorative chrome. A tracker card is a name, an icon, a summary, and a button.
 

@@ -33,7 +33,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 | Email (magic links) | `net/smtp` to a transactional email relay | In development, links are logged to the console instead of sent |
 | Frontend | HTMX (vendored `htmx.min.js`) | Served from `/static`, no CDN |
 | Charts | Chart.js 4.5.1, vendored `chart.umd.min.js` | Count, number, and duration charts on the tracker page and on `GET /charts`. One overlay is vertical bands from a small plugin in `chart.js`. Loaded only when that chart is present. Logging does not depend on it. |
-| CSS | Pico.css (vendored `pico.min.css`) | Classless-first, minimal custom CSS. Visual rules are in `DESIGN.md` |
+| CSS | Pico.css (vendored `pico.min.css`) | The class build, not the classless one. Minimal custom CSS. Visual rules are in `DESIGN.md` |
 | Icons | Tabler, individual SVGs vendored and embedded | MIT. Inlined so `stroke="currentColor"` follows Pico, including dark mode. A tracker's own icon is an allow-listed Tabler name or emoji. |
 | Payments | Not built | Paddle is the planned merchant of record for phase 5. There is no billing code |
 | Ads | Not built | AdSense is phase 5, after the app is live |
