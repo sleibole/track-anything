@@ -247,6 +247,7 @@ func newLogger(env string) *slog.Logger {
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /static/splash/{scheme}/{size}", handleSplash)
 	mux.Handle("GET /static/", http.FileServerFS(embedded))
 	mux.HandleFunc("GET /healthz", a.handleHealthz)
 	mux.HandleFunc("GET /{$}", a.handleHome)

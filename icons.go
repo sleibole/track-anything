@@ -107,6 +107,7 @@ func trackerIcon(v string) (template.HTML, error) {
 }
 
 var templateFuncs = template.FuncMap{
-	"icon":        icon,
-	"trackerIcon": trackerIcon,
+	"icon":              icon,
+	"trackerIcon":       trackerIcon,
+	"startupImageLinks": startupImageLinks,
 }

@@ -55,6 +55,7 @@ track-anything/
 ├── days.go             # day boundaries, per-day counts, the count-chart series, chart ranges, overlay days, undo window, summaries
 ├── timezones.go        # friendly time-zone names for settings
 ├── icons.go            # embedded Tabler SVGs and the tracker icon allow-list
+├── splash.go           # iOS home-screen startup images, drawn from the 512 icon
 ├── access.go           # trackerForUser, trackerForShareToken, archivedTrackerForOwner, household lookups
 ├── auth.go             # signup, login, logout, magic links, email verification, sessions
 ├── turnstile.go        # Siteverify check for signup, login, and change password
@@ -508,6 +509,7 @@ Set on connect:
 
 - `manifest.webmanifest` with `name`, `start_url: "/"`, `display: "standalone"`, and 192 and 512 icons. The 512 icon is also the maskable icon; the artwork has safe-zone padding.
 - Apple touch icon, `apple-mobile-web-app-capable`, and `mobile-web-app-capable`. iOS still adds the icon from Share → Add to Home Screen.
+- iOS shows an `apple-touch-startup-image` on home-screen launch when the image's pixel size matches the device and orientation. Those images are drawn from the 512 icon, centered on white in light mode and on `#13171f` in dark mode, for current iPhone and iPad sizes. A size with no image still shows the blank screen. iPad Split View and Stage Manager do not match a full-screen image. Android's splash still comes from the manifest `background_color` and icons. Changing a startup image means removing the home-screen icon and adding it again; iOS keeps the image from the moment it was added.
 - The logged-out home and the dashboard include a short offer on a phone. When the browser fires `beforeinstallprompt`, the offer is an Add to Home Screen button that opens the browser's install dialog. On iPhone and iPad it names Share, then Add to Home Screen. Other phones point at the browser menu (Install app or Add to Home screen). A page opened inside another app's browser says to open Safari or Chrome. The offer is not shown on a computer, when the app is already open from the home screen, or after Not now. Not now is remembered in `localStorage` on that device. Login, settings, tracker pages, and share pages do not include it.
 - No service worker through phase 5, so deploys do not leave stale CSS and JS. Add a minimal worker only if the install option is missing on a real phone, and that fallback does not cache pages. The later offline-logging worker is specified under Offline logging. While online it prefers the network, so a deploy still reaches the new pages.
 - The manifest is served as `application/manifest+json`.
@@ -623,7 +625,7 @@ What the suite has to pin down:
 - **CSV.** Count, number, and duration exports. Commas, quotes, and newlines in a note stay inside one field. A recorded zero is a `recorded_zero` row. A member is refused. Someone who cannot see the tracker gets a 404 and no rows. Timestamps and values match the stored history.
 - **Deletion (phase 5).** Permanent tracker delete removes the tracker and its entries, owner only, with confirmation.
 - **Ads and billing (phase 5).** No ad markup for ad-free users, users in the grace period, or on share/login/settings pages. The Paddle webhook rejects bad signatures and old timestamps, applies an event once even if delivered twice, ignores an older event arriving after a newer one, finds the user through `custom_data`, and sets and clears the plan. Tests build the `Paddle-Signature` header the way Paddle does, against a test secret, and the portal handler talks to a stub API URL.
-- **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes. The logged-out home and the dashboard include the home-screen offer. Login and settings do not.
+- **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes. The logged-out home and the dashboard include the home-screen offer. Login and settings do not. The layout links a light and a dark startup image for a known phone size, in portrait and landscape. That image is a PNG of the requested pixel size whose corner is the page background. An unknown splash size is a 404.
 - **Offline logging (later).** A repeated sync with the same client id inserts one entry and returns it again on retry. `OccurredAt` is the tap time sent with that id. `CreatedAt` is the sync, and the undo window uses it. A member or share-link log that omits the client id still stores the server's current time. The cached snapshot is enough to show the tracker name, icon, and log button. History and charts are not required for the log tap.
 - **Health.** `GET /healthz` needs no session. It returns 200 `ok` when `SELECT 1` succeeds, and 503 with no database error text when that query fails. The failure is logged.
 - **Metrics.** Not built. No test requests `/metrics`.

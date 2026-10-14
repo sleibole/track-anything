@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"image/color"
+	"image/png"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -72,6 +74,54 @@ func TestLayoutLinksInstallAssets(t *testing.T) {
 		if !strings.Contains(body, meta) {
 			t.Errorf("layout missing %s", meta)
 		}
+	}
+	for _, link := range []string{
+		`<link rel="apple-touch-startup-image" href="/static/splash/light/1170x2532.png" media="(prefers-color-scheme: light) and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">`,
+		`<link rel="apple-touch-startup-image" href="/static/splash/dark/1170x2532.png" media="(prefers-color-scheme: dark) and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">`,
+		`<link rel="apple-touch-startup-image" href="/static/splash/light/2532x1170.png" media="(prefers-color-scheme: light) and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)">`,
+		`<link rel="apple-touch-startup-image" href="/static/splash/dark/2532x1170.png" media="(prefers-color-scheme: dark) and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)">`,
+		`html { background-color: #fff; }`,
+		`html { background-color: #13171f; }`,
+	} {
+		if !strings.Contains(body, link) {
+			t.Errorf("layout missing %s", link)
+		}
+	}
+}
+
+func TestSplashImage(t *testing.T) {
+	h := newTestApp(t).routes()
+	cases := []struct {
+		path string
+		w, h int
+		bg   color.RGBA
+	}{
+		{"/static/splash/light/1170x2532.png", 1170, 2532, splashLight},
+		{"/static/splash/dark/1170x2532.png", 1170, 2532, splashDark},
+		{"/static/splash/light/2532x1170.png", 2532, 1170, splashLight},
+		{"/static/splash/dark/2532x1170.png", 2532, 1170, splashDark},
+	}
+	for _, tc := range cases {
+		code, body := get(t, h, tc.path, nil)
+		if code != http.StatusOK {
+			t.Errorf("%s: status %d", tc.path, code)
+			continue
+		}
+		img, err := png.Decode(strings.NewReader(body))
+		if err != nil {
+			t.Errorf("%s: %v", tc.path, err)
+			continue
+		}
+		if img.Bounds().Dx() != tc.w || img.Bounds().Dy() != tc.h {
+			t.Errorf("%s: size %dx%d", tc.path, img.Bounds().Dx(), img.Bounds().Dy())
+		}
+		got := color.RGBAModel.Convert(img.At(0, 0)).(color.RGBA)
+		if got != tc.bg {
+			t.Errorf("%s: corner %v, want %v", tc.path, got, tc.bg)
+		}
+	}
+	if code, _ := get(t, h, "/static/splash/light/1x1.png", nil); code != http.StatusNotFound {
+		t.Errorf("unknown splash size: status %d", code)
 	}
 }
 

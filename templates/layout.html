@@ -11,6 +11,13 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Track Anything">
+  <style>
+    html { background-color: #fff; }
+    @media (prefers-color-scheme: dark) {
+      html { background-color: #13171f; }
+    }
+  </style>
+  {{startupImageLinks}}
   <link rel="stylesheet" href="/static/pico.min.css">
   <link rel="stylesheet" href="/static/app.css">
   <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[234]..","swap":true},{"code":"...","swap":false,"error":true}]}'>
