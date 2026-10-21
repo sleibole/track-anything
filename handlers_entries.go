@@ -232,6 +232,87 @@ func (a *app) handleLogEntry(w http.ResponseWriter, r *http.Request) {
 	redirectBack(w, r, trackerURL(t))
 }
 
+// handleLogHistoryDay records one event on an earlier count-history day that is still
+// a gap: no entries and no recorded zero. The time is local noon. Owners only.
+func (a *app) handleLogHistoryDay(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	t, role, err := trackerForUser(a.db, u.ID, pathID(r, "id"))
+	if err != nil {
+		a.lookupError(w, r, err)
+		return
+	}
+	if role != roleOwner {
+		a.ownerOnly(w, r)
+		return
+	}
+	if !t.IsCount() {
+		a.renderTrackerError(w, r, t, role, "Only a count tracker can be logged for an earlier day.")
+		return
+	}
+	loc := location(u.TimeZone)
+	now := a.now()
+	day := r.PostFormValue("day")
+	if _, err := time.ParseInLocation(dayLayout, day, loc); err != nil || day >= localDay(now, loc) {
+		a.renderTrackerError(w, r, t, role, "Pick an earlier day.")
+		return
+	}
+	occurred, err := historyDayTime(day, loc)
+	if err != nil {
+		a.renderTrackerError(w, r, t, role, "Pick an earlier day.")
+		return
+	}
+	e := Entry{TrackerID: t.ID, OccurredAt: occurred, RecordedByID: &u.ID, CreatedAt: now}
+	msg, err := a.logGapDay(t, day, loc, &e)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if msg != "" {
+		a.renderTrackerError(w, r, t, role, msg)
+		return
+	}
+	redirectBack(w, r, trackerURL(t))
+}
+
+// logGapDay writes an entry when the local day has no entries and no recorded zero.
+// A non-empty message means nothing was written. The check and the insert share one
+// transaction. A recorded zero that appears in that same moment is cleared, because
+// a day with an event is not none.
+func (a *app) logGapDay(t Tracker, day string, loc *time.Location, e *Entry) (string, error) {
+	start, end, err := dayBounds(day, loc)
+	if err != nil {
+		return "", err
+	}
+	var msg string
+	err = a.db.Transaction(func(tx *gorm.DB) error {
+		var n int64
+		if err := tx.Model(&Entry{}).
+			Where("tracker_id = ? AND occurred_at >= ? AND occurred_at < ?", t.ID, start, end).
+			Count(&n).Error; err != nil {
+			return err
+		}
+		if n > 0 {
+			msg = "That day already has entries."
+			return nil
+		}
+		var zeros int64
+		if err := tx.Model(&RecordedZero{}).
+			Where("tracker_id = ? AND day = ?", t.ID, day).
+			Count(&zeros).Error; err != nil {
+			return err
+		}
+		if zeros > 0 {
+			msg = "That day is already recorded as none."
+			return nil
+		}
+		if err := tx.Create(e).Error; err != nil {
+			return err
+		}
+		return tx.Where("tracker_id = ? AND day = ?", t.ID, day).Delete(&RecordedZero{}).Error
+	})
+	return msg, err
+}
+
 // handleRecordZero marks today, or for an owner an earlier day, as none.
 func (a *app) handleRecordZero(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)

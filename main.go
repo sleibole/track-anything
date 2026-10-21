@@ -299,6 +299,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /trackers/{id}/quick", a.requireUser(a.handleQuickLog))
 	mux.HandleFunc("POST /trackers/{id}/entries", a.requireUser(a.handleLogEntry))
 	mux.HandleFunc("POST /trackers/{id}/zero", a.requireUser(a.handleRecordZero))
+	mux.HandleFunc("POST /trackers/{id}/day", a.requireUser(a.handleLogHistoryDay))
 	mux.HandleFunc("POST /entries/{eid}/undo", a.requireUser(a.handleUndoEntry))
 	mux.HandleFunc("POST /entries/{eid}", a.requireUser(a.handleEditEntry))
 	mux.HandleFunc("POST /entries/{eid}/delete", a.requireUser(a.handleDeleteEntry))

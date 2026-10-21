@@ -30,6 +30,23 @@ func TestDayBoundsAcrossDST(t *testing.T) {
 	}
 }
 
+func TestHistoryDayTimeIsLocalNoon(t *testing.T) {
+	la := location("America/Los_Angeles")
+	for _, day := range []string{"2026-03-08", "2026-11-01", "2026-06-15"} {
+		got, err := historyDayTime(day, la)
+		if err != nil {
+			t.Fatal(err)
+		}
+		local := got.In(la)
+		if localDay(got, la) != day || local.Hour() != 12 || local.Minute() != 0 || local.Second() != 0 {
+			t.Errorf("%s: %v", day, local)
+		}
+	}
+	if _, err := historyDayTime("2026-02-30", la); err == nil {
+		t.Error("invalid day accepted")
+	}
+}
+
 func TestCountsByDay(t *testing.T) {
 	la := location("America/Los_Angeles")
 	at := func(s string) time.Time {

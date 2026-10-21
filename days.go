@@ -37,6 +37,21 @@ func dayBounds(day string, loc *time.Location) (start, end time.Time, err error)
 	return d.UTC(), d.AddDate(0, 0, 1).UTC(), nil
 }
 
+// historyDayTime is local noon on a calendar day. Logging a blank history day
+// stores that instant, so the entry belongs to the row's day and history shows 12:00 PM.
+// Noon falls inside a spring-forward day and a fall-back day.
+func historyDayTime(day string, loc *time.Location) (time.Time, error) {
+	d, err := time.ParseInLocation(dayLayout, day, loc)
+	if err != nil {
+		return time.Time{}, err
+	}
+	noon := time.Date(d.Year(), d.Month(), d.Day(), 12, 0, 0, 0, loc)
+	if localDay(noon, loc) != day {
+		return time.Time{}, fmt.Errorf("noon is not on %s", day)
+	}
+	return noon.UTC(), nil
+}
+
 func recent(created, now time.Time) bool {
 	return now.Sub(created) < undoWindow
 }

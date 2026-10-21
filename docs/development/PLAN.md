@@ -20,6 +20,8 @@ Within `docs/development/`:
 
 These development documents contain settled project decisions and should be followed when implementing new features.
 
+`AGENTS.md` at the repo root instructs coding agents. Follow it when changing the code. Existing tests must not be modified, deleted, skipped, disabled, or have their assertions weakened without explicit permission. If an existing test appears incorrect or conflicts with an intended behavior change, explain the issue and request permission before changing it. Adding new tests is allowed. The rule itself lives in `AGENTS.md`.
+
 ## North-star test
 
 **Would we actually use Track Anything instead of the scrap of paper?**
@@ -73,7 +75,7 @@ Start with the smallest useful tracker and add value shapes only when a real use
 - A count tracker can store one **recorded zero** for a calendar day: the count is deliberately none. That mark is not an event and does not increase the count. A day with no entries and no recorded zero is **nothing logged**. Logging an event for that day clears the recorded zero. Charts and per-day counts draw a recorded zero as zero and leave an unlogged day blank. A recorded zero is not an entry, so Done today and Last occurrence ignore it when they build the summary line. History still shows it.
 - For number and duration trackers, **the last value carries forward**: if you used a 5lb club last time, the form already says 5, and **Log again** records it with one tap. A duration works the same way, shown as words such as "45 min" or "1 hr 10 min". Backfilling an older entry does not change what carries forward. The note does not carry forward, and the time defaults to now. Changing the prefilled value (moving up to 6lb) and submitting is how a new value starts carrying forward. The button says **Log again**. The custom log label stays on a count tracker, and on the link that opens a number or duration tracker before it has a value.
 - A tracker's kind can change until it has an entry or a recorded zero. After that it stays, so old rows are not reinterpreted. The unit on a number tracker can still be edited. There is no unit conversion.
-- Members log at the current time, with an optional note. Owners can also choose when an entry happened, which is how they backfill ("I forgot to log yesterday"). When it happened is separate from when the row was written. Undo uses when it was written. Marking an earlier day as none is the same kind of backfill: owner only.
+- Members log at the current time, with an optional note. Owners can also choose when an entry happened, which is how they backfill ("I forgot to log yesterday"). When it happened is separate from when the row was written. Undo uses when it was written. Marking an earlier day as none is the same kind of backfill: owner only. On a count tracker's history, an owner can also log a day that still has nothing logged. That entry is noon on that day. Editing an entry that already exists is separate.
 - **Archive, not delete**, for trackers. Archiving hides the tracker and is the normal way to say "I don't want this tracker anymore." It is reversible: the owner restores it from the household page. Permanently deleting a tracker and its entries is a separate, confirmed owner action that arrives in phase 5, with the other destructive privacy operations.
 - **Fields and sub-trackers** (one workout containing several exercises, each with weight, reps, and sets) are designed below but deferred. They get built only if number and duration trackers prove painful for workouts in real use.
 
@@ -113,6 +115,7 @@ Household names do not have to be unique across people. You cannot own two whose
 | Mark today as none, or undo that mark within 15 minutes | Yes | Yes | Yes |
 | Choose when a new entry happened (backfill) | Yes | No | No |
 | Mark an earlier day as none, or clear an older mark | Yes | No | No |
+| Log an unlogged history day at noon | Yes | No | No |
 | Edit an entry's time or note, delete older entries | Yes | No | No |
 | Create, edit, archive, or restore trackers | Yes | No | No |
 | Turn on, regenerate, or turn off a share link | Yes | No | No |
@@ -154,11 +157,11 @@ Sessions last 30 days. Once a session is past half its lifetime, the next reques
 
 A calm, mobile-first tracking notebook. Logging is fast, review is easy, and the same screens cover the dog's meals and a workout measurement. Tone takes a little from a family calendar: a recognizable icon, a soft color, an approachable card. The layout stays sparser than a calendar. How the screens look is in `DESIGN.md`.
 
-**Home.** Trackers stay grouped by household. Each one is a card with its name, icon, optional accent, a summary, and one logging button. The summary follows that tracker's summary display. Millie ate, set to Times today, reads "2 times today". McGill Big 3, set to Done today, reads "Done today". Logan Motrin, set to Last occurrence, reads "Last: 6:42 AM". The button records the current time in one tap, then offers **Undo**. The button's words are the log label, which is separate from the summary. Before that setting existed, phase 2 showed the Times today wording on every card.
+**Home.** Trackers stay grouped by household. A single list of trackers, and a separate quick-entry view, are later ideas. This page keeps the household groups. Each tracker is a card with its name, icon, optional accent, a summary, and one logging button. The summary follows that tracker's summary display. Millie ate, set to Times today, reads "2 times today". McGill Big 3, set to Done today, reads "Done today". Logan Motrin, set to Last occurrence, reads "Last: 6:42 AM". The button records the current time in one tap, then offers **Undo**. The button's words are the log label, which is separate from the summary. Before that setting existed, phase 2 showed the Times today wording on every card.
 
 **Tracker detail.** Today's logging control and today's entries come first. The trend follows, then history. Correcting a mistake sits on the entry. Anyone who can log can undo an entry or a recorded zero from the last 15 minutes. Only an owner can choose when a new entry happened, edit the time, note, or value, delete an older entry, mark an earlier day as none, or clear an older recorded zero. On a phone the logging action stays first. On a wider screen, the trend and history can sit beside that column, with the trend above history. They never sit above the log control.
 
-**History.** Dated entries, with the time they happened. "None" (a recorded zero) and "Nothing logged" are different rows. That distinction matters for the dog: a day with no meals is data, and a day nobody wrote down is a gap.
+**History.** Dated entries, with the time they happened. "None" (a recorded zero) and "Nothing logged" are different rows. That distinction matters for the dog: a day with no meals is data, and a day nobody wrote down is a gap. On a count tracker, an owner can mark an unlogged history day as none, or log it. The log action uses the tracker's log label and stores noon on that day. A day that already has an entry, or is already none, does not offer it.
 
 **Trends.** The chart matches the tracker: events per day, a value over time, or a duration over time. A recorded zero is a zero. A day with nothing logged is a gap. The tracker page chart is the last 30 local days, including today. Week and month views are not built. One other count tracker's events can be drawn on that chart as shaded bands. A separate Charts screen looks at a longer range of the same chart. See Charts and overlays.
 
@@ -270,7 +273,7 @@ Paddle Billing with one yearly price. Checkout, card, tax, invoices, and cancell
 
 ## Phases
 
-Each phase ends with the app running and usable locally. Phase 2 ends with the first public deploy. Behaviors described here are covered by `make test`; the suite is specified in `ARCHITECTURE.md`. Basic offline logging sits under Later ideas. It is outside these phases. Recurring, scheduled, and goal-based trackers sit there too. They are a direction for a later phase, not work in phases 0–5 or in the summary-display follow-on.
+Each phase ends with the app running and usable locally. Phase 2 ends with the first public deploy. Behaviors described here are covered by `make test`; the suite is specified in `ARCHITECTURE.md`. Basic offline logging sits under Later ideas. It is outside these phases. Recurring, scheduled, and goal-based trackers sit there too. They are a direction for a later phase, not work in phases 0–5 or in the summary-display follow-on. The same is true of a single-list view, a quick-entry view, chart trend lines, averages, projections, user-defined units, and public or planned workouts.
 
 ### Phase 0: Project skeleton (done)
 
@@ -467,12 +470,88 @@ How this could eventually meet the rest of the product, once there is a reason t
 
 The product stays a small, flexible way to record arbitrary events and measurements. A schedule, when someone wants one, makes that record easier to keep. It does not make Track Anything a calendar, a todo list, or a habit-tracking platform.
 
-- **Event-relative view.** After historical charts and overlays have real history behind them, align repeated occurrences of an event and show another tracker's values on the surrounding days. For woods and meals, that is the average meal count at three days before, two days before, one day before, the woods day, and one, two, and three days after, across outings. A decline that shows up one or two days after woods is easier to see than on the calendar timeline. This is still a picture for a person to read. It is not a correlation study, and it is not designed further until charts and overlays are in use.
+- **Event-relative view.** After historical charts and overlays have real history behind them, align repeated occurrences of an event and show another tracker's values on the surrounding days. For woods and meals, that is the average meal count at three days before, two days before, one day before, the woods day, and one, two, and three days after, across outings. A decline that shows up one or two days after woods is easier to see than on the calendar timeline. This is still a picture for a person to read. It is not a correlation study, and it is not designed further until charts and overlays are in use. An average drawn on the ordinary chart is a separate later idea under Chart analysis.
 - **Start without an account**: the logged-out homepage asks "What would you like to track?", and submitting it creates a temporary user and the tracker; saving the account later adds an email. Needs long-lived sessions, cleanup of abandoned temporary users, a rate limit, and a visible **Log in** link so returning users don't make duplicates. Share links already cover much of the "use it without signing up" need.
-- Tracker templates ("Start from: McGill Big 3", "Start from: TOI").
+- Tracker templates ("Start from: McGill Big 3", "Start from: TOI"). A plan that other people share, which someone follows and then records, is a separate later idea under Public trackers and planned workouts.
 - A user-uploaded icon per tracker. The first version uses the built-in picker only.
 - CSV import.
 - Extra things the ad-free plan could include, if anything.
+
+### Single-list tracker view
+
+Home groups trackers by household. Add a view that shows those trackers together in one list, so they are easy to scan and easy to log.
+
+**To do:** add that single-list view.
+
+Screens for it are not in `DESIGN.md` yet. Settle the questions below before specifying the layout.
+
+- Is this a separate screen, or another arrangement of the same home page?
+- Which trackers appear: every tracker the person can see, or a subset they choose?
+- Does the list follow the saved household order and tracker order, or does it have an order of its own?
+- What stays on each row so logging remains as fast as the card?
+
+### Quick-entry view
+
+Add a view for recording tracker entries in as few taps as possible.
+
+The home card already records the current time in one tap. A number or duration tracker can repeat the carried value with **Log again**. This view is an additional way in. How it is simpler than those paths is still open. It has to keep the principle that common events are recordable with one or very few taps.
+
+**To do:** add that quick-entry view.
+
+- Which trackers does it include, and does the person choose them?
+- What does a tap record when the tracker needs a number, a duration, or a note?
+- Does the view sit beside home, or does it take the place of a screen that already exists?
+
+### Chart analysis
+
+The tracker trend and the charts page draw the observations. A person looking at the chart notices the pattern. Those charts do not draw a trend line, an average, or a projection, and they do not state a cause. The three items below are separate later additions. Each one applies only where it fits the tracked data. Where it fits — count, number, duration, the 30-day trend, the charts page — is open for each item. Week and month buckets stay unbuilt. The event-relative view stays its own idea.
+
+**To do:**
+
+- **Trend lines.** Draw a trend line where that is appropriate for the tracked data. Which kinds of tracker, which chart, and how the line is fit are undecided.
+- **Averages.** Show an average where that is appropriate for the tracked data. Which average, which kinds, and which chart are undecided. This is an average of the series on the chart. The event-relative view, above, is the other reading: another tracker's values on the days around a repeated event.
+- **Projections.** Extend the series forward where a projection is appropriate for the tracked data. What is projected, how far ahead, and from what basis are undecided.
+
+These stay pictures for a person to read. They stay inside the guardrail that a chart is for looking, and that a pattern is not a diagnosis or a claim about cause. How that limit shows up on the chart is undecided.
+
+### Custom units
+
+Let users define units for their trackers.
+
+A number tracker already stores one unit string, such as lb or °F. The owner types it when creating the tracker and can edit it later. There is no conversion. A count tracker has no unit. A duration is stored as seconds and shown in hours, minutes, and seconds. Whether a number's unit is fixed on the tracker or chosen on each entry is already an open question under Open questions.
+
+**To do:** let users define the units their trackers use.
+
+What "define" adds beyond that unit string is open:
+
+- A unit the user names once and reuses, or the string the number tracker already stores?
+- Defined by one person, or shared by a household?
+- Do count trackers or duration trackers gain a user-defined unit?
+- Does a defined unit include conversion? The current decision is no conversion. Changing that needs its own decision.
+
+### Public trackers and planned workouts
+
+Explore public trackers or shareable workout templates. The first case is a Peloton workout plan that other people already share.
+
+Example, for the wife in Sharing: she currently prints a spreadsheet of Peloton workouts shared by other people. She should be able to bring that plan into the app, follow it, and record her workouts.
+
+Getting the plan into the app is undecided. A Peloton API is not a requirement. CSV import, listed above, is a separate later idea. Whether it is how a plan arrives is undecided. Tracker templates, also above, stay a separate idea: a starting point such as "Start from: McGill Big 3". A public plan is a sequence someone follows over time. Fields and sub-trackers stay on their own deferred track. Whether a planned workout needs them is open.
+
+The product stays a general tracker. How far a shared workout plan can go before it presses on the guardrail against becoming a full fitness platform is open.
+
+**To do:**
+
+- **Public trackers or shareable templates.** Explore public trackers, or workout templates other people can share, using shared Peloton workout plans as the first case.
+- **Planned entries.** Let a user enter planned workouts ahead of time, then follow that plan.
+- **Completion and results.** Let a user record that a planned workout was done, and record the actual result against that plan. What the result contains — done or not, a duration, a number, a note — is undecided.
+
+**Open:**
+
+- **Sharing.** What is public: a template anyone can take, a tracker people log together, or both? Who can publish one? The share link that already exists lets someone log one tracker. Whether a public plan uses that link, or a different kind of sharing, is undecided.
+- **Copying into a household.** Can a public plan be copied into a household? After the copy, is it independent of the public original? Who in the household can see it? A tracker still belongs to exactly one household unless that rule changes on purpose.
+- **Planned versus completed.** How a planned entry is distinguished from a completed one. A plan is an intention for a later session. A completed entry is what happened, including the result that was recorded. A planned row is also distinct from a recorded zero and from a day nobody logged.
+- Whether planning ahead uses the same optional schedule described under Recurring, scheduled, and goal-based trackers, or a different mechanism. That schedule is still a direction, not a spec.
+- Whether one plan is one tracker, several trackers, or a shape the current tracker model does not have yet.
 
 ## Decision log
 
@@ -495,10 +574,11 @@ The product stays a small, flexible way to record arbitrary events and measureme
 | Interface | Calm mobile-first notebook | Cards with name, icon, optional accent, summary, and a one-tap log. Recognizable icons and soft cards, with less on screen than a family calendar. |
 | Tracker icon | Optional, in phase 2 | Built-in picker of clear icons or emoji. Default is the tally mark. Name stays visible. Uploads stay a later idea. Moved out of later ideas so the first tracker is recognizable on its card. |
 | Accent | Optional, small built-in set | Recognition on the card and icon only. Pico remains the only UI palette. Default is none. |
-| Log button | Short label, still one tap | Default "+ Log". The dog card can say "+ Ate". Logan Motrin can say "Gave Motrin". Same quick-log and 15-minute undo as the earlier "+1" label. Independent of summary display. |
+| Log button | Short label, still one tap | Default "+ Log". The dog card can say "+ Ate". Logan Motrin can say "Gave Motrin". Same quick-log and 15-minute undo as the earlier "+1" label. Independent of summary display. On an owner's unlogged count-history day, that same label sits beside Record none and stores noon on that day. |
+| History day log | Noon on that local day | Owner only, count trackers, and only a day with nothing logged. The entry shows 12:00 PM. Edit can change the time. Undo runs from when the row was written. A day that already has an entry, or is already none, is refused. |
 | Summary display | Times today, Done today, or Last occurrence | Stored as `times`, `done`, or `last`. Presentation of the same timestamped entries. Default `times`. Shipped after phase 2. Done today does not cap entries per day. Last occurrence crosses midnight. An empty tracker says "Never logged". See Summary display. |
 | Zero vs unlogged | Different states | A recorded zero is deliberate. No entries and no recorded zero means nothing logged. Charts leave that day blank. The Times today summary says "None today" or "Nothing logged today". Done today and Last occurrence do not treat the zero as an entry. |
-| Analysis | Daily count chart, then overlay, then value charts, then a charts page | The count line chart is on the tracker page: last 30 local days, including today, gaps for unlogged days, zeros for recorded none. Number and duration charts use that same window and keep each entry as its own point. `GET /charts` is the same chart for one tracker over the last 30 days (default), 90 days, 6 months, or a year. Count charts stay daily. Six months and a year are calendar offsets, then every local day. One other count tracker's events are vertical shaded bands, one band per local day. On the tracker page the choice is `?overlay=`. On the charts page it is `tracker`, `overlay`, and `range` in the query string, not stored. No saved dashboards and no widget grid. Week and month buckets are not built. Event-relative summaries are a later idea, not a statistics feature. Patterns, not causes. |
+| Analysis | Daily count chart, then overlay, then value charts, then a charts page | The count line chart is on the tracker page: last 30 local days, including today, gaps for unlogged days, zeros for recorded none. Number and duration charts use that same window and keep each entry as its own point. `GET /charts` is the same chart for one tracker over the last 30 days (default), 90 days, 6 months, or a year. Count charts stay daily. Six months and a year are calendar offsets, then every local day. One other count tracker's events are vertical shaded bands, one band per local day. On the tracker page the choice is `?overlay=`. On the charts page it is `tracker`, `overlay`, and `range` in the query string, not stored. No saved dashboards and no widget grid. Week and month buckets are not built. Event-relative summaries are a later idea, not a statistics feature. Patterns, not causes. Trend lines, averages, and projections are separate later ideas under Chart analysis. The charts that exist now draw the observations only. |
 | Ads | AdSense with a certified consent platform, after launch | No home-made consent banner. No ads on share, login, or settings |
 | Start without account | Later idea | Share links cover most of the need for now |
 | Install | Manifest + icons; phone offer on home and dashboard; no service worker through phase 5 | Verified on a phone at first deploy. Not a store app. A small worker arrives with later offline logging |
@@ -511,7 +591,11 @@ The product stays a small, flexible way to record arbitrary events and measureme
 - **Share page contents**: the summary line, the log button, and today's entries only (current plan), or the recent history too?
 - **Undo window**: 15 minutes is the starting value. Right length?
 - **Workouts**: is one number per tracker (e.g. weight for "Club mill") enough, or do weight and reps need to be recorded together? That's the trigger for fields. Relatedly, for TOI: one entry per exercise with a sets count, or one entry per set?
-- **Units**: fixed per tracker (current plan), or chosen per entry?
+- **Units**: fixed per tracker (current plan), or chosen per entry? A number tracker already stores one user-entered unit string. What further "defined units" would add — reuse, who defines them, count and duration, conversion — is open under Custom units. The current decision is still no conversion.
+- **Single-list view**: a separate screen, or another arrangement of home? Every visible tracker, or a subset? The saved household and tracker order, or an order of its own? See Single-list tracker view.
+- **Quick entry**: which trackers, what a tap records when a value or a note is required, and whether the view sits beside home? See Quick-entry view.
+- **Chart analysis**: for trend lines, averages, and projections separately, which tracker kinds, which screen, and over what window? What a projection is based on. How the chart stays a picture to read and does not state a cause. See Chart analysis.
+- **Public workout plans**: what is shared, and who can publish it? Can a public plan be copied into a household, and is the copy then independent? How a planned entry is distinguished from a completed entry? How the plan gets into the app. A Peloton API is not a requirement. How far this can go before it presses on the guardrail against a full fitness platform. See Public trackers and planned workouts.
 - **Free tier**: ad-supported, limited by tracker count or history, or simply generous so $5/year is mostly a convenience purchase?
 - **Does ad-free include anything else?**
 - **Consent platform**: Google's "Privacy & messaging", or a third-party certified one?

@@ -78,6 +78,8 @@ The heading is the household name. The member list already shows who is in it. T
 
 Show the date, then that day's entries with the time they happened. A count's recorded zero reads as none. A day with no entries and no recorded zero reads as nothing logged. Those two states do not look the same. A number entry shows the value and the tracker's unit, such as "8:15 AM — 10 lb". A duration shows words, such as "8:15 AM — 42 min". Number and duration history lists the days that have entries. They do not offer Record none.
 
+On a count tracker, an owner's unlogged history day offers two quiet actions: the tracker's log label, then **Record none**. The words match the logging button: **+ Log** by default, or a custom label such as **+ Ate**. The log records one event at noon on that day, so the row shows **12:00 PM**. A day that already has an entry keeps its time and **Edit**. A day recorded as none keeps **Clear**. Neither shows the log action. The owner can change the noon time with **Edit**.
+
 Who logged an entry can be shown where it helps, without putting it on every line.
 
 ### Trends

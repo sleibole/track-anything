@@ -684,6 +684,7 @@ html[data-reordering] * {
 .day-head {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin: 0.9rem 0 0.2rem;
 }
