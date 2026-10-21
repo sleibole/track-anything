@@ -73,21 +73,23 @@ func (a *app) loadToday(t Tracker, loc *time.Location, now time.Time) (todayStat
 
 // trackerCard is the home card, also used at the top of the tracker and share pages.
 type trackerCard struct {
-	Tracker      Tracker
-	Count        int
-	Summary      string
-	Zone         string // IANA name used for this summary, for the optimistic last-occurrence clock
-	Link         string // tracker page; empty on the share page
-	QuickURL     string
-	UndoURL      string // set while the viewer's latest entry can still be undone
-	Back         string // where the log and undo buttons return; empty means the tracker page
-	Carry        string // "Last value: 10 lb" or "Last duration: 42 min"; empty when nothing carries forward
-	CarryValue   string // number input, without the unit
-	CarryHours   string
-	CarryMinutes string
-	CarrySeconds string
-	LogAgain     bool // one tap repeats Carry; false when there is no previous value
-	Reorder      bool // dashboard only: the viewer owns this household and may drag the card
+	Tracker        Tracker
+	Count          int
+	Summary        string
+	Zone           string // IANA name used for this summary, for the optimistic last-occurrence clock
+	Link           string // tracker page; empty on the share page
+	QuickURL       string
+	UndoURL        string // set while the viewer's latest entry can still be undone
+	Back           string // where the log and undo buttons return; empty means the tracker page
+	Carry          string // "Last value: 10 lb" or "Last duration: 42 min"; empty when nothing carries forward
+	CarryValue     string // number input, without the unit
+	CarryHours     string
+	CarryMinutes   string
+	CarrySeconds   string
+	LogAgain       bool   // one tap repeats Carry; false when there is no previous value
+	Reorder        bool   // dashboard only: the viewer owns this household and may drag the card
+	HouseholdLabel string // dashboard only: household name on a shared tracker; empty on a personal one
+	HouseholdURL   string
 }
 
 // card builds a tracker's card. viewerID is nil for a share-link visitor.

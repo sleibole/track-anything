@@ -23,7 +23,7 @@ Build the narrow screen first. The logging rules are in **Recording** below. Per
 
 ### Home
 
-Logged-in home keeps the household groups. Inside a group, each tracker is one card:
+Logged-in home is one list of every tracker the person can see. Each tracker is one card:
 
 - The name, always visible.
 - The chosen icon, or the tally-mark default.
@@ -36,11 +36,13 @@ Logged-in home keeps the household groups. Inside a group, each tracker is one c
 
 Cards stack in a single column. They do not tile into a dense grid. On a wide screen they may sit in a quiet row, still with room around them and with the name and the button readable.
 
-Each group's heading is the household name, and usually nothing else. When two households on the page have the same name, after trimming surrounding whitespace and ignoring case, the one someone else created adds that person's email in quieter text, so a partner's "My trackers" doesn't look like your own. Your own households never carry your email, and you cannot own two that match that way. "My trackers" is just the default name for a personal household. It does not suggest a shared family space.
+A tracker in the personal household shows no household name, even after that household is renamed. A tracker in any other household shows that household's name in small muted text under the tracker name. The name is a link to the household page. When two households on the page have the same name, after trimming surrounding whitespace and ignoring case, the one someone else created adds that person's email on the same line, so a partner's "My trackers" doesn't look like your own. Your own households never carry your email, and you cannot own two that match that way. "My trackers" is just the default name for a personal household. It does not suggest a shared family space.
 
-A small drag handle sits on each heading and, in a household you own, on each tracker card. Dragging a card reorders it inside that household. Dragging a heading moves the whole group. The handle is the only drag target, so the log button still works as a button. A household you only belong to has no tracker handles. The order of the groups on your dashboard is yours. Someone else's dashboard does not follow it.
+There are no household headings and no separate containers. The cards stack in the saved household order, and within a household they keep that household's tracker order. A small drag handle sits on each tracker card in a household you own. Dragging it reorders the card inside that household only. The handle is the only drag target, so the log button still works as a button. A household you only belong to has no tracker handles. The order of households on your dashboard is still yours, saved from before, and someone else's dashboard does not follow it. Home no longer has a handle for moving a whole household.
 
-Below the groups, a quiet **New household** action (a `<details>` element, closed by default) opens one name field and a **Create** button. A name that matches another household you already own, after trimming surrounding whitespace and ignoring case, stays on the form with an error and creates nothing. Creating one lands on the new household's page, where the invite link is. Home does not turn into a household admin screen.
+When the list has no trackers, one line says there are none yet and links to creating one. An empty household does not add its own section.
+
+Below the list, a quiet **New household** action (a `<details>` element, closed by default) opens one name field and a **Create** button. A name that matches another household you already own, after trimming surrounding whitespace and ignoring case, stays on the form with an error and creates nothing. Creating one lands on the new household's page, where the invite link is. Home does not turn into a household admin screen.
 
 The header's global **New tracker** keeps its household picker. Starting from a household page is still the preferred path, because it opens the form already set to that household.
 

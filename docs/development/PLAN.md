@@ -83,7 +83,7 @@ Start with the smallest useful tracker and add value shapes only when a real use
 
 Trackers belong to a **household**, and a single tracker can also be shared by **link**.
 
-**Households.** A household is the unit of sharing. Everyone in it sees and logs all of its trackers. The owner can invite people with an **invite link** (copied and sent by hand; the app sends no invite email). Opening it asks you to log in or sign up, then adds you as a member. You can belong to several households and own several. The dashboard shows trackers from all of them, grouped by household.
+**Households.** A household is the unit of sharing. Everyone in it sees and logs all of its trackers. The owner can invite people with an **invite link** (copied and sent by hand; the app sends no invite email). Opening it asks you to log in or sign up, then adds you as a member. You can belong to several households and own several. The dashboard shows every tracker from all of them in one list.
 
 **Personal household.** Every user gets one at signup, named "My trackers", with that user as owner. It is the default place for that person's private trackers. It is an ordinary household: the same model, the same rules, and no separate personal-tracker type. It is not shared with a spouse or family by default. Joining someone else's household does not expose either person's personal household. The name is only a default and can be renamed.
 
@@ -157,7 +157,7 @@ Sessions last 30 days. Once a session is past half its lifetime, the next reques
 
 A calm, mobile-first tracking notebook. Logging is fast, review is easy, and the same screens cover the dog's meals and a workout measurement. Tone takes a little from a family calendar: a recognizable icon, a soft color, an approachable card. The layout stays sparser than a calendar. How the screens look is in `DESIGN.md`.
 
-**Home.** Trackers stay grouped by household. A single list of trackers, and a separate quick-entry view, are later ideas. This page keeps the household groups. Each tracker is a card with its name, icon, optional accent, a summary, and one logging button. The summary follows that tracker's summary display. Millie ate, set to Times today, reads "2 times today". McGill Big 3, set to Done today, reads "Done today". Logan Motrin, set to Last occurrence, reads "Last: 6:42 AM". The button records the current time in one tap, then offers **Undo**. The button's words are the log label, which is separate from the summary. Before that setting existed, phase 2 showed the Times today wording on every card.
+**Home.** Every tracker the person can see is one list. There are no household headings. A tracker in the personal household has no household name. A tracker in any other household shows that household's name in quiet text, and the name links to the household page. When two households on the list share a name, the one someone else created adds that person's email on that line. The list follows the saved household order, then each household's tracker order. Each tracker is a card with its name, icon, optional accent, a summary, and one logging button. The summary follows that tracker's summary display. Millie ate, set to Times today, reads "2 times today". McGill Big 3, set to Done today, reads "Done today". Logan Motrin, set to Last occurrence, reads "Last: 6:42 AM". The button records the current time in one tap, then offers **Undo**. The button's words are the log label, which is separate from the summary. Before that setting existed, phase 2 showed the Times today wording on every card. A separate quick-entry view is still a later idea.
 
 **Tracker detail.** Today's logging control and today's entries come first. The trend follows, then history. Correcting a mistake sits on the entry. Anyone who can log can undo an entry or a recorded zero from the last 15 minutes. Only an owner can choose when a new entry happened, edit the time, note, or value, delete an older entry, mark an earlier day as none, or clear an older recorded zero. On a phone the logging action stays first. On a wider screen, the trend and history can sit beside that column, with the trend above history. They never sit above the log control.
 
@@ -293,7 +293,7 @@ The first screen replaces paper tick marks: create a tracker, choose an icon, lo
 
 - Households, count trackers, and entries. A personal household named "My trackers" is created at signup. Accounts from phase 1 get the same household when phase 2 ships. Phase 2 does not create or rename households. Those arrived in the Household organization follow-on below.
 - Create, edit, archive, and restore trackers (owners). Create and edit set the name, icon, accent, and log label. The icon defaults to the tally mark, the accent defaults to none, and the label defaults to "+ Log". Summary display was not on this form. It arrived in the follow-on below. Permanent deletion waits for phase 5.
-- Dashboard grouped by household. Each tracker is a card: name, icon, optional accent, the Times today summary ("3 times today", "1 time today", "None today", or "Nothing logged today"), and the log button. **Undo** shows immediately. Done today and Last occurrence arrived in the follow-on after phase 2.
+- Dashboard of tracker cards: name, icon, optional accent, the Times today summary ("3 times today", "1 time today", "None today", or "Nothing logged today"), and the log button. **Undo** shows immediately. Done today and Last occurrence arrived in the follow-on after phase 2. The cards were grouped under household headings; that grouping was replaced by one list later.
 - A recorded zero ("none") is separate from a day with nothing logged. Logging an event clears that day's recorded zero.
 - Tracker page: today's log control and today's entries first, then history. Anyone in the household can log now with an optional note, and undo while recent. Owners can also choose the time (backfill), edit an entry's time or note, and delete. The last 30 days show each day's count, a recorded zero, or nothing logged.
 - On a phone, the log control stays first. On a wider screen, history can sit beside it. Phase 2 did not put a chart on this page.
@@ -324,7 +324,7 @@ A small follow-on from dogfooding phase 2. Inviting a spouse into "My trackers" 
 - **Rename a household.** Owners can rename it, including their personal "My trackers". The same owned-name rule applies. Renaming a household to its own current name, including a change of spacing or case, is fine.
 - **Move a tracker** to another household the same person owns. It is the same tracker with all of its entries, recorded zeros, and history. Nothing is copied. It still belongs to exactly one household. After the move, membership in the new household decides who can see it: members of the old household who are not in the new one lose access, and members of the new one gain it. Its settings stay as they are. An active share link is kept and keeps working. The move does not turn it off or replace it. This is how Millie ate and Woods run go from "My trackers" into a new Family household without being recreated.
 - **Leave a household.** A regular member can leave a household. Owners cannot leave this way.
-- **Dashboard headings** show only the household name. The creator's email appears only when two households you can see have the same name. See Sharing.
+- **Dashboard labels** show a household name only on trackers outside the personal household. The creator's email appears on that label only when two households you can see have the same name. See Sharing. The home screen used to put this on a heading above each group. It is now on the card.
 
 Not in this follow-on: deleting a household, demoting an owner, an owner leaving, ownership transfer, merging households, per-tracker permissions, nested households, family roles, invitations by email, and separate private and shared tracker types.
 
@@ -479,16 +479,7 @@ The product stays a small, flexible way to record arbitrary events and measureme
 
 ### Single-list tracker view
 
-Home groups trackers by household. Add a view that shows those trackers together in one list, so they are easy to scan and easy to log.
-
-**To do:** add that single-list view.
-
-Screens for it are not in `DESIGN.md` yet. Settle the questions below before specifying the layout.
-
-- Is this a separate screen, or another arrangement of the same home page?
-- Which trackers appear: every tracker the person can see, or a subset they choose?
-- Does the list follow the saved household order and tracker order, or does it have an order of its own?
-- What stays on each row so logging remains as fast as the card?
+Done. Home is one list of every tracker the person can see. Personal trackers have no household name. Shared trackers show the household name in quiet text, linking to that household. The list uses the saved household order, then each household's tracker order. There is no grouping toggle and no extra filter. Logging, undo, and tracker reorder stay on the card.
 
 ### Quick-entry view
 
@@ -572,6 +563,7 @@ The product stays a general tracker. How far a shared workout plan can go before
 | Second use case | Woods outings and workout progression | A woods outing can be a count, for the phase 3 overlay, or a duration. Workout weight is a number tracker. Both shipped in phase 4. |
 | Tracker kinds | Count first, then number and duration | Fields and sub-trackers deferred until real use demands them |
 | Interface | Calm mobile-first notebook | Cards with name, icon, optional accent, summary, and a one-tap log. Recognizable icons and soft cards, with less on screen than a family calendar. |
+| Home list | One list of every visible tracker | No household headings. Personal trackers are unlabeled. Any other household's trackers show that name, with the creator's email only when two visible names match. Order is the saved household order, then tracker order. |
 | Tracker icon | Optional, in phase 2 | Built-in picker of clear icons or emoji. Default is the tally mark. Name stays visible. Uploads stay a later idea. Moved out of later ideas so the first tracker is recognizable on its card. |
 | Accent | Optional, small built-in set | Recognition on the card and icon only. Pico remains the only UI palette. Default is none. |
 | Log button | Short label, still one tap | Default "+ Log". The dog card can say "+ Ate". Logan Motrin can say "Gave Motrin". Same quick-log and 15-minute undo as the earlier "+1" label. Independent of summary display. On an owner's unlogged count-history day, that same label sits beside Record none and stores noon on that day. |

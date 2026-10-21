@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -142,6 +143,15 @@ type dashboardPage struct {
 
 func (g householdGroup) IsOwner() bool { return g.Role == roleOwner }
 
+func (p dashboardPage) HasTrackers() bool {
+	for _, g := range p.Groups {
+		if len(g.Cards) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *app) dashboard(u *User) ([]householdGroup, error) {
 	var members []HouseholdMember
 	if err := a.db.Where("user_id = ?", u.ID).Order("position, household_id").Find(&members).Error; err != nil {
@@ -183,7 +193,47 @@ func (a *app) dashboard(u *User) ([]householdGroup, error) {
 		}
 		groups[i].CreatedBy = email
 	}
+	personalID, err := a.personalHouseholdID(u.ID, groups)
+	if err != nil {
+		return nil, err
+	}
+	for i := range groups {
+		if groups[i].Household.ID == personalID {
+			continue
+		}
+		label := groups[i].Household.Name
+		if groups[i].CreatedBy != "" {
+			label += " · " + groups[i].CreatedBy
+		}
+		link := "/households/" + strconv.FormatUint(uint64(groups[i].Household.ID), 10)
+		for j := range groups[i].Cards {
+			groups[i].Cards[j].HouseholdLabel = label
+			groups[i].Cards[j].HouseholdURL = link
+		}
+	}
 	return groups, nil
+}
+
+// personalHouseholdID is the household created for this user at signup: the
+// earliest household on the dashboard whose creator is the viewer. Later
+// households they create, and households someone else created, are shared.
+func (a *app) personalHouseholdID(viewerID uint, groups []householdGroup) (uint, error) {
+	var best uint
+	var bestAt time.Time
+	for _, g := range groups {
+		creator, err := householdCreator(a.db, g.Household.ID)
+		if err != nil {
+			return 0, err
+		}
+		if creator.ID != viewerID {
+			continue
+		}
+		if best == 0 || g.Household.CreatedAt.Before(bestAt) || (g.Household.CreatedAt.Equal(bestAt) && g.Household.ID < best) {
+			best = g.Household.ID
+			bestAt = g.Household.CreatedAt
+		}
+	}
+	return best, nil
 }
 
 // duplicateHouseholdNames marks households whose names match another on the page,

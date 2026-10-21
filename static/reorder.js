@@ -1,7 +1,7 @@
-// Dashboard reorder. A handle moves a tracker within its household, or a household
-// among the others. The list on the page is updated immediately. The server stores
-// the order and answers 204, so the page does not reload. Without this script the
-// handles stay hidden and logging still works.
+// Dashboard reorder. A handle moves a tracker within its household. The list on
+// the page is updated immediately. The server stores the order and answers 204,
+// so the page does not reload. Without this script the handles stay hidden and
+// logging still works.
 
 document.documentElement.dataset.reorder = "1";
 if (window.trackerReorder) {

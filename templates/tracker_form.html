@@ -109,7 +109,7 @@
 {{end}}
 <form method="post" action="/trackers/{{.ID}}/archive" class="archive-form">
   <button type="submit" class="quiet">{{icon "archive"}} Archive this tracker</button>
-  <small>Hides it and turns off its share link. Entries are kept; restore it from the household page.</small>
+  <small>Hides it and turns off its share link. Entries are kept; restore it from the <a href="/households/{{.HouseholdID}}">household page</a>.</small>
 </form>
 <p class="form-foot"><a href="/trackers/{{.ID}}">Back to {{.Name}}</a></p>
 {{end}}
