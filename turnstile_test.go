@@ -434,6 +434,65 @@ func TestTurnstileSendsDetectedClientIP(t *testing.T) {
 	}
 }
 
+func TestTurnstileLogsSiteverifyResult(t *testing.T) {
+	cases := []struct {
+		name   string
+		token  string
+		status int
+		body   string
+		netErr bool
+		result string
+		sent   string
+		level  string
+		msg    string
+	}{
+		{name: "accept", token: "widget-token", status: http.StatusOK, body: `{"success":true}`, result: "accept", sent: "true", level: "INFO", msg: "turnstile siteverify"},
+		{name: "reject", token: "widget-token", status: http.StatusOK, body: `{"success":false,"error-codes":["invalid-input-secret"]}`, result: "reject", sent: "true", level: "WARN", msg: "turnstile verification failed"},
+		{name: "error", token: "widget-token", netErr: true, result: "error", sent: "true", level: "WARN", msg: "turnstile verification failed"},
+		{name: "missing", token: "", result: "error", sent: "false", level: "WARN", msg: "turnstile verification failed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			ts := newTestServer(t)
+			ts.app.logger = slog.New(slog.NewTextHandler(&buf, nil))
+			ts.app.turnstile.secret = "super-secret-turnstile"
+			ts.app.turnstile.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if tc.token == "" {
+					t.Error("missing token called siteverify")
+				}
+				if tc.netErr {
+					return nil, errors.New("dial tcp: connection refused")
+				}
+				return turnstileResponse(tc.status, tc.body), nil
+			})
+			ts.browser(t).post("/signup", url.Values{
+				"email":        {"dog@example.com"},
+				"timezone":     {"UTC"},
+				turnstileField: {tc.token},
+			})
+			logged := buf.String()
+			for _, want := range []string{tc.msg, "result=" + tc.result, "sent=" + tc.sent, "level=" + tc.level} {
+				if !strings.Contains(logged, want) {
+					t.Fatalf("log missing %q: %s", want, logged)
+				}
+			}
+			if tc.result == "reject" && !strings.Contains(logged, "invalid-input-secret") {
+				t.Fatalf("log missing the reject code: %s", logged)
+			}
+			if tc.name == "error" && !strings.Contains(logged, "connection refused") {
+				t.Fatalf("log missing the transport error: %s", logged)
+			}
+			if tc.name == "missing" && !strings.Contains(logged, "missing token") {
+				t.Fatalf("log missing the missing-token error: %s", logged)
+			}
+			if strings.Contains(logged, "super-secret-turnstile") || (tc.token != "" && strings.Contains(logged, tc.token)) {
+				t.Fatalf("log leaked a secret or token: %s", logged)
+			}
+		})
+	}
+}
+
 func TestTurnstileLogsOmitSecrets(t *testing.T) {
 	var buf bytes.Buffer
 	ts := newTestServer(t)

@@ -90,16 +90,41 @@ func (v *turnstileVerifier) verify(ctx context.Context, token, remoteIP string) 
 	return nil
 }
 
+// turnstileVerifyResult classifies a Siteverify attempt. "accept" and "reject"
+// mean Cloudflare answered. "error" means the call failed, or no token was sent.
+func turnstileVerifyResult(err error) (result string, sent bool) {
+	if err == nil {
+		return "accept", true
+	}
+	msg := err.Error()
+	if msg == "missing token" {
+		return "error", false
+	}
+	if strings.HasPrefix(msg, "siteverify rejected") {
+		return "reject", true
+	}
+	return "error", true
+}
+
 // turnstileFailed reports whether this request may not perform a protected
-// action. A failure is logged without the secret or the submitted token.
+// action. The outcome is logged without the secret or the submitted token.
 func (a *app) turnstileFailed(r *http.Request) bool {
 	err := a.turnstile.verify(r.Context(), r.PostFormValue(turnstileField), a.clientIP(r))
+	result, sent := turnstileVerifyResult(err)
 	if err == nil {
+		a.logger.Info("turnstile siteverify",
+			"method", r.Method,
+			"path", logPath(r.URL.Path),
+			"result", result,
+			"sent", sent,
+		)
 		return false
 	}
 	a.logger.Warn("turnstile verification failed",
 		"method", r.Method,
 		"path", logPath(r.URL.Path),
+		"result", result,
+		"sent", sent,
 		"err", err,
 	)
 	return true
