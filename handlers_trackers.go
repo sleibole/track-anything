@@ -87,7 +87,7 @@ type trackerCard struct {
 	CarryMinutes   string
 	CarrySeconds   string
 	LogAgain       bool   // one tap repeats Carry; false when there is no previous value
-	Reorder        bool   // dashboard only: the viewer owns this household and may drag the card
+	Reorder        bool   // dashboard only: the card has a handle for the viewer's own order
 	HouseholdLabel string // dashboard only: household name on a shared tracker; empty on a personal one
 	HouseholdURL   string
 }

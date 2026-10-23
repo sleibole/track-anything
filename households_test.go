@@ -90,8 +90,11 @@ func TestSignupCreatesPersonalHousehold(t *testing.T) {
 		t.Fatalf("household %+v", h)
 	}
 	home := b.get("/")
-	if !strings.Contains(home.body, "My trackers") || !strings.Contains(home.body, "No trackers yet") {
-		t.Fatal("dashboard doesn't show the personal household")
+	if !strings.Contains(home.body, "No trackers yet") {
+		t.Fatal("dashboard doesn't show the empty state")
+	}
+	if page := b.get(fmt.Sprintf("/households/%d", h.ID)); page.status != http.StatusOK || !strings.Contains(page.body, "My trackers") {
+		t.Fatal("the personal household page doesn't show the household")
 	}
 }
 
@@ -135,6 +138,7 @@ func TestInviteLinkJoinFlow(t *testing.T) {
 		t.Fatal("invite link not shown")
 	}
 	join := "/join/" + *h.InviteToken
+	owner.createTracker(h, "Shared meal", nil)
 
 	// A new person opens the link, signs up, and comes back to the invitation.
 	b := ts.browser(t)
@@ -154,11 +158,11 @@ func TestInviteLinkJoinFlow(t *testing.T) {
 		t.Fatal("not joined as member")
 	}
 	// Two households named "My trackers": the partner's shows its creator.
-	if !strings.Contains(r.body, "owner@example.com") {
+	if !labelShows(r.body, h.ID, "owner@example.com") {
 		t.Error("dashboard doesn't show whose household it is")
 	}
-	if strings.Count(r.body, "My trackers") != 2 {
-		t.Error("expected both households on the dashboard")
+	if !strings.Contains(r.body, "Shared meal") || strings.Contains(r.body, "member@example.com") {
+		t.Error("the joined household's tracker is not on the dashboard, or the member's own household is labeled")
 	}
 	if r := b.get(join); !strings.Contains(r.body, "already in this household") {
 		t.Error("second visit doesn't say already a member")
@@ -314,14 +318,15 @@ func (ts *testServer) ownedNamed(t *testing.T, email, name string) Household {
 	return h
 }
 
-func headingShows(body string, id uint, email string) bool {
+// labelShows reports whether the household label on a home card includes email.
+func labelShows(body string, id uint, email string) bool {
 	needle := fmt.Sprintf(`/households/%d">`, id)
 	i := strings.Index(body, needle)
 	if i < 0 {
 		return false
 	}
 	rest := body[i:]
-	end := strings.Index(rest, "</h2>")
+	end := strings.Index(rest, "</a>")
 	if end < 0 {
 		return false
 	}
@@ -435,10 +440,14 @@ func TestDashboardDisambiguatesDuplicateNames(t *testing.T) {
 	member := ts.browser(t)
 	member.signup("member@example.com", "")
 	member.post("/join/"+*h.InviteToken, nil)
+	owner.createTracker(h, "Family meal", nil)
 
-	// "My trackers" and "Family" don't match, so the heading is just the name.
+	// "My trackers" and "Family" don't match, so the label is just the name.
 	home := member.get("/").body
-	if headingShows(home, h.ID, "owner@example.com") || strings.Contains(home, "member@example.com") {
+	if !strings.Contains(home, fmt.Sprintf(`/households/%d">Family</a>`, h.ID)) {
+		t.Fatalf("the shared tracker has no household label:\n%s", home)
+	}
+	if labelShows(home, h.ID, "owner@example.com") || strings.Contains(home, "member@example.com") {
 		t.Fatalf("unique names were disambiguated:\n%s", home)
 	}
 
@@ -450,10 +459,10 @@ func TestDashboardDisambiguatesDuplicateNames(t *testing.T) {
 		t.Fatalf("rename to own name stored %q", personal.Name)
 	}
 	home = member.get("/").body
-	if !headingShows(home, h.ID, "owner@example.com") {
+	if !labelShows(home, h.ID, "owner@example.com") {
 		t.Fatal("a partner's same-named household doesn't show who created it")
 	}
-	if headingShows(home, personal.ID, "member@example.com") || strings.Contains(home, "member@example.com") {
+	if labelShows(home, personal.ID, "member@example.com") || strings.Contains(home, "member@example.com") {
 		t.Fatal("the viewer's own household shows their email")
 	}
 }

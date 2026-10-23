@@ -9,12 +9,8 @@
   <a href="/trackers/new" role="button" class="secondary outline">{{icon "plus"}} New tracker</a>
 </div>
 {{template "installHint"}}
-<div class="tracker-list">
-{{range .Data.Groups}}{{if .Cards}}
-<div class="tracker-order"{{if .IsOwner}} data-reorder-list data-reorder-url="/households/{{.Household.ID}}/order"{{end}}>
-{{range .Cards}}{{template "card" .}}{{end}}
-</div>
-{{end}}{{end}}
+<div class="tracker-list" data-reorder-list data-reorder-url="/trackers/order">
+{{range .Data.Cards}}{{template "card" .}}{{end}}
 </div>
 {{if not .Data.HasTrackers}}
 <p class="muted">No trackers yet. <a href="/trackers/new">Create one</a> to start logging.</p>

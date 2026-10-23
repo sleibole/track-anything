@@ -126,12 +126,12 @@ func ownedNameTaken(owned []Household, exceptID uint, name string) bool {
 }
 
 func (a *app) renderDashboardError(w http.ResponseWriter, r *http.Request, u *User, name, msg string) {
-	groups, err := a.dashboard(u)
+	cards, err := a.dashboard(u)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, http.StatusUnprocessableEntity, "dashboard.html", dashboardPage{Groups: groups, Name: name, Error: msg})
+	a.render(w, r, http.StatusUnprocessableEntity, "dashboard.html", dashboardPage{Cards: cards, Name: name, Error: msg})
 }
 
 func (a *app) handleCreateHousehold(w http.ResponseWriter, r *http.Request) {

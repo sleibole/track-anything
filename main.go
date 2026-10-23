@@ -286,6 +286,7 @@ func (a *app) routes() http.Handler {
 
 	mux.HandleFunc("GET /trackers/new", a.requireUser(a.handleNewTracker))
 	mux.HandleFunc("POST /trackers", a.requireUser(a.handleCreateTracker))
+	mux.HandleFunc("POST /trackers/order", a.requireUser(a.handleReorderHome))
 	mux.HandleFunc("GET /trackers/{id}", a.requireUser(a.handleShowTracker))
 	mux.HandleFunc("GET /trackers/{id}/edit", a.requireUser(a.handleEditTracker))
 	mux.HandleFunc("POST /trackers/{id}", a.requireUser(a.handleUpdateTracker))

@@ -138,12 +138,13 @@ func TestReorderTrackerPermissions(t *testing.T) {
 	if ts.tracker(t, alpha.ID).Position != 1 || ts.tracker(t, beta.ID).Position != 2 {
 		t.Fatal("member changed tracker order")
 	}
+	// A member's home handles save their own order, never the household's.
 	memberPage := member.get("/").body
-	if strings.Contains(memberPage, "Drag to reorder this tracker") || strings.Contains(memberPage, `/households/`+fmt.Sprint(shared.ID)+`/order`) {
-		t.Fatal("member dashboard offers tracker reorder")
+	if strings.Contains(memberPage, `/households/`+fmt.Sprint(shared.ID)+`/order`) {
+		t.Fatal("member dashboard posts to the household's shared order")
 	}
-	if !strings.Contains(memberPage, "Drag to reorder this household") {
-		t.Fatal("member dashboard missing household handles")
+	if !strings.Contains(memberPage, "Drag to reorder this tracker") || !strings.Contains(memberPage, `data-reorder-url="/trackers/order"`) {
+		t.Fatal("member dashboard missing their own reorder handles")
 	}
 
 	other := ts.browser(t)
@@ -197,8 +198,11 @@ func TestReorderHouseholdsPersists(t *testing.T) {
 	family := ts.ownedNamed(t, "owner@example.com", "Family")
 	owner.post("/households", url.Values{"name": {"Camp"}})
 	camp := ts.ownedNamed(t, "owner@example.com", "Camp")
+	owner.createTracker(personal, "Home meal", nil)
+	owner.createTracker(family, "Family meal", nil)
+	owner.createTracker(camp, "Camp meal", nil)
 
-	assertOrder(t, owner.get("/").body, householdHref(personal.ID), householdHref(family.ID), householdHref(camp.ID))
+	assertOrder(t, owner.get("/").body, "Home meal", "Family meal", "Camp meal")
 	if ts.membership(t, personal, "owner@example.com").Position != 1 ||
 		ts.membership(t, family, "owner@example.com").Position != 2 ||
 		ts.membership(t, camp, "owner@example.com").Position != 3 {
@@ -217,14 +221,15 @@ func TestReorderHouseholdsPersists(t *testing.T) {
 		ts.membership(t, family, "owner@example.com").Position != 3 {
 		t.Fatal("saved household order is wrong")
 	}
-	assertOrder(t, owner.get("/").body, householdHref(camp.ID), householdHref(personal.ID), householdHref(family.ID))
+	assertOrder(t, owner.get("/").body, "Camp meal", "Home meal", "Family meal")
 
 	owner.post("/households", url.Values{"name": {"Extra"}})
 	extra := ts.ownedNamed(t, "owner@example.com", "Extra")
 	if ts.membership(t, extra, "owner@example.com").Position != 4 {
 		t.Fatalf("new household position %d", ts.membership(t, extra, "owner@example.com").Position)
 	}
-	assertOrder(t, owner.get("/").body, householdHref(camp.ID), householdHref(personal.ID), householdHref(family.ID), householdHref(extra.ID))
+	owner.createTracker(extra, "Extra meal", nil)
+	assertOrder(t, owner.get("/").body, "Camp meal", "Home meal", "Family meal", "Extra meal")
 
 	if r := owner.post("/households/order", idValues(camp.ID, personal.ID)); r.status != http.StatusConflict {
 		t.Fatalf("partial list: %d", r.status)
@@ -243,16 +248,18 @@ func TestHouseholdOrderIsPersonal(t *testing.T) {
 	owner.post("/households", url.Values{"name": {"Family"}})
 	family := ts.ownedNamed(t, "owner@example.com", "Family")
 	personal := ts.personalHousehold(t, "member@example.com")
+	member.createTracker(personal, "Mine", nil)
+	owner.createTracker(shared, "Shared meal", nil)
 
 	memberPage := member.get("/").body
-	assertOrder(t, memberPage, householdHref(personal.ID), householdHref(shared.ID))
+	assertOrder(t, memberPage, "Mine", "Shared meal")
 	ownerBefore := ts.membership(t, shared, "owner@example.com").Position
 	familyBefore := ts.membership(t, family, "owner@example.com").Position
 
 	if r := member.post("/households/order", idValues(shared.ID, personal.ID)); r.status != http.StatusNoContent {
 		t.Fatalf("member reorder: %d\n%s", r.status, r.body)
 	}
-	assertOrder(t, member.get("/").body, householdHref(shared.ID), householdHref(personal.ID))
+	assertOrder(t, member.get("/").body, "Shared meal", "Mine")
 	if ts.membership(t, shared, "owner@example.com").Position != ownerBefore || ts.membership(t, family, "owner@example.com").Position != familyBefore {
 		t.Fatal("member changed the owner's household order")
 	}

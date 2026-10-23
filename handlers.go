@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"time"
 
@@ -120,12 +121,12 @@ func (a *app) handleHome(w http.ResponseWriter, r *http.Request) {
 		a.render(w, r, http.StatusOK, "home.html", nil)
 		return
 	}
-	groups, err := a.dashboard(u)
+	cards, err := a.dashboard(u)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, http.StatusOK, "dashboard.html", dashboardPage{Groups: groups})
+	a.render(w, r, http.StatusOK, "dashboard.html", dashboardPage{Cards: cards})
 }
 
 type householdGroup struct {
@@ -136,23 +137,44 @@ type householdGroup struct {
 }
 
 type dashboardPage struct {
-	Groups []householdGroup
-	Name   string // the name field, kept when creating a household fails
-	Error  string
+	Cards []trackerCard
+	Name  string // the name field, kept when creating a household fails
+	Error string
 }
 
-func (g householdGroup) IsOwner() bool { return g.Role == roleOwner }
+func (p dashboardPage) HasTrackers() bool { return len(p.Cards) > 0 }
 
-func (p dashboardPage) HasTrackers() bool {
-	for _, g := range p.Groups {
-		if len(g.Cards) > 0 {
-			return true
-		}
+// dashboard is the viewer's home list: every active tracker they can see, in
+// their own order. Trackers they never placed follow, in household order.
+func (a *app) dashboard(u *User) ([]trackerCard, error) {
+	groups, err := a.dashboardGroups(u)
+	if err != nil {
+		return nil, err
 	}
-	return false
+	var rows []TrackerOrder
+	if err := a.db.Where("user_id = ?", u.ID).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	placed := make(map[uint]int, len(rows))
+	for _, row := range rows {
+		placed[row.TrackerID] = row.Position
+	}
+	var cards []trackerCard
+	for _, g := range groups {
+		cards = append(cards, g.Cards...)
+	}
+	sort.SliceStable(cards, func(i, j int) bool {
+		pi, iok := placed[cards[i].Tracker.ID]
+		pj, jok := placed[cards[j].Tracker.ID]
+		if iok != jok {
+			return iok
+		}
+		return iok && pi < pj
+	})
+	return cards, nil
 }
 
-func (a *app) dashboard(u *User) ([]householdGroup, error) {
+func (a *app) dashboardGroups(u *User) ([]householdGroup, error) {
 	var members []HouseholdMember
 	if err := a.db.Where("user_id = ?", u.ID).Order("position, household_id").Find(&members).Error; err != nil {
 		return nil, err
@@ -175,7 +197,7 @@ func (a *app) dashboard(u *User) ([]householdGroup, error) {
 				return nil, err
 			}
 			c.Back = "/"
-			c.Reorder = m.Role == roleOwner
+			c.Reorder = true
 			g.Cards = append(g.Cards, c)
 		}
 		groups = append(groups, g)

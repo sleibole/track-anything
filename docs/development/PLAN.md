@@ -124,6 +124,7 @@ Household names do not have to be unique across people. You cannot own two whose
 | Move a tracker to another household they own | Yes | No | No |
 | Reorder trackers in a household | Yes | No | No |
 | Reorder the households on their own dashboard | Yes | Yes | No |
+| Reorder their own home list, across households | Yes | Yes | No |
 | Leave the household | No | Yes | No |
 
 Any logged-in user can create a new household and becomes its owner.
@@ -479,7 +480,7 @@ The product stays a small, flexible way to record arbitrary events and measureme
 
 ### Single-list tracker view
 
-Done. Home is one list of every tracker the person can see. Personal trackers have no household name. Shared trackers show the household name in quiet text, linking to that household. The list uses the saved household order, then each household's tracker order. There is no grouping toggle and no extra filter. Logging, undo, and tracker reorder stay on the card.
+Done. Home is one list of every tracker the person can see. Personal trackers have no household name. Shared trackers show the household name in quiet text, linking to that household. The order is each person's own: a drag handle on every card moves it anywhere in the list, across households. Until someone drags, the list uses their household order, then each household's tracker order, and an unplaced tracker goes at the end. There is no grouping toggle and no extra filter. Logging, undo, and reorder stay on the card.
 
 ### Quick-entry view
 
@@ -584,7 +585,6 @@ The product stays a general tracker. How far a shared workout plan can go before
 - **Undo window**: 15 minutes is the starting value. Right length?
 - **Workouts**: is one number per tracker (e.g. weight for "Club mill") enough, or do weight and reps need to be recorded together? That's the trigger for fields. Relatedly, for TOI: one entry per exercise with a sets count, or one entry per set?
 - **Units**: fixed per tracker (current plan), or chosen per entry? A number tracker already stores one user-entered unit string. What further "defined units" would add — reuse, who defines them, count and duration, conversion — is open under Custom units. The current decision is still no conversion.
-- **Single-list view**: a separate screen, or another arrangement of home? Every visible tracker, or a subset? The saved household and tracker order, or an order of its own? See Single-list tracker view.
 - **Quick entry**: which trackers, what a tap records when a value or a note is required, and whether the view sits beside home? See Quick-entry view.
 - **Chart analysis**: for trend lines, averages, and projections separately, which tracker kinds, which screen, and over what window? What a projection is based on. How the chart stays a picture to read and does not state a cause. See Chart analysis.
 - **Public workout plans**: what is shared, and who can publish it? Can a public plan be copied into a household, and is the copy then independent? How a planned entry is distinguished from a completed entry? How the plan gets into the app. A Peloton API is not a requirement. How far this can go before it presses on the guardrail against a full fitness platform. See Public trackers and planned workouts.

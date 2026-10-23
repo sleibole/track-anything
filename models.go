@@ -84,6 +84,14 @@ type Tracker struct {
 	UpdatedAt      time.Time
 }
 
+// TrackerOrder is one person's place for a tracker on their home list, across
+// households. Not shared. A tracker without a row comes after the placed ones.
+type TrackerOrder struct {
+	UserID    uint `gorm:"primaryKey"`
+	TrackerID uint `gorm:"primaryKey;index"`
+	Position  int  `gorm:"not null"`
+}
+
 func (t Tracker) Label() string {
 	if t.LogLabel == "" {
 		return defaultLogLabel

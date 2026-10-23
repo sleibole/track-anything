@@ -1,7 +1,7 @@
-// Dashboard reorder. A handle moves a tracker within its household. The list on
-// the page is updated immediately. The server stores the order and answers 204,
-// so the page does not reload. Without this script the handles stay hidden and
-// logging still works.
+// Dashboard reorder. A handle moves a tracker anywhere in the viewer's home list,
+// across households. The list on the page is updated immediately. The server
+// stores the order and answers 204, so the page does not reload. Without this
+// script the handles stay hidden and logging still works.
 
 document.documentElement.dataset.reorder = "1";
 if (window.trackerReorder) {
@@ -40,8 +40,10 @@ if (window.trackerReorder) {
     // The item has to be a direct child of its list, so a tracker cannot leave its household.
     if (!handle || !item || !list || item.parentElement !== list || !list.dataset.reorderUrl) return;
     event.preventDefault();
+    // Capture on the document, not the handle. The handle moves with the card, and
+    // retargeting it drops the pointer, so the rest of the drag never arrives.
     try {
-      handle.setPointerCapture(event.pointerId);
+      document.documentElement.setPointerCapture(event.pointerId);
     } catch {
       // The pointer can already be gone. The move and up handlers no-op without drag.
     }
@@ -51,6 +53,7 @@ if (window.trackerReorder) {
       list,
       startY: event.clientY,
       y: event.clientY,
+      grabOffset: event.clientY - item.getBoundingClientRect().top,
       moved: false,
       previous: itemIDs(list),
       frame: 0,
@@ -72,7 +75,7 @@ if (window.trackerReorder) {
       drag.frame = requestAnimationFrame(tick);
     }
     // Place immediately. A fast drag can release before the next frame.
-    placeItem(drag.list, drag.item, drag.y);
+    moveDragged(drag);
   }
 
   function tick() {
@@ -81,8 +84,28 @@ if (window.trackerReorder) {
     const edge = 72;
     if (y < edge) window.scrollBy(0, -Math.ceil((edge - y) / 8));
     else if (y > window.innerHeight - edge) window.scrollBy(0, Math.ceil((y - (window.innerHeight - edge)) / 8));
-    placeItem(drag.list, drag.item, y);
+    moveDragged(drag);
     drag.frame = requestAnimationFrame(tick);
+  }
+
+  // Slide the card with the pointer. Swap when the card's middle passes a neighbor.
+  // The handle is at the top of the card, so the card has to move with it.
+  function moveDragged(state) {
+    const item = state.item;
+    item.style.transform = "";
+    const height = item.getBoundingClientRect().height;
+    const items = [...state.list.querySelectorAll(":scope > [data-reorder-item]")];
+    let top = Infinity;
+    let bottom = -Infinity;
+    for (const el of items) {
+      const box = el.getBoundingClientRect();
+      top = Math.min(top, box.top);
+      bottom = Math.max(bottom, box.bottom);
+    }
+    const desiredTop = Math.min(Math.max(state.y - state.grabOffset, top), bottom - height);
+    placeItem(state.list, item, desiredTop + height / 2);
+    const laidOut = item.getBoundingClientRect().top;
+    item.style.transform = `translateY(${desiredTop - laidOut}px)`;
   }
 
   function finishDrag(event, commit) {
@@ -90,6 +113,7 @@ if (window.trackerReorder) {
     const state = drag;
     drag = null;
     if (state.frame) cancelAnimationFrame(state.frame);
+    state.item.style.transform = "";
     state.item.classList.remove("is-dragging");
     if (!commit || !state.moved) {
       if (state.moved) restoreItems(state.list, state.previous);
@@ -105,9 +129,9 @@ if (window.trackerReorder) {
     saveOrder(state.list, state.previous, current);
   }
 
-  // Swap with the neighbor the pointer has crossed, and keep going when one
+  // Swap with the neighbor the card's middle has crossed, and keep going when one
   // move crosses several cards. Stopping at the first neighbor that does not
-  // qualify keeps a tall group from jumping back and forth.
+  // qualify keeps a tall card from jumping back and forth.
   function placeItem(list, item, clientY) {
     const limit = list.querySelectorAll(":scope > [data-reorder-item]").length;
     for (let i = 0; i < limit; i++) {

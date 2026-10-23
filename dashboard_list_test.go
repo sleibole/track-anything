@@ -32,8 +32,8 @@ func TestUnifiedTrackerList(t *testing.T) {
 	if strings.Contains(home, "owner@example.com") {
 		t.Fatal("a uniquely named household shows the creator")
 	}
-	if !strings.Contains(home, "Drag to reorder this tracker") || !strings.Contains(home, fmt.Sprintf(`/households/%d/order`, personal.ID)) || !strings.Contains(home, fmt.Sprintf(`/households/%d/order`, family.ID)) {
-		t.Fatal("owned trackers lost their reorder handles")
+	if strings.Count(home, "Drag to reorder this tracker") != 2 || !strings.Contains(home, `data-reorder-url="/trackers/order"`) {
+		t.Fatal("trackers lost their reorder handles")
 	}
 	if !strings.Contains(home, fmt.Sprintf(`action="/trackers/%d/quick"`, homeMeal.ID)) || !strings.Contains(home, fmt.Sprintf(`action="/trackers/%d/quick"`, familyMeal.ID)) {
 		t.Fatal("the list dropped a log button")
@@ -64,10 +64,10 @@ func TestUnifiedListLabelsSharedHouseholds(t *testing.T) {
 		t.Fatalf("shared tracker label:\n%s", home)
 	}
 	if strings.Contains(home, fmt.Sprintf(`/households/%d/order`, shared.ID)) {
-		t.Fatal("a member can reorder someone else's trackers")
+		t.Fatal("a member's home posts to the household's shared order")
 	}
-	if !strings.Contains(home, fmt.Sprintf(`/households/%d/order`, personal.ID)) || !strings.Contains(home, "Drag to reorder this tracker") {
-		t.Fatal("a member lost reorder on their own trackers")
+	if strings.Count(home, "Drag to reorder this tracker") != 2 || !strings.Contains(home, `data-reorder-url="/trackers/order"`) {
+		t.Fatal("a member lost reorder on their home list")
 	}
 
 	owner.post(fmt.Sprintf("/households/%d", shared.ID), url.Values{"name": {"Family"}})

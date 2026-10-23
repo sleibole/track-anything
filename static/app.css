@@ -403,11 +403,6 @@ html.install-prompt .install-actions [data-install-action] {
   margin-top: 1rem;
 }
 
-/* The order wrapper is only for drag-and-drop. The cards read as one list. */
-.tracker-order {
-  display: contents;
-}
-
 /* Hidden until reorder.js runs, so a page without the script has no dead control. */
 button.drag-handle {
   display: none;
@@ -459,6 +454,8 @@ html[data-reordering] * {
 }
 
 [data-reorder-item].is-dragging {
+  position: relative;
+  z-index: 1;
   opacity: 0.72;
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;

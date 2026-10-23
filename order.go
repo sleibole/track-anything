@@ -110,6 +110,42 @@ func (a *app) handleReorderHouseholds(w http.ResponseWriter, r *http.Request) {
 	a.finishOrder(w, r, err)
 }
 
+// handleReorderHome saves the signed-in user's own order for their home list.
+// The ids must be exactly the active trackers they can see, across households.
+// It does not move a tracker, and it does not change anyone else's order or a
+// household's shared order.
+func (a *app) handleReorderHome(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	ids, ok := orderIDs(r)
+	if !ok {
+		a.badOrder(w, r)
+		return
+	}
+	err := a.db.Transaction(func(tx *gorm.DB) error {
+		var have []uint
+		err := tx.Model(&Tracker{}).
+			Joins("JOIN household_members ON household_members.household_id = trackers.household_id").
+			Where("household_members.user_id = ? AND trackers.archived_at IS NULL", u.ID).
+			Pluck("trackers.id", &have).Error
+		if err != nil {
+			return err
+		}
+		if !sameIDSet(have, ids) {
+			return errOrderConflict
+		}
+		// Rows for trackers they can no longer see go too, so a rejoin appends.
+		if err := tx.Where("user_id = ?", u.ID).Delete(&TrackerOrder{}).Error; err != nil {
+			return err
+		}
+		rows := make([]TrackerOrder, len(ids))
+		for i, id := range ids {
+			rows[i] = TrackerOrder{UserID: u.ID, TrackerID: id, Position: i + 1}
+		}
+		return tx.Create(&rows).Error
+	})
+	a.finishOrder(w, r, err)
+}
+
 // handleReorderTrackers saves the order of active trackers in one household.
 // The owner is the only one who can change it, because the order is shared.
 // The ids must be exactly that household's active trackers, so a drag cannot move
