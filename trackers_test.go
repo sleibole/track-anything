@@ -692,13 +692,14 @@ func TestTimesTodaySummaryOnHomeTrackerAndShare(t *testing.T) {
 	link := "/s/" + *tr.ShareToken
 	sitter := ts.browser(t)
 
+	want := "2 times today - Last: " + ts.clock.now().In(la).Format("3:04 PM")
 	for name, body := range map[string]string{
 		"home":    owner.get("/").body,
 		"tracker": owner.get(base).body,
 		"share":   sitter.get(link).body,
 	} {
-		if summaryText(t, body) != "2 times today" {
-			t.Errorf("%s summary = %q", name, summaryText(t, body))
+		if summaryText(t, body) != want {
+			t.Errorf("%s summary = %q, want %q", name, summaryText(t, body), want)
 		}
 	}
 	page := owner.get(base).body

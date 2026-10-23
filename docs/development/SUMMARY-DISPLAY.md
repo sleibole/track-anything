@@ -8,9 +8,9 @@ This is a presentation setting on an existing count tracker. Do not add a tracke
 
 ## Outcome
 
-An owner chooses Times today, Done today, or Last occurrence on create and on edit. The sentence above the log button follows that choice on the home card, the tracker page, and the share page. History rows, recorded-zero actions, and the empty today-list stay as they are. Existing trackers, and a create that omits the field, stay Times today, so a phase 2 card still reads "3 times today".
+An owner chooses Times today, Done today, or Last occurrence on create and on edit. The sentence above the log button follows that choice on the home card, the tracker page, and the share page. History rows, recorded-zero actions, and the empty today-list stay as they are. Existing trackers, and a create that omits the field, stay Times today, so a phase 2 card still reads "3 times today - Last: 8:15 PM" once today has entries.
 
-**Done when** matches `PLAN.md`: Millie ate reads "2 times today", McGill Big 3 reads "Done today" after one log and still after a second log the same day, and Logan Motrin reads "Last: 6:42 AM" on that day and "Last: Yesterday, 8:15 PM" the next day. `make test` passes, including the cases under Tests.
+**Done when** matches `PLAN.md`: Millie ate reads "2 times today - Last: 6:42 AM", McGill Big 3 reads "Done today" after one log and still after a second log the same day, and Logan Motrin reads "Last: 6:42 AM" on that day and "Last: Yesterday, 8:15 PM" the next day. `make test` passes, including the cases under Tests.
 
 ## Where the line is built
 
@@ -72,7 +72,7 @@ func summaryLine(display string, count int, zero bool, latest *time.Time, loc *t
 
 Empty `display` is Times today.
 
-**Times today.** `todaySummary(count, zero)`: "Nothing logged today", "1 time today", "3 times today", or "None today".
+**Times today.** `todaySummary(count, zero)`: "Nothing logged today", "1 time today", "3 times today", or "None today". When `latest` is on today's local day and the count is at least one, the line adds ` - Last: ` and that entry's `3:04 PM` clock: "2 times today - Last: 6:42 AM". An older timestamp does not.
 
 **Done today.** `count > 0` is "Done today". Otherwise "Not done today", including a recorded zero and including entries that exist only on other days. A second entry is still stored; the sentence stays "Done today". `latest` is unused. This display does not make the tracker or its entries a yes-or-no type.
 
@@ -142,7 +142,7 @@ Members never see this form. Create and edit are already owner-only. Do not add 
 
 In `static/app.js`, the quick-log listener branches on `data-summary-display` before it touches the text:
 
-- `times`, or a missing attribute: keep the current count increment and "1 time today" / "N times today".
+- `times`, or a missing attribute: keep the current count increment and "1 time today - Last: …" / "N times today - Last: …", using the current time in `data-time-zone`.
 - `done`: set the text to "Done today". Leave the entry creation to the server. A second tap the same day still posts; the line stays "Done today".
 - `last`: set the text to "Last: " plus the current time in `data-time-zone`, formatted as `h:mm AM` with a normal space (6:42 AM, not a browser-local zone and not a narrow no-break space). Use `Intl.DateTimeFormat` with that IANA name, `hour: "numeric"`, `minute: "2-digit"`, `hour12: true`, then join the hour, minute, and day-period parts so the space matches Go's `3:04 PM`.
 
@@ -186,7 +186,7 @@ These cases are in the suite. Pure cases are in `days_test.go`, table-driven, no
 
 **Pages**, one tracker each, viewer's zone America/Los_Angeles:
 
-- Times today, two entries today: home, tracker page, and share page all contain "2 times today". History for a previous day still contains the day-summary "None" or "Nothing logged", not "Done today".
+- Times today, two entries today: home, tracker page, and share page all read "2 times today - Last: " plus the latest entry's clock. History for a previous day still contains the day-summary "None" or "Nothing logged", not "Done today".
 - Done today, one entry today: "Done today". A second quick-log the same day adds a second `Entry` and the line stays "Done today". Undo the only entry today: "Not done today". Mark today none with no entries: the summary is "Not done today", and history can still say none.
 - Done today, entries only on an earlier day: "Not done today".
 - Last, never logged: "Never logged" on the summary element. The today-list may still say "Nothing logged yet"; that is the list, and this test should target the summary paragraph (`tracker-summary`).

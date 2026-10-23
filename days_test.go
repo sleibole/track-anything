@@ -156,6 +156,18 @@ func TestSummaryLine(t *testing.T) {
 		t.Errorf("yesterday = %q, want %q", got, want)
 	}
 
+	logged := at("2026-06-15 06:42")
+	if got, want := summaryLine(summaryTimes, 1, false, ptr(logged), la, now), "1 time today - Last: 6:42 AM"; got != want {
+		t.Errorf("times today one = %q, want %q", got, want)
+	}
+	evening := at("2026-06-15 20:15")
+	if got, want := summaryLine("", 3, false, ptr(evening), la, now), "3 times today - Last: 8:15 PM"; got != want {
+		t.Errorf("times today many = %q, want %q", got, want)
+	}
+	if got := summaryLine(summaryTimes, 2, false, ptr(yesterday), la, now); got != "2 times today" {
+		t.Errorf("times today with an older timestamp = %q", got)
+	}
+
 	// Spring forward: 23:30 the evening before is still yesterday on the 23-hour day.
 	springEntry := at("2026-03-07 23:30")
 	springNow := at("2026-03-08 12:00")

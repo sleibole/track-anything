@@ -112,6 +112,7 @@ func todaySummary(count int, zero bool) string {
 
 // summaryLine is the sentence above the log button.
 // latest is nil when the tracker has no entries. zero is ignored unless display is times.
+// Times today appends " - Last: 3:04 PM" when latest falls on today's local day.
 func summaryLine(display string, count int, zero bool, latest *time.Time, loc *time.Location, now time.Time) string {
 	switch display {
 	case summaryDone:
@@ -122,7 +123,11 @@ func summaryLine(display string, count int, zero bool, latest *time.Time, loc *t
 	case summaryLast:
 		return lastOccurrenceSummary(latest, loc, now)
 	default:
-		return todaySummary(count, zero)
+		line := todaySummary(count, zero)
+		if count > 0 && latest != nil && localDay(*latest, loc) == localDay(now, loc) {
+			line += " - Last: " + latest.In(loc).Format("3:04 PM")
+		}
+		return line
 	}
 }
 

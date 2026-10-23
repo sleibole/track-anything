@@ -158,7 +158,7 @@ Sessions last 30 days. Once a session is past half its lifetime, the next reques
 
 A calm, mobile-first tracking notebook. Logging is fast, review is easy, and the same screens cover the dog's meals and a workout measurement. Tone takes a little from a family calendar: a recognizable icon, a soft color, an approachable card. The layout stays sparser than a calendar. How the screens look is in `DESIGN.md`.
 
-**Home.** Every tracker the person can see is one list. There are no household headings. A tracker in the personal household has no household name. A tracker in any other household shows that household's name in quiet text, and the name links to the household page. When two households on the list share a name, the one someone else created adds that person's email on that line. The list follows the saved household order, then each household's tracker order. Each tracker is a card with its name, icon, optional accent, a summary, and one logging button. The summary follows that tracker's summary display. Millie ate, set to Times today, reads "2 times today". McGill Big 3, set to Done today, reads "Done today". Logan Motrin, set to Last occurrence, reads "Last: 6:42 AM". The button records the current time in one tap, then offers **Undo**. The button's words are the log label, which is separate from the summary. Before that setting existed, phase 2 showed the Times today wording on every card. A separate quick-entry view is still a later idea.
+**Home.** Every tracker the person can see is one list. There are no household headings. A tracker in the personal household has no household name. A tracker in any other household shows that household's name in quiet text, and the name links to the household page. When two households on the list share a name, the one someone else created adds that person's email on that line. The list follows the saved household order, then each household's tracker order. Each tracker is a card with its name, icon, optional accent, a summary, and one logging button. The summary follows that tracker's summary display. Millie ate, set to Times today, reads "2 times today - Last: 6:42 AM". McGill Big 3, set to Done today, reads "Done today". Logan Motrin, set to Last occurrence, reads "Last: 6:42 AM". The button records the current time in one tap, then offers **Undo**. The button's words are the log label, which is separate from the summary. Before that setting existed, phase 2 showed the Times today wording on every card. A separate quick-entry view is still a later idea.
 
 **Tracker detail.** Today's logging control and today's entries come first. The trend follows, then history. Correcting a mistake sits on the entry. Anyone who can log can undo an entry or a recorded zero from the last 15 minutes. Only an owner can choose when a new entry happened, edit the time, note, or value, delete an older entry, mark an earlier day as none, or clear an older recorded zero. On a phone the logging action stays first. On a wider screen, the trend and history can sit beside that column, with the trend above history. They never sit above the log control.
 
@@ -214,11 +214,11 @@ The page's zone is the viewer's stored zone, or the household first owner's zone
 **Times today.** How many times did this happen today? Stored as `times`. This is the phase 2 wording, and the default for a new tracker and for every tracker that already exists.
 
 - No entries and no recorded zero today: "Nothing logged today".
-- One entry today: "1 time today".
-- More than one: "3 times today", using the count.
+- One entry today: "1 time today - Last: 6:42 AM".
+- More than one: "3 times today - Last: 8:15 PM", using the count. The time is that day's latest entry, in the same `3:04 PM` clock as an entry.
 - A recorded zero and no entries today: "None today".
 
-Entries on other days are not part of this count. Millie ate uses Times today and reads "2 times today".
+Entries on other days are not part of this count, and they do not add a Last time. Millie ate uses Times today and reads "2 times today - Last: 6:42 AM".
 
 **Done today.** Did this happen today? Stored as `done`. The summary is whether today has at least one entry. The name is the summary line's question. It is not a kind of tracker, and it does not change the entries.
 
@@ -310,12 +310,12 @@ The first screen replaces paper tick marks: create a tracker, choose an icon, lo
 A small enhancement from dogfooding phase 2. It is not required for phase 2 to be done, and it does not wait for charts (phase 3) or for number and duration trackers (phase 4). How it was built is `SUMMARY-DISPLAY.md`.
 
 - Add **summary display** to create and edit, with Times today, Done today, and Last occurrence. The wording for each is under Summary display. The form uses ordinary radios. The stored values are `times`, `done`, and `last`.
-- Existing trackers, and any tracker saved without a choice, stay Times today. A phase 2 card keeps "3 times today".
+- Existing trackers, and any tracker saved without a choice, stay Times today. A phase 2 card keeps that wording, including Last when today has entries ("3 times today - Last: 8:15 PM").
 - The log label stays a separate field.
 - Done today still stores every timestamped entry. Last occurrence still shows the latest entry on a later day, or "Never logged" when the tracker has no entries.
 - No new tracker kind, and no change to history rows or charts.
 
-**Done when:** Millie ate reads "2 times today", McGill Big 3 reads "Done today" after one log and still after a second log the same day, and Logan Motrin reads "Last: 6:42 AM" on that day and "Last: Yesterday, 8:15 PM" the next day. The entries underneath are unchanged.
+**Done when:** Millie ate reads "2 times today - Last: 6:42 AM", McGill Big 3 reads "Done today" after one log and still after a second log the same day, and Logan Motrin reads "Last: 6:42 AM" on that day and "Last: Yesterday, 8:15 PM" the next day. The entries underneath are unchanged.
 
 ### After phase 2: Household organization (done)
 

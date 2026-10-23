@@ -37,7 +37,6 @@ if (window.trackerReorder) {
     const handle = event.target.closest("[data-drag-handle]");
     const item = handle && handle.closest("[data-reorder-item]");
     const list = item && item.parentElement && item.parentElement.closest("[data-reorder-list]");
-    // The item has to be a direct child of its list, so a tracker cannot leave its household.
     if (!handle || !item || !list || item.parentElement !== list || !list.dataset.reorderUrl) return;
     event.preventDefault();
     // Capture on the document, not the handle. The handle moves with the card, and

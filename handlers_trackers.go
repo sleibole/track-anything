@@ -129,10 +129,16 @@ func cardFor(t Tracker, s todayState, latest *Entry, now time.Time, loc *time.Lo
 	if latest != nil {
 		occurred = &latest.OccurredAt
 	}
+	// Times today names the latest log today. Those rows are already newest-first.
+	// Last occurrence keeps the latest entry on any day.
+	summaryAt := occurred
+	if t.SummaryMode() == summaryTimes && len(s.Entries) > 0 {
+		summaryAt = &s.Entries[0].OccurredAt
+	}
 	c := trackerCard{
 		Tracker:  t,
 		Count:    s.Count,
-		Summary:  summaryLine(t.SummaryDisplay, s.Count, s.Zero != nil, occurred, loc, now),
+		Summary:  summaryLine(t.SummaryDisplay, s.Count, s.Zero != nil, summaryAt, loc, now),
 		Zone:     loc.String(),
 		Link:     fmt.Sprintf("/trackers/%d", t.ID),
 		QuickURL: fmt.Sprintf("/trackers/%d/quick", t.ID),

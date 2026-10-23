@@ -54,7 +54,8 @@ document.addEventListener("submit", (event) => {
   }
   const count = Number(summary.dataset.count) + 1;
   summary.dataset.count = count;
-  summary.textContent = count === 1 ? "1 time today" : `${count} times today`;
+  const times = count === 1 ? "1 time today" : `${count} times today`;
+  summary.textContent = `${times} - Last: ${clockInZone(new Date(), summary.dataset.timeZone)}`;
 });
 
 function restoreUnsavedLog(event) {
