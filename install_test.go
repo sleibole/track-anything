@@ -215,3 +215,11 @@ func TestLayoutInlinesBrandIcon(t *testing.T) {
 		t.Error("layout does not inline the brand icon")
 	}
 }
+
+func TestHeaderUsesAppIcon(t *testing.T) {
+	h := newTestApp(t).routes()
+	_, body := get(t, h, "/", nil)
+	if !strings.Contains(body, `<img class="brand-mark" src="/static/icons/icon-192.png" alt="" width="22" height="22">`) {
+		t.Error("header does not use the app icon")
+	}
+}

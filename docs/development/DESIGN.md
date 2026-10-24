@@ -194,9 +194,9 @@ Logged out: **Log in** and **Sign up** in the header. Logged in: **Charts**, set
 
 Tabler instead of Font Awesome: an icon font or a JavaScript loader is the wrong trade here, and Font Awesome's CC BY license was a worse fit.
 
-Chrome icons, the ones the app itself uses: `tallymarks` (the header brand mark and the default tracker icon), `plus`, `arrow-back-up` (undo), `loader` (log and undo while the request is in flight), `trash`, `pencil`, `chart-line`, `settings`, `share`, `users`, `archive`, `calendar`, `link`, `logout`, `grip-vertical` (reorder). Form labels add `mail` (email), `lock` (password), `lock-check` (confirm password), and `timezone`.
+Chrome icons, the ones the app itself uses: `tallymarks` (the default tracker icon), `plus`, `arrow-back-up` (undo), `loader` (log and undo while the request is in flight), `trash`, `pencil`, `chart-line`, `settings`, `share`, `users`, `archive`, `calendar`, `link`, `logout`, `grip-vertical` (reorder). Form labels add `mail` (email), `lock` (password), `lock-check` (confirm password), and `timezone`.
 
-The favicon, Apple touch icon, and home-screen icons are the teal tally artwork in `static/`. They are separate from these in-page icons.
+The header brand mark is the same teal tally as the favicon, Apple touch icon, and home-screen icons. It sits beside the name and links home. The other chrome icons stay the Tabler set above.
 
 The tracker picker is a separate handful, described under **Screens**. Copy in a Tabler SVG when it joins that picker. Emoji in the picker are text, not SVGs. Do not offer the whole Tabler set, and do not accept an uploaded icon in the first version.
 
