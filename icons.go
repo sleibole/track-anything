@@ -106,8 +106,16 @@ func trackerIcon(v string) (template.HTML, error) {
 	return icon(v)
 }
 
+// nav is an in-app link. href is last so tests can match href="...">label</a>.
+// Boosting this anchor swaps #content and pushes the URL. It does not boost
+// child links, and it is not used for login, signup, or file downloads.
+func nav(href string) template.HTMLAttr {
+	return template.HTMLAttr(`hx-boost="true" hx-target="#content" hx-swap="innerHTML show:window:top" href="` + template.HTMLEscapeString(href) + `"`)
+}
+
 var templateFuncs = template.FuncMap{
 	"icon":              icon,
 	"trackerIcon":       trackerIcon,
 	"startupImageLinks": startupImageLinks,
+	"nav":               nav,
 }

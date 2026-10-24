@@ -1,19 +1,15 @@
-{{define "scripts"}}
-<script src="/static/reorder.js" defer></script>
-{{end}}
-
 {{define "content"}}
 {{template "autoRefresh" "/"}}
 <div class="page-head">
   <h1>Your trackers</h1>
-  <a href="/trackers/new" role="button" class="secondary outline">{{icon "plus"}} New tracker</a>
+  <a role="button" class="secondary outline" {{nav "/trackers/new"}}>{{icon "plus"}} New tracker</a>
 </div>
 {{template "installHint"}}
 <div class="tracker-list" data-reorder-list data-reorder-url="/trackers/order">
 {{range .Data.Cards}}{{template "card" .}}{{end}}
 </div>
 {{if not .Data.HasTrackers}}
-<p class="muted">No trackers yet. <a href="/trackers/new">Create one</a> to start logging.</p>
+<p class="muted">No trackers yet. <a {{nav "/trackers/new"}}>Create one</a> to start logging.</p>
 {{end}}
 <details class="new-household"{{if .Data.Error}} open{{end}}>
   <summary>New household</summary>
@@ -26,4 +22,5 @@
     <button type="submit">Create</button>
   </form>
 </details>
+<script src="/static/reorder.js"></script>
 {{end}}

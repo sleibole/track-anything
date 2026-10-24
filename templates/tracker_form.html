@@ -6,7 +6,7 @@
 
 <article class="form-card">
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
-  <form method="post" action="{{with .Tracker}}/trackers/{{.ID}}{{else}}/trackers{{end}}">
+  <form method="post" action="{{with .Tracker}}/trackers/{{.ID}}{{else}}/trackers{{end}}" hx-post="{{with .Tracker}}/trackers/{{.ID}}{{else}}/trackers{{end}}">
     {{if not .Tracker}}
       {{if gt (len .Households) 1}}
       <label>
@@ -84,12 +84,12 @@
   <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/share" hx-post="/trackers/{{$.Data.Tracker.ID}}/share" hx-confirm="Make a new link? The current one will stop working.">
     <button type="submit" class="secondary outline">Make a new link</button>
   </form>
-  <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/share/delete">
+  <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/share/delete" hx-post="/trackers/{{$.Data.Tracker.ID}}/share/delete">
     <button type="submit" class="quiet">Turn off the share link</button>
   </form>
   {{else}}
   <p>Let someone log without an account, like a dog sitter or a kitchen tablet.</p>
-  <form method="post" action="/trackers/{{.ID}}/share">
+  <form method="post" action="/trackers/{{.ID}}/share" hx-post="/trackers/{{.ID}}/share">
     <button type="submit" class="secondary outline">Turn on a share link</button>
   </form>
   {{end}}
@@ -107,11 +107,11 @@
   <button type="submit" class="quiet">Move</button>
 </form>
 {{end}}
-<form method="post" action="/trackers/{{.ID}}/archive" class="archive-form">
+<form method="post" action="/trackers/{{.ID}}/archive" hx-post="/trackers/{{.ID}}/archive" class="archive-form">
   <button type="submit" class="quiet">{{icon "archive"}} Archive this tracker</button>
-  <small>Hides it and turns off its share link. Entries are kept; restore it from the <a href="/households/{{.HouseholdID}}">household page</a>.</small>
+  <small>Hides it and turns off its share link. Entries are kept; restore it from the <a {{nav (printf "/households/%d" .HouseholdID)}}>household page</a>.</small>
 </form>
-<p class="form-foot"><a href="/trackers/{{.ID}}">Back to {{.Name}}</a></p>
+<p class="form-foot"><a {{nav (printf "/trackers/%d" .ID)}}>Back to {{.Name}}</a></p>
 {{end}}
 </div>
 {{end}}

@@ -6,7 +6,7 @@
   <section class="tracker-log">
     <div class="page-head">
       {{template "trackerTitle" .Tracker}}
-      {{if .IsOwner}}<a href="/trackers/{{.Tracker.ID}}/edit" aria-label="Edit tracker" title="Edit tracker">{{icon "pencil"}}</a>{{end}}
+      {{if .IsOwner}}<a aria-label="Edit tracker" title="Edit tracker" {{nav (printf "/trackers/%d/edit" .Tracker.ID)}}>{{icon "pencil"}}</a>{{end}}
     </div>
     {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
     {{template "logControl" .Card}}

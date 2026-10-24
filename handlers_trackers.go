@@ -766,7 +766,7 @@ func (a *app) handleCreateTracker(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/trackers/%d", t.ID), http.StatusSeeOther)
+	redirectTo(w, r, fmt.Sprintf("/trackers/%d", t.ID))
 }
 
 // ownedTracker loads an active tracker for an owner-only action, writing the 404 or 403
@@ -917,7 +917,7 @@ func (a *app) handleUpdateTracker(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/trackers/%d", t.ID), http.StatusSeeOther)
+	redirectTo(w, r, fmt.Sprintf("/trackers/%d", t.ID))
 }
 
 func (a *app) handleMoveTracker(w http.ResponseWriter, r *http.Request) {
@@ -973,7 +973,7 @@ func (a *app) handleArchiveTracker(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/households/%d", t.HouseholdID), http.StatusSeeOther)
+	redirectTo(w, r, fmt.Sprintf("/households/%d", t.HouseholdID))
 }
 
 func (a *app) handleRestoreTracker(w http.ResponseWriter, r *http.Request) {

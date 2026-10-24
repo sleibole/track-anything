@@ -28,11 +28,11 @@
 <body>
   <header class="container">
     <nav>
-      <ul><li><a href="/" class="brand">{{icon "tallymarks"}} <strong>Track Anything</strong></a></li></ul>
+      <ul><li><a class="brand" {{nav "/"}}>{{icon "tallymarks"}} <strong>Track Anything</strong></a></li></ul>
       <ul>
         {{with .User}}
-        <li><a href="/charts">Charts</a></li>
-        <li><a href="/settings" aria-label="Settings" title="Settings">{{icon "settings"}}</a></li>
+        <li><a {{nav "/charts"}}>Charts</a></li>
+        <li><a aria-label="Settings" title="Settings" {{nav "/settings"}}>{{icon "settings"}}</a></li>
         <li>
           <form method="post" action="/logout" class="inline">
             <button type="submit" class="outline secondary" aria-label="Log out" title="Log out">{{icon "logout"}}</button>
@@ -45,10 +45,12 @@
       </ul>
     </nav>
   </header>
-  <main class="container" id="content" hx-target="#content" hx-swap="innerHTML show:none">
+  <main class="container" id="content" hx-history-elt hx-target="#content" hx-swap="innerHTML show:none">
     {{template "content" .}}
   </main>
   <template id="button-spinner">{{icon "loader"}}</template>
 </body>
 </html>
 {{end}}
+
+{{define "partial"}}<title>{{template "title" .}}</title>{{template "content" .}}{{end}}

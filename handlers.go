@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -73,14 +74,48 @@ func parseID(s string) uint {
 }
 
 // redirectTo sends a form to another page. A normal submit is a 303. An HTMX submit
-// gets a full navigation, so the address bar matches the page it lands on.
+// gets HX-Location, which swaps the destination into #content. The path is pushed
+// unless the browser is already there. This is not HX-Redirect: the shell stays.
 func redirectTo(w http.ResponseWriter, r *http.Request, to string) {
 	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", to)
+		push := "true"
+		if sameRequestPath(r, to) {
+			push = "false"
+		}
+		payload, err := json.Marshal(struct {
+			Path   string `json:"path"`
+			Target string `json:"target"`
+			Swap   string `json:"swap"`
+			Push   string `json:"push"`
+		}{
+			Path: to, Target: "#content", Swap: "innerHTML show:window:top", Push: push,
+		})
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("HX-Location", string(payload))
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
+// sameRequestPath reports whether to is the page already in the address bar.
+func sameRequestPath(r *http.Request, to string) bool {
+	current := r.Header.Get("HX-Current-URL")
+	if current == "" {
+		return false
+	}
+	cu, err := url.Parse(current)
+	if err != nil {
+		return false
+	}
+	dest, err := url.Parse(to)
+	if err != nil {
+		return false
+	}
+	return cu.Path == dest.Path && cu.RawQuery == dest.RawQuery
 }
 
 // redirectBack sends a form post back to the page it came from. HTMX follows the

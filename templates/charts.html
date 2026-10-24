@@ -6,7 +6,7 @@
     <h1>Charts</h1>
   </div>
   {{if not .Trackers}}
-  <p class="muted">No trackers yet. <a href="/trackers/new">Create one</a> to start logging.</p>
+  <p class="muted">No trackers yet. <a {{nav "/trackers/new"}}>Create one</a> to start logging.</p>
   {{else}}
   <div class="chart-controls">
     <details class="overlay-picker">

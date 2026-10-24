@@ -15,7 +15,7 @@
   {{if eq .Saved "verification"}}<p role="status" class="saved">Verification email sent. The link works once and expires in 24 hours.</p>{{end}}
   {{if .VerifyError}}<p role="alert" class="error">{{.VerifyError}}</p>{{end}}
   <p>Your email isn't verified yet.</p>
-  <form method="post" action="/settings/verify">
+  <form method="post" action="/settings/verify" hx-post="/settings/verify">
     <button type="submit">Send verification email</button>
   </form>
 </article>
@@ -27,7 +27,7 @@
   {{if .TimeZoneError}}<p role="alert" class="error">{{.TimeZoneError}}</p>{{end}}
   <details class="timezone"{{if or .TimeZoneError (eq .Saved "timezone")}} open{{end}}>
     <summary>{{.TimeZoneLabel}}</summary>
-    <form method="post" action="/settings/timezone">
+    <form method="post" action="/settings/timezone" hx-post="/settings/timezone">
       <label>
         {{icon "timezone"}} Time zone
         <select name="timezone" required aria-describedby="timezone-help">

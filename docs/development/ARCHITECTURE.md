@@ -104,9 +104,11 @@ track-anything/
 │   ├── icon-192.png
 │   ├── icon-512.png    # also the maskable icon; the artwork has safe-zone padding
 │   └── apple-touch-icon.png
+├── scripts/
+│   └── dev-server.sh   # named Air servers for concurrent agents
 ├── .air.toml           # Air config for local autoreload
 ├── Dockerfile          # multi-stage build, used by Dokku now and Fly.io later
-└── Makefile            # dev, run, build, test
+└── Makefile            # dev, dev-agent, dev-list, dev-stop, dev-stop-all, run, build, test
 ```
 
 ## Local development
@@ -119,7 +121,19 @@ make dev
 
 That starts [Air](https://github.com/air-verse/air), which builds the server and listens on http://localhost:8080. `ADDR` changes the port. Go runs Air by version, so it does not need a separate install and it is not a module dependency. Copy `.env.example` to `.env` if you want the local settings in Config; a missing file is fine.
 
-Saving a `.go` file, an HTML template, or CSS or JavaScript under `static/` makes Air rebuild and restart. Refresh the browser after the restart. Air does not reload the page. Templates, CSS, and JavaScript stay embedded with `go:embed`, so those edits are picked up by compiling a new binary into `tmp/`, which is gitignored.
+`make dev` is the personal server: port 8080, build output `tmp/main`, database `data/trackanything.db`. A named agent server does not use those:
+
+```
+make dev-agent NAME=<unique-name>
+```
+
+The name is the instance id. [scripts/dev-server.sh](../../scripts/dev-server.sh) reserves a free port from 8100 through 8199, gives the instance its own Air build directory and SQLite file under `tmp/dev-agents/<name>/`, and exports `ADDR`, `DB_PATH`, and `BASE_URL` before Air starts. The app and Air both leave variables that are already set alone, so a local `.env` cannot point the agent server at port 8080 or the personal database. The generated Air config is the committed `.air.toml` with that instance's `tmp_dir`, build `-o` path, and `entrypoint`. Watch extensions, exclude list, `send_interrupt`, and `kill_delay` stay as they are.
+
+`make dev-list` prints the name, port, URL, and status of each recorded instance. `make dev-stop NAME=<name>` stops that instance. `make dev-stop-all` stops only instances recorded under `tmp/dev-agents/`; it does not look for the personal server. Ctrl-C, SIGHUP, and `dev-stop` signal the recorded process and the Go binary Air started, and only when the command line still matches that instance.
+
+The servers share this working tree. They are not separate Git worktrees. Saving a watched file rebuilds every running Air. The script waits up to 60 seconds for `/healthz` (`DEV_SERVER_READY_TIMEOUT` changes that). If the process exits first, it prints the status and the log tail.
+
+Saving a `.go` file, an HTML template, or CSS or JavaScript under `static/` makes Air rebuild and restart. Refresh the browser after the restart. Air does not reload the page. Templates, CSS, and JavaScript stay embedded with `go:embed`, so those edits are picked up by compiling a new binary. `make dev` writes `tmp/main`. An agent server writes `tmp/dev-agents/<name>/air/main`. Both directories are gitignored.
 
 `make run` starts the server once, without reload. `make build` and the Docker image do not use Air.
 
@@ -419,13 +433,15 @@ Later offline sync reuses `POST /trackers/{id}/quick`, `POST /s/{token}/quick`, 
 
 ## HTMX
 
-The render helper checks `HX-Request` and returns either the full page or a partial. Ad and consent scripts live in `layout.html`, outside any element HTMX swaps, so they load once per page and are not re-run by partial updates.
+The render helper checks `HX-Request` and returns either the full page or a partial: a `<title>` plus the page's content block. HTMX lifts the title and swaps the block into `#content` (`innerHTML`). The header and the rest of the document stay. `#content` carries `hx-history-elt`, so back and forward restore that element's contents rather than the whole body. Ad and consent scripts live in `layout.html`, outside any element HTMX swaps, so they load once per page and are not re-run by partial updates.
 
-- **Forms post, then redirect.** Every form works as a plain `POST` that redirects back to its page. With HTMX, the form also has `hx-post`; HTMX follows the redirect, the page comes back as its content block, and `<main>` is swapped in place. Handlers have one code path either way.
+In-app links use `hx-boost` on the anchor itself, targeted at `#content`. There is no `hx-boost` on `<body>` or `<main>`. Login, signup, log out, change password, and CSV export stay real navigations. The three redirect responses are separate and are not one helper. See `HTMX.md`.
+
+- **Forms post, then redirect.** Every form works as a plain `POST`. A normal submit is a `303`. An in-app `hx-post` that stays on the same URL is also a `303`: HTMX follows it and swaps `#content`. An in-app post that changes the URL uses `redirectTo`, which sends `HX-Location` (swap into `#content`, and push history when the path changed). A post that must replace the shell, such as a signed-out HTMX request, sends `HX-Redirect` and loads a new document. Do not collapse these into one response.
 - **Log button**: a small delegated handler in `app.js` updates the summary on tap before the response arrives. The optimistic line follows the tracker's summary display: the next Times today count, "Done today", or "Last" at the current time. The server response replaces it. If the request fails or never reaches the server, the previous line is restored and a short inline message says it was not saved. Nothing is queued. While a log or undo request is in flight, that button is disabled and its label is replaced by the loader icon (`templates/layout.html` holds the SVG; `app.js` moves it into the button). The icon's stroke is `currentColor`, so it follows the button text in light and dark. The label returns when the request ends without replacing the button. The Done today attribute value is `done`. The later offline path is separate. See Offline logging.
 - **Tracker pages refresh themselves.** Home, the tracker page, and the share page include a hidden element that re-fetches the page's own GET every 30 seconds, and when the tab becomes visible again (`hx-trigger="every 30s [trackerIdle()], visibilitychange[trackerIdle()] from:document"`). The response is the usual content block, swapped into `<main>`, so the element replaces itself and its timer starts over. `trackerIdle()` in `app.js` skips the refresh while the tab is hidden, a field in the page has focus, any `<details>` is open, or another HTMX request is in flight. Any other HTMX request aborts a refresh already on its way, so it cannot land after a log. Edit forms, the household page, settings, and account screens do not refresh.
 - **Errors swap too.** The `htmx-config` meta tag swaps 4xx responses, so a validation message or "too late to undo" appears in place. A number **Log again** error sends `HX-Retarget` for that tracker's log control, so the message stays on the card.
-- Signup, login, and change password stay full-page posts. A successful login has to replace the header, which lives outside the HTMX swap target. The Turnstile script is in the layout of those pages only. A failed submit is a new page with a new widget, because the previous token cannot be reused. If an HTMX response does include the form, `app.js` renders a widget for any `.cf-turnstile` element that is not already mounted.
+- Signup, login, log out, and change password stay full-page posts. A successful login has to replace the header, which lives outside the HTMX swap target. The Turnstile script is in the layout of signup, login, and verified settings. A failed password or auth submit is a new page with a new widget, because the previous token cannot be reused. Settings itself can be opened as a content swap; `app.js` adds the Turnstile script if the widget is present and the script is not, and it renders the widget again after a cached history restore.
 - Owner deletes, member removal, promotion, invite regeneration, leaving a household, and moving a tracker use `hx-confirm`.
 
 ## Authentication

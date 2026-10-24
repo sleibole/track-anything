@@ -254,6 +254,10 @@ document.querySelectorAll(".auth-password-toggle").forEach((toggle) => {
 // Turnstile tokens are single-use. A failed submit that stays on the form, including
 // an HTMX swap of the same form, needs a new widget before the next attempt.
 // The API script is deferred, so it calls onTurnstileLoad instead of turnstile.ready.
+// Same URL as templates/partials/turnstile.html. A content swap of settings does not
+// include the layout script, so this adds it once when a widget is on the page.
+const turnstileScriptURL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onTurnstileLoad";
+
 function renderTurnstile(root) {
   if (!window.turnstile || !root || !root.querySelectorAll) return;
   root.querySelectorAll(".cf-turnstile").forEach((el) => {
@@ -265,13 +269,46 @@ function renderTurnstile(root) {
   });
 }
 
+function ensureTurnstile(root) {
+  if (!root || !root.querySelector || !root.querySelector(".cf-turnstile")) return;
+  if (window.turnstile || document.querySelector("script[src*='challenges.cloudflare.com/turnstile']")) return;
+  const script = document.createElement("script");
+  script.src = turnstileScriptURL;
+  document.head.appendChild(script);
+}
+
+// A cached history restore can put back a widget that was already mounted, or a
+// dead iframe. Clear those and render again. A cache miss gets fresh markup.
+function restoreTurnstile(root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll(".cf-turnstile").forEach((el) => {
+    if (window.turnstile) {
+      try {
+        window.turnstile.remove(el);
+      } catch {
+        // The saved node may not be a live widget. Rendering it again is enough.
+      }
+    }
+    delete el.dataset.turnstileMounted;
+    el.replaceChildren();
+  });
+  ensureTurnstile(root);
+  renderTurnstile(root);
+}
+
 window.onTurnstileLoad = function () {
   renderTurnstile(document);
 };
 
 document.addEventListener("htmx:afterSettle", (event) => {
-  renderTurnstile(event.detail?.target || document);
+  const root = event.detail?.target || document;
+  ensureTurnstile(root);
+  renderTurnstile(root);
   syncInstallHint();
+});
+
+document.addEventListener("htmx:historyRestore", () => {
+  restoreTurnstile(document.getElementById("content") || document);
 });
 
 // Home-screen install. The manifest makes the site installable; this offer

@@ -50,11 +50,13 @@ type view struct {
 	TurnstileSiteKey string
 }
 
-// render writes a full page, or only the page's "content" block for HTMX requests.
+// render writes a full page, or a title plus the content block for HTMX requests.
+// The title is lifted out of the fragment by HTMX. The content block is swapped
+// into #content, so the header and the rest of the document stay.
 func (a *app) render(w http.ResponseWriter, r *http.Request, status int, page string, data any) {
 	block := "layout"
 	if r.Header.Get("HX-Request") == "true" {
-		block = "content"
+		block = "partial"
 	}
 	a.renderBlock(w, r, status, page, block, data)
 }

@@ -67,13 +67,13 @@
   <h2>Trackers</h2>
   <ul class="rows">
     {{range .Trackers}}
-    <li><a href="/trackers/{{.ID}}"><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</a></li>
+    <li><a {{nav (printf "/trackers/%d" .ID)}}><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</a></li>
     {{else}}
     <li class="muted">No trackers yet.</li>
     {{end}}
   </ul>
   {{if .IsOwner}}
-  <a href="/trackers/new?household={{.Household.ID}}" role="button" class="secondary outline">{{icon "plus"}} New tracker</a>
+  <a role="button" class="secondary outline" {{nav (printf "/trackers/new?household=%d" .Household.ID)}}>{{icon "plus"}} New tracker</a>
   {{end}}
   {{if .Archived}}
   <details class="archived">

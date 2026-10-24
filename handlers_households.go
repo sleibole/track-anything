@@ -394,5 +394,5 @@ func (a *app) handleJoin(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	redirectTo(w, r, "/")
 }

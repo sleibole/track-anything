@@ -6,10 +6,10 @@
   {{with .CreatedBy}}<p>An invitation from {{.}}.</p>{{end}}
   {{if .AlreadyMember}}
   <p>You're already in this household.</p>
-  <a href="/" role="button">Go to your trackers</a>
+  <a role="button" {{nav "/"}}>Go to your trackers</a>
   {{else}}
   <p>You'll see its trackers on your home screen and can log on them.</p>
-  <form method="post" action="/join/{{.Token}}" class="auth-form">
+  <form method="post" action="/join/{{.Token}}" hx-post="/join/{{.Token}}" class="auth-form">
     <button type="submit">Join household</button>
   </form>
   {{end}}

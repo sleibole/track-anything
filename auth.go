@@ -215,7 +215,16 @@ func (a *app) loadUser(next http.Handler) http.Handler {
 func (a *app) requireUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if currentUser(r) == nil {
-			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
+			to := "/login?next=" + url.QueryEscape(r.URL.RequestURI())
+			// A 303 would be followed inside the HTMX request and the login
+			// fragment would land under the old header. HX-Redirect loads the
+			// login document, shell included. A normal request stays a 303.
+			if r.Header.Get("HX-Request") == "true" {
+				w.Header().Set("HX-Redirect", to)
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			http.Redirect(w, r, to, http.StatusSeeOther)
 			return
 		}
 		next(w, r)

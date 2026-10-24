@@ -31,7 +31,7 @@
       <button type="submit" data-occurrence>{{.Tracker.Label}}</button>
     </form>
     {{else if .Link}}
-    <a href="{{.Link}}" role="button">{{.Tracker.Label}}</a>
+    <a role="button" {{nav .Link}}>{{.Tracker.Label}}</a>
     {{end}}
     {{with .UndoURL}}
     <form method="post" action="{{.}}" hx-post="{{.}}">
@@ -49,8 +49,8 @@
   <div class="tracker-card-head">
     {{if .Reorder}}<button type="button" class="drag-handle" data-drag-handle aria-label="Drag to reorder this tracker">{{icon "grip-vertical"}}</button>{{end}}
     <div class="tracker-card-title">
-      <a href="{{.Link}}" class="tracker-name"><span class="tracker-icon">{{trackerIcon .Tracker.Icon}}</span> {{.Tracker.Name}}</a>
-      {{if .HouseholdLabel}}<a class="tracker-household" href="{{.HouseholdURL}}">{{.HouseholdLabel}}</a>{{end}}
+      <a class="tracker-name" {{nav .Link}}><span class="tracker-icon">{{trackerIcon .Tracker.Icon}}</span> {{.Tracker.Name}}</a>
+      {{if .HouseholdLabel}}<a class="tracker-household" {{nav .HouseholdURL}}>{{.HouseholdLabel}}</a>{{end}}
     </div>
   </div>
   {{template "logControl" .}}
