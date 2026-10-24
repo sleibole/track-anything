@@ -24,12 +24,12 @@
     {{end}}
 
     <details class="log-details"{{if or .Error .Note (and (not .Tracker.IsCount) (not .Card.LogAgain))}} open{{end}}>
-      <summary>{{if .Tracker.IsDuration}}{{if .IsOwner}}Log a duration, note, or time{{else}}Log a duration or note{{end}}{{else if .Tracker.IsNumber}}{{if .IsOwner}}Log a value, note, or time{{else}}Log a value or note{{end}}{{else}}{{if .IsOwner}}Log with a note or time{{else}}Log with a note{{end}}{{end}}</summary>
+      <summary>{{if .Tracker.IsDuration}}{{if .IsOwner}}Log a duration, note, or time{{else}}Log a duration or note{{end}}{{else if .Tracker.IsNumber}}{{if .IsOwner}}Log with a note or specific time{{else}}Log a value or note{{end}}{{else}}{{if .IsOwner}}Log with a note or time{{else}}Log with a note{{end}}{{end}}</summary>
       <form method="post" action="/trackers/{{.Tracker.ID}}/entries" hx-post="/trackers/{{.Tracker.ID}}/entries">
         {{template "valueFields" .}}
         {{if .IsOwner}}<label>{{icon "calendar"}} When <input type="datetime-local" name="time" value="{{.NowValue}}"></label>{{end}}
         <label>Note <input type="text" name="note" value="{{.Note}}" maxlength="500"></label>
-        <button type="submit">Log</button>
+        <button type="submit" data-occurrence>Log</button>
       </form>
     </details>
 
@@ -81,7 +81,7 @@
         {{if and $.Data.IsOwner $.Data.Tracker.IsCount (not .Logged)}}
         <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/day" hx-post="/trackers/{{$.Data.Tracker.ID}}/day" class="inline">
           <input type="hidden" name="day" value="{{.Day}}">
-          <button type="submit" class="quiet">{{$.Data.Tracker.Label}}</button>
+          <button type="submit" class="quiet" data-occurrence>{{$.Data.Tracker.Label}}</button>
         </form>
         <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/zero" hx-post="/trackers/{{$.Data.Tracker.ID}}/zero" class="inline">
           <input type="hidden" name="day" value="{{.Day}}">

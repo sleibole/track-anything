@@ -87,7 +87,8 @@ type trackerCard struct {
 	CarryHours     string
 	CarryMinutes   string
 	CarrySeconds   string
-	LogAgain       bool   // a duration repeats Carry in one tap; a number shows the value field. False when there is no previous value
+	LogAgain       bool   // a duration repeats Carry in one tap; a number's button says Log again. False when there is no previous value
+	NumberField    bool   // home shows the number input even when nothing carries forward. An inline error sets it so that field stays
 	Error          string // validation message for this tracker; empty when the last submit worked
 	Reorder        bool   // dashboard only: the card has a handle for the viewer's own order
 	HouseholdLabel string // dashboard only: household name on a shared tracker; empty on a personal one
@@ -592,6 +593,7 @@ func applyInlineLogError(c *trackerCard, r *http.Request, t Tracker, msg string)
 	c.Error = msg
 	if t.IsNumber() {
 		c.CarryValue = r.PostFormValue("number")
+		c.NumberField = true
 	}
 }
 

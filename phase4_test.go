@@ -552,6 +552,72 @@ func TestNumberLogAgainSubmitsTheField(t *testing.T) {
 	}
 }
 
+func TestHomeNumberFieldWhenTodayIsEmpty(t *testing.T) {
+	ts := newTestServer(t)
+	owner := ts.browser(t)
+	owner.signup("weight-home@example.com", "")
+	h := ts.personalHousehold(t, "weight-home@example.com")
+	weight := owner.createTracker(h, "Weight", url.Values{
+		"kind": {kindNumber}, "unit": {"lb"}, "summary_display": {summaryDone},
+	})
+	path := fmt.Sprintf("/trackers/%d", weight.ID)
+
+	home := owner.get("/").body
+	if strings.Contains(home, "Log again") || strings.Contains(home, "Last value:") {
+		t.Fatal("empty number tracker invented a carried value")
+	}
+	if !strings.Contains(home, `class="log-again"`) || !strings.Contains(home, `name="number" step="any" inputmode="decimal" value=""`) || !strings.Contains(home, ">&#43; Log</button>") {
+		t.Fatal("home hid the empty value field")
+	}
+	page := owner.get(path).body
+	if !strings.Contains(page, `role="button"`) || !strings.Contains(page, ">&#43; Log</a>") {
+		t.Fatal("tracker page no longer opens on the first log")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, ts.srv.URL+path+"/entries", strings.NewReader(url.Values{
+		"number": {"nope"}, "log_again": {"1"}, "back": {"/"},
+	}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	resp, err := owner.c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fragment := string(body)
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(fragment, "Enter a valid number.") || !strings.Contains(fragment, `value="nope"`) || !strings.Contains(fragment, ">&#43; Log</button>") || strings.Contains(fragment, "Log again") {
+		t.Fatalf("bad first number left the card: %d %s", resp.StatusCode, fragment)
+	}
+	if len(ts.entries(t, weight.ID)) != 0 {
+		t.Fatal("invalid number was stored")
+	}
+
+	logged := owner.post(path+"/entries", url.Values{"number": {"180"}, "log_again": {"1"}, "back": {"/"}})
+	if logged.status != http.StatusOK || logged.url.Path != "/" || !strings.Contains(logged.body, "Last value: 180 lb") || !strings.Contains(logged.body, `value="180"`) || !strings.Contains(logged.body, ">Log again</button>") {
+		t.Fatalf("first log from home: %d at %s", logged.status, logged.url)
+	}
+
+	past := owner.createTracker(h, "Yesterday", url.Values{
+		"kind": {kindNumber}, "unit": {"lb"}, "summary_display": {summaryDone},
+	})
+	la := location("America/Los_Angeles")
+	yesterday := ts.clock.now().In(la).AddDate(0, 0, -1).Format(timeInputLayout)
+	if r := owner.post(fmt.Sprintf("/trackers/%d/entries", past.ID), url.Values{"number": {"191.8"}, "time": {yesterday}}); r.status != http.StatusOK {
+		t.Fatalf("backfill: %d", r.status)
+	}
+	home = owner.get("/").body
+	if !strings.Contains(home, "Not done today") || !strings.Contains(home, "Last value: 191.8 lb") || !strings.Contains(home, `value="191.8"`) || !strings.Contains(home, ">Log again</button>") {
+		t.Fatal("a value from another day was not in the home field")
+	}
+}
+
 func csvRows(t *testing.T, b *browser, trackerID uint) [][]string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, b.ts.srv.URL+fmt.Sprintf("/trackers/%d/export", trackerID), nil)

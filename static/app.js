@@ -83,6 +83,59 @@ function restoreUnsavedLog(event) {
 document.addEventListener("htmx:responseError", restoreUnsavedLog);
 document.addEventListener("htmx:sendError", restoreUnsavedLog);
 
+// Log and undo disable the clicked button and swap its label for the loader icon.
+// The icon uses currentColor, so it follows that button's text color.
+function occurrenceButton(elt) {
+  if (!elt || typeof elt.querySelector !== "function") return null;
+  if (elt.matches?.("button[data-occurrence]")) return elt;
+  return elt.querySelector("button[data-occurrence]");
+}
+
+function loaderIcon() {
+  const icon = document.getElementById("button-spinner")?.content?.querySelector(".icon");
+  return icon ? icon.cloneNode(true) : null;
+}
+
+function holdOccurrenceButton(button) {
+  if (!button || button.dataset.held === "1") return;
+  const icon = loaderIcon();
+  if (!icon) return;
+  const width = button.offsetWidth;
+  const height = button.offsetHeight;
+  button.dataset.held = "1";
+  button.dataset.label = button.innerHTML;
+  if (!button.hasAttribute("aria-label")) {
+    button.dataset.named = "1";
+    button.setAttribute("aria-label", button.textContent.replace(/\s+/g, " ").trim());
+  }
+  button.style.minWidth = width + "px";
+  button.style.minHeight = height + "px";
+  button.replaceChildren(icon);
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+}
+
+function releaseOccurrenceButton(button) {
+  if (!button || button.dataset.held !== "1" || !button.isConnected) return;
+  button.innerHTML = button.dataset.label || "";
+  if (button.dataset.named) button.removeAttribute("aria-label");
+  button.disabled = false;
+  button.removeAttribute("aria-busy");
+  button.style.minWidth = "";
+  button.style.minHeight = "";
+  delete button.dataset.held;
+  delete button.dataset.label;
+  delete button.dataset.named;
+}
+
+document.addEventListener("htmx:beforeRequest", (event) => {
+  holdOccurrenceButton(occurrenceButton(event.detail?.elt));
+});
+
+document.addEventListener("htmx:afterRequest", (event) => {
+  releaseOccurrenceButton(occurrenceButton(event.detail?.elt));
+});
+
 // Tracker pages refresh themselves (the autoRefresh partial). Skip it while the tab is
 // hidden, a form field has focus, a details section is open, or a request is in flight.
 window.trackerIdle = function () {

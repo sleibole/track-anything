@@ -580,6 +580,28 @@ html[data-reordering] * {
   margin: 0;
 }
 
+/* The loader replaces the label. It stays the button's text color, including on a disabled button. */
+button[data-occurrence][aria-busy="true"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+}
+
+button[data-occurrence][aria-busy="true"]::before {
+  content: none;
+  display: none;
+}
+
+button[data-occurrence][aria-busy="true"] .icon {
+  flex: none;
+  animation: loader-spin 0.7s linear infinite;
+}
+
+@keyframes loader-spin {
+  to { transform: rotate(360deg); }
+}
+
 .log-buttons > :first-child {
   flex: 1;
 }

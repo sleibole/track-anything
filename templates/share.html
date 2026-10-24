@@ -20,7 +20,7 @@
     <summary>{{if .Tracker.IsDuration}}Log a duration{{else}}Log a value{{end}}</summary>
     <form method="post" action="/s/{{.Token}}/entries" hx-post="/s/{{.Token}}/entries">
       {{template "valueFields" .}}
-      <button type="submit">Log</button>
+      <button type="submit" data-occurrence>Log</button>
     </form>
   </details>
   {{end}}

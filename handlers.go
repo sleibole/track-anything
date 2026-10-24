@@ -199,6 +199,7 @@ func (a *app) dashboardGroups(u *User) ([]householdGroup, error) {
 			}
 			c.Back = "/"
 			c.Reorder = true
+			c.NumberField = t.IsNumber()
 			g.Cards = append(g.Cards, c)
 		}
 		groups = append(groups, g)

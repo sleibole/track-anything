@@ -818,3 +818,34 @@ func TestLastOccurrenceSummary(t *testing.T) {
 		t.Fatalf("recorded zero counted as an occurrence: %q, want %q", got, want)
 	}
 }
+
+func TestOccurrenceButtonsUseTheLoader(t *testing.T) {
+	ts := newTestServer(t)
+	b := ts.browser(t)
+	b.signup("dog@example.com", "")
+	h := ts.personalHousehold(t, "dog@example.com")
+	tr := b.createTracker(h, "Dog ate", url.Values{"log_label": {"+ Ate"}})
+
+	home := b.get("/").body
+	if !strings.Contains(home, `data-occurrence>&#43; Ate</button>`) || !strings.Contains(home, `id="button-spinner"`) || !strings.Contains(home, `M12 3a9 9 0 1 0 9 9`) {
+		t.Fatal("log button is not set up to swap in the loader")
+	}
+	b.post(fmt.Sprintf("/trackers/%d/quick", tr.ID), nil)
+	logged := b.get("/").body
+	if !strings.Contains(logged, `data-occurrence>`) || !strings.Contains(logged, `outline" data-occurrence>`) {
+		t.Fatal("undo button is not set up to swap in the loader")
+	}
+	page := b.get(fmt.Sprintf("/trackers/%d", tr.ID)).body
+	if !strings.Contains(page, `class="quiet" data-occurrence>Undo</button>`) || !strings.Contains(page, `data-occurrence>Log</button>`) {
+		t.Fatal("tracker page log or entry undo is missing the loader hook")
+	}
+	script := b.get("/static/app.js").body
+	for _, want := range []string{"button-spinner", "button[data-occurrence]", "aria-busy", "replaceChildren"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("app.js missing %q", want)
+		}
+	}
+	if css := b.get("/static/app.css").body; !strings.Contains(css, "loader-spin") || !strings.Contains(css, `button[data-occurrence][aria-busy="true"]`) {
+		t.Fatal("loader animation missing")
+	}
+}

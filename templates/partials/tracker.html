@@ -7,7 +7,7 @@
   <p class="tracker-summary" data-summary data-count="{{.Count}}" data-summary-display="{{.Tracker.SummaryMode}}" data-time-zone="{{.Zone}}">{{.Summary}}</p>
   {{with .Carry}}<p class="carry">{{.}}</p>{{end}}
   <div class="log-buttons">
-    {{if and .LogAgain .Tracker.IsNumber}}
+    {{if and .Tracker.IsNumber (or .LogAgain .NumberField)}}
     <form class="log-again" method="post" action="{{.EntriesURL}}" hx-post="{{.EntriesURL}}" data-quick>
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <input type="hidden" name="log_again" value="1">
@@ -18,17 +18,17 @@
         </span>
         {{with .Error}}<p role="alert" class="error">{{.}}</p>{{end}}
       </div>
-      <button type="submit">Log again</button>
+      <button type="submit" data-occurrence>{{if .LogAgain}}Log again{{else}}{{.Tracker.Label}}{{end}}</button>
     </form>
     {{else if .LogAgain}}
     <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick>
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
-      <button type="submit">Log again</button>
+      <button type="submit" data-occurrence>Log again</button>
     </form>
     {{else if .Tracker.IsCount}}
     <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick>
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
-      <button type="submit">{{.Tracker.Label}}</button>
+      <button type="submit" data-occurrence>{{.Tracker.Label}}</button>
     </form>
     {{else if .Link}}
     <a href="{{.Link}}" role="button">{{.Tracker.Label}}</a>
@@ -36,7 +36,7 @@
     {{with .UndoURL}}
     <form method="post" action="{{.}}" hx-post="{{.}}">
       {{with $.Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
-      <button type="submit" class="secondary outline">{{icon "arrow-back-up"}} Undo</button>
+      <button type="submit" class="secondary outline" data-occurrence>{{icon "arrow-back-up"}} Undo</button>
     </form>
     {{end}}
   </div>
@@ -92,7 +92,7 @@
   {{if .By}}<small class="muted">{{if .ViaLink}}via share link{{else}}by {{.By}}{{end}}</small>{{end}}
   {{with .UndoURL}}
   <form method="post" action="{{.}}" hx-post="{{.}}" class="inline">
-    <button type="submit" class="quiet">Undo</button>
+    <button type="submit" class="quiet" data-occurrence>Undo</button>
   </form>
   {{end}}
   {{if .Owner}}
