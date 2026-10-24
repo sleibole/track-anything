@@ -8,7 +8,7 @@ This is a small, practical guide, not a formal design system. Pico.css supplies 
 
 - **Calm notebook, mobile-first.** Fast to log, easy to review, and the same card pattern for the dog's meals now and a workout measurement later. A family calendar is loose inspiration for recognizable icons, soft colors, and approachable cards. Keep each screen less crowded than that: one primary action, the name always readable, no illustrated scenes, and no gradients.
 - **Pico's class build.** `pico.min.css` styles elements and classes such as `container`, `outline`, and `secondary`. Custom classes in `app.css` cover what Pico does not. Keep `app.css` small.
-- **Pico's color, including dark mode.** Pico is the only UI palette. The brand blue is Pico's primary (`#0172ad` in the install theme color). The app icon is Tabler tally marks on that blue. A tracker may add one optional accent from a small built-in set of soft tints, on its card and icon only. The accent helps recognition and is never the only label. It has to stay clear in light and dark. Chrome icons use `currentColor` so they follow text color, including dark mode and button hover.
+- **Pico's color, including dark mode.** Pico is the only UI palette. The installed app icon is the teal tally, and the install theme color is that teal (`#0F766E`). A tracker may add one optional accent from a small built-in set of soft tints, on its card and icon only. The accent helps recognition and is never the only label. It has to stay clear in light and dark. Chrome icons use `currentColor` so they follow text color, including dark mode and button hover.
 - **Obvious in a glance.** No decorative chrome. A tracker card is a name, an icon, a summary, and a button.
 
 ## Page layout
@@ -194,7 +194,9 @@ Logged out: **Log in** and **Sign up** in the header. Logged in: **Charts**, set
 
 Tabler instead of Font Awesome: an icon font or a JavaScript loader is the wrong trade here, and Font Awesome's CC BY license was a worse fit.
 
-Chrome icons, the ones the app itself uses: `tallymarks` (the brand mark, also the app icon and the default tracker icon), `plus`, `arrow-back-up` (undo), `loader` (log and undo while the request is in flight), `trash`, `pencil`, `chart-line`, `settings`, `share`, `users`, `archive`, `calendar`, `link`, `logout`, `grip-vertical` (reorder). Form labels add `mail` (email), `lock` (password), `lock-check` (confirm password), and `timezone`.
+Chrome icons, the ones the app itself uses: `tallymarks` (the header brand mark and the default tracker icon), `plus`, `arrow-back-up` (undo), `loader` (log and undo while the request is in flight), `trash`, `pencil`, `chart-line`, `settings`, `share`, `users`, `archive`, `calendar`, `link`, `logout`, `grip-vertical` (reorder). Form labels add `mail` (email), `lock` (password), `lock-check` (confirm password), and `timezone`.
+
+The favicon, Apple touch icon, and home-screen icons are the teal tally artwork in `static/`. They are separate from these in-page icons.
 
 The tracker picker is a separate handful, described under **Screens**. Copy in a Tabler SVG when it joins that picker. Emoji in the picker are text, not SVGs. Do not offer the whole Tabler set, and do not accept an uploaded icon in the first version.
 

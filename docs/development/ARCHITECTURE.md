@@ -34,7 +34,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 | Frontend | HTMX (vendored `htmx.min.js`) | Served from `/static`, no CDN |
 | Charts | Chart.js 4.5.1, vendored `chart.umd.min.js` | Count, number, and duration charts on the tracker page and on `GET /charts`. One overlay is vertical bands from a small plugin in `chart.js`. Loaded only when that chart is present. Logging does not depend on it. |
 | CSS | Pico.css (vendored `pico.min.css`) | The class build, not the classless one. Minimal custom CSS. Visual rules are in `DESIGN.md` |
-| Icons | Tabler, individual SVGs vendored and embedded | MIT. Inlined so `stroke="currentColor"` follows Pico, including dark mode. A tracker's own icon is an allow-listed Tabler name or emoji. |
+| Icons | Tabler, individual SVGs vendored and embedded | MIT. Inlined so `stroke="currentColor"` follows Pico, including dark mode. A tracker's own icon is an allow-listed Tabler name or emoji. The installed app icon is the separate teal tally artwork under `static/`. |
 | Payments | Not built | Paddle is the planned merchant of record for phase 5. There is no billing code |
 | Ads | Not built | AdSense is phase 5, after the app is live |
 | Bot protection | Cloudflare Turnstile | Managed mode on signup, login (password and magic link), and change password. The server calls Siteverify. This does not replace CSRF or rate limits |
@@ -100,10 +100,10 @@ track-anything/
 │   ├── pico.min.css
 │   ├── app.css
 │   ├── manifest.webmanifest
-│   ├── icon.svg        # app icon source and favicon: Tabler tally marks on Pico blue
-│   ├── icon-192.png
-│   ├── icon-512.png    # also the maskable icon; the artwork has safe-zone padding
-│   └── apple-touch-icon.png
+│   ├── favicon.ico        # 16, 32, 48, 64, 128, and 256 frames of the teal tally
+│   ├── icon.svg           # favicon: teal tally mark
+│   ├── apple-touch-icon.png  # 180px Apple touch icon
+│   └── icons/             # teal tally PWA icons: standard, maskable, Apple sizes, favicon PNGs
 ├── scripts/
 │   └── dev-server.sh   # named Air servers for concurrent agents
 ├── .air.toml           # Air config for local autoreload
@@ -536,9 +536,9 @@ Set on connect:
 
 ## Installable web app
 
-- `manifest.webmanifest` with `name`, `start_url: "/"`, `display: "standalone"`, and 192 and 512 icons. The 512 icon is also the maskable icon; the artwork has safe-zone padding.
-- Apple touch icon, `apple-mobile-web-app-capable`, and `mobile-web-app-capable`. iOS still adds the icon from Share → Add to Home Screen.
-- iOS shows an `apple-touch-startup-image` on home-screen launch when the image's pixel size matches the device and orientation. Those images are drawn from the 512 icon, centered on white in light mode and on `#13171f` in dark mode, for current iPhone and iPad sizes. A size with no image still shows the blank screen. iPad Split View and Stage Manager do not match a full-screen image. Android's splash still comes from the manifest `background_color` and icons. Changing a startup image means removing the home-screen icon and adding it again; iOS keeps the image from the moment it was added.
+- `manifest.webmanifest` with `name`, `id` and `start_url` of `/`, `display: "standalone"`, theme color `#0F766E`, and background `#FAFAF7`. Icons are the teal tally: 192 and 512 for `purpose: any`, and separate 192 and 512 maskable icons whose artwork sits inside the safe circle.
+- Favicon (`favicon.ico`, 16 and 32 PNG, and `icon.svg`), Apple touch icons (180, and 120, 152, and 167), `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, and `mobile-web-app-capable`. iOS still adds the icon from Share → Add to Home Screen.
+- iOS shows an `apple-touch-startup-image` on home-screen launch when the image's pixel size matches the device and orientation. Those images are drawn from `static/icons/icon-512.png`, centered on white in light mode and on `#13171f` in dark mode, for current iPhone and iPad sizes. A size with no image still shows the blank screen. iPad Split View and Stage Manager do not match a full-screen image. Android's splash still comes from the manifest `background_color` and icons. Changing a startup image means removing the home-screen icon and adding it again; iOS keeps the image from the moment it was added.
 - The logged-out home and the dashboard include a short offer on a phone. When the browser fires `beforeinstallprompt`, the offer is an Add to Home Screen button that opens the browser's install dialog. On iPhone and iPad it names Share, then Add to Home Screen. Other phones point at the browser menu (Install app or Add to Home screen). A page opened inside another app's browser says to open Safari or Chrome. The offer is not shown on a computer, when the app is already open from the home screen, or after Not now. Not now is remembered in `localStorage` on that device. Login, settings, tracker pages, and share pages do not include it.
 - No service worker through phase 5, so deploys do not leave stale CSS and JS. Add a minimal worker only if the install option is missing on a real phone, and that fallback does not cache pages. The later offline-logging worker is specified under Offline logging. While online it prefers the network, so a deploy still reaches the new pages.
 - The manifest is served as `application/manifest+json`.

@@ -68,7 +68,7 @@ var (
 
 func loadSplashIcon() (image.Image, error) {
 	splashIconOnce.Do(func() {
-		b, err := embedded.ReadFile("static/icon-512.png")
+		b, err := embedded.ReadFile("static/icons/icon-512.png")
 		if err != nil {
 			splashIconErr = err
 			return
