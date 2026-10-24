@@ -2,13 +2,13 @@
 
 How Track Anything should look and behave. Product scope is `PLAN.md`. Implementation is `ARCHITECTURE.md`. User help, when it exists, belongs in `docs/help/`.
 
-This is a small, practical guide, not a formal design system. Pico.css supplies type, spacing, color, buttons, and cards. Custom CSS is for the cases Pico does not already cover.
+This is a small, practical guide, not a formal design system. Pico.css supplies type, spacing, buttons, and cards. Brand color lives in `static/theme.css`. Other custom CSS is for the cases Pico does not already cover.
 
 ## Visual language
 
 - **Calm notebook, mobile-first.** Fast to log, easy to review, and the same card pattern for the dog's meals now and a workout measurement later. A family calendar is loose inspiration for recognizable icons, soft colors, and approachable cards. Keep each screen less crowded than that: one primary action, the name always readable, no illustrated scenes, and no gradients.
 - **Pico's class build.** `pico.min.css` styles elements and classes such as `container`, `outline`, and `secondary`. Custom classes in `app.css` cover what Pico does not. Keep `app.css` small.
-- **Pico's color, including dark mode.** Pico is the only UI palette. The installed app icon is the teal tally, and the install theme color is that teal (`#0F766E`). A tracker may add one optional accent from a small built-in set of soft tints, on its card and icon only. The accent helps recognition and is never the only label. It has to stay clear in light and dark. Chrome icons use `currentColor` so they follow text color, including dark mode and button hover.
+- **Teal on Pico, including dark mode.** Pico supplies type, spacing, layout, and components, and it follows the system color scheme. `static/theme.css` loads after Pico and is the only place that sets the brand, using Pico's color variables. Light mode uses deep teal `#0F766E` (hover `#115E59`), warm white `#FAFAF7`, white cards and fields, and slate text `#1E293B`. Mint `#5EEAD4` is a text selection and a dark-mode accent. It is not a fill behind white text. Dark mode keeps dark neutral surfaces, uses a lighter teal for links and focus, and keeps white text on the deep teal buttons. Secondary actions stay Pico's secondary color. Success, warning, error, and delete colors stay Pico's. The installed app icon is the teal tally, and the install theme color is `#0F766E`. A tracker may add one optional accent from a small built-in set of soft tints, on its card and icon only. The accent helps recognition and is never the only label. It has to stay clear in light and dark. Chrome icons use `currentColor` so they follow text color, including dark mode and button hover.
 - **Obvious in a glance.** No decorative chrome. A tracker card is a name, an icon, a summary, and a button.
 
 ## Page layout

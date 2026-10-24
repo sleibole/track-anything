@@ -1,0 +1,114 @@
+/* Brand colors for Pico 2.1.1. Load this after pico.min.css.
+   Typography, spacing, layout, and component rules stay in Pico.
+   These selectors match Pico's so they override its color tokens
+   and still follow the system scheme, including an explicit data-theme. */
+
+:host(:not([data-theme="dark"])),
+:root:not([data-theme="dark"]),
+[data-theme="light"] {
+  --pico-background-color: #fafaf7;
+  --pico-color: #1e293b;
+  --pico-text-selection-color: rgba(94, 234, 212, 0.45);
+  --pico-muted-border-color: #e7e5e4;
+  --pico-primary: #0f766e;
+  --pico-primary-background: #0f766e;
+  --pico-primary-border: var(--pico-primary-background);
+  --pico-primary-underline: rgba(15, 118, 110, 0.5);
+  --pico-primary-hover: #115e59;
+  --pico-primary-hover-background: #115e59;
+  --pico-primary-hover-border: var(--pico-primary-hover-background);
+  --pico-primary-hover-underline: var(--pico-primary-hover);
+  --pico-primary-focus: #0f766e;
+  --pico-primary-inverse: #fff;
+  --pico-h1-color: #1e293b;
+  --pico-h2-color: #1e293b;
+  --pico-h3-color: #1e293b;
+  --pico-h4-color: #334155;
+  --pico-h5-color: #334155;
+  --pico-h6-color: #475569;
+  --pico-card-background-color: #fff;
+  --pico-card-sectioning-background-color: #fff;
+  --pico-form-element-background-color: #fff;
+  --pico-form-element-color: #1e293b;
+  --pico-form-element-active-background-color: #fff;
+  --pico-form-element-active-border-color: var(--pico-primary);
+  --pico-form-element-focus-color: var(--pico-primary);
+  --pico-dropdown-background-color: #fff;
+  --pico-dropdown-border-color: #e7e5e4;
+}
+
+/* Lighter teal for links, outlines, and focus. Filled controls stay
+   #0f766e so the white label, check, and switch thumb keep contrast.
+   Mint is the hover and focus accent, not a fill behind white text. */
+@media only screen and (prefers-color-scheme: dark) {
+  :host(:not([data-theme])),
+  :root:not([data-theme]) {
+    --pico-background-color: #13171f;
+    --pico-color: #c2c7d0;
+    --pico-text-selection-color: rgba(94, 234, 212, 0.28);
+    --pico-muted-border-color: #202632;
+    --pico-primary: #2dd4bf;
+    --pico-primary-background: #0f766e;
+    --pico-primary-border: var(--pico-primary-background);
+    --pico-primary-underline: rgba(45, 212, 191, 0.55);
+    --pico-primary-hover: #5eead4;
+    --pico-primary-hover-background: #115e59;
+    --pico-primary-hover-border: var(--pico-primary-hover-background);
+    --pico-primary-hover-underline: var(--pico-primary-hover);
+    --pico-primary-focus: #5eead4;
+    --pico-primary-inverse: #fff;
+    --pico-h1-color: #f0f1f3;
+    --pico-h2-color: #e0e3e7;
+    --pico-h3-color: #c2c7d0;
+    --pico-h4-color: #b3b9c5;
+    --pico-h5-color: #a4acba;
+    --pico-h6-color: #8891a4;
+    --pico-card-background-color: #181c25;
+    --pico-card-sectioning-background-color: rgb(26, 30.5, 40.25);
+    --pico-form-element-background-color: rgb(28, 33, 43.5);
+    --pico-form-element-color: #e0e3e7;
+    --pico-form-element-active-background-color: rgb(26, 30.5, 40.25);
+    --pico-form-element-active-border-color: #2dd4bf;
+    --pico-form-element-focus-color: #2dd4bf;
+    --pico-dropdown-background-color: #181c25;
+    --pico-dropdown-border-color: #202632;
+  }
+}
+
+[data-theme="dark"] {
+  --pico-background-color: #13171f;
+  --pico-color: #c2c7d0;
+  --pico-text-selection-color: rgba(94, 234, 212, 0.28);
+  --pico-muted-border-color: #202632;
+  --pico-primary: #2dd4bf;
+  --pico-primary-background: #0f766e;
+  --pico-primary-border: var(--pico-primary-background);
+  --pico-primary-underline: rgba(45, 212, 191, 0.55);
+  --pico-primary-hover: #5eead4;
+  --pico-primary-hover-background: #115e59;
+  --pico-primary-hover-border: var(--pico-primary-hover-background);
+  --pico-primary-hover-underline: var(--pico-primary-hover);
+  --pico-primary-focus: #5eead4;
+  --pico-primary-inverse: #fff;
+  --pico-h1-color: #f0f1f3;
+  --pico-h2-color: #e0e3e7;
+  --pico-h3-color: #c2c7d0;
+  --pico-h4-color: #b3b9c5;
+  --pico-h5-color: #a4acba;
+  --pico-h6-color: #8891a4;
+  --pico-card-background-color: #181c25;
+  --pico-card-sectioning-background-color: rgb(26, 30.5, 40.25);
+  --pico-form-element-background-color: rgb(28, 33, 43.5);
+  --pico-form-element-color: #e0e3e7;
+  --pico-form-element-active-background-color: rgb(26, 30.5, 40.25);
+  --pico-form-element-active-border-color: #2dd4bf;
+  --pico-form-element-focus-color: #2dd4bf;
+  --pico-dropdown-background-color: #181c25;
+  --pico-dropdown-border-color: #202632;
+}
+
+/* The inline style in the layout is the pre-paint color. Pico sets the
+   page background on :where(:root), which loses to that rule. */
+html {
+  background-color: var(--pico-background-color);
+}

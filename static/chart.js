@@ -79,8 +79,8 @@
       if (bands.length === 0) return;
 
       const ctx = chart.ctx;
-      const fill = mixAlpha(cssVar("--pico-primary", "#0172ad"), 28);
-      const cap = mixAlpha(cssVar("--pico-primary", "#0172ad"), 70);
+      const fill = mixAlpha(cssVar("--pico-primary", "#0f766e"), 28);
+      const cap = mixAlpha(cssVar("--pico-primary", "#0f766e"), 70);
       ctx.save();
       ctx.beginPath();
       ctx.rect(area.left, area.top, area.right - area.left, area.bottom - area.top);
@@ -381,7 +381,7 @@
     const overlay = readOverlay();
     const hasBands = !!(overlay && overlay.days.length > 0);
     const dayTip = !!(canvas.parentElement && canvas.parentElement.querySelector(".chart-tip"));
-    const primary = cssVar("--pico-primary", "#0172ad");
+    const primary = cssVar("--pico-primary", "#0f766e");
     const muted = cssVar("--pico-muted-color", "#5c6b7a");
     const grid = cssVar("--pico-muted-border-color", "rgba(128, 128, 128, 0.35)");
     const font = getComputedStyle(document.body).fontFamily;
@@ -472,7 +472,7 @@
     const hasBands = !!(overlay && overlay.days.length > 0);
     const dayTip = !!(canvas.parentElement && canvas.parentElement.querySelector(".chart-tip"));
     const duration = chartData.kind === "duration";
-    const primary = cssVar("--pico-primary", "#0172ad");
+    const primary = cssVar("--pico-primary", "#0f766e");
     const muted = cssVar("--pico-muted-color", "#5c6b7a");
     const grid = cssVar("--pico-muted-border-color", "rgba(128, 128, 128, 0.35)");
     const font = getComputedStyle(document.body).fontFamily;
