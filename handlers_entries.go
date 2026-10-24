@@ -217,6 +217,10 @@ func (a *app) handleLogEntry(w http.ResponseWriter, r *http.Request) {
 		occurred, msg = parseEntryTime(v, loc, now)
 	}
 	if msg != "" {
+		if r.PostFormValue("log_again") == "1" {
+			a.renderNumberLogError(w, r, t, role, msg)
+			return
+		}
 		a.renderTrackerError(w, r, t, role, msg)
 		return
 	}
@@ -230,6 +234,36 @@ func (a *app) handleLogEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirectBack(w, r, trackerURL(t))
+}
+
+// renderNumberLogError keeps a failed Log again inside the tracker that was submitted.
+// HTMX swaps that tracker's log control. A plain submit re-renders the tracker page
+// with the message on the control, not in a banner above the page.
+func (a *app) renderNumberLogError(w http.ResponseWriter, r *http.Request, t Tracker, role, msg string) {
+	u := currentUser(r)
+	loc := location(u.TimeZone)
+	if r.Header.Get("HX-Request") == "true" {
+		c, err := a.card(t, loc, a.now(), &u.ID)
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		applyInlineLogError(&c, r, t, msg)
+		a.writeLogControl(w, r, http.StatusUnprocessableEntity, "tracker_show.html", c)
+		return
+	}
+	overlay, err := a.resolveOverlay(u.ID, t, requestedOverlayID(r))
+	if err != nil {
+		a.lookupError(w, r, err)
+		return
+	}
+	p, err := a.trackerPage(t, role, u, overlay)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	applyInlineLogError(&p.Card, r, t, msg)
+	a.render(w, r, http.StatusUnprocessableEntity, "tracker_show.html", p)
 }
 
 // handleLogHistoryDay records one event on an earlier count-history day that is still

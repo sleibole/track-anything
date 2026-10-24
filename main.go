@@ -315,7 +315,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /s/{token}/zeros/{zid}/undo", a.handleShareUndoZero)
 
 	csrf := http.NewCrossOriginProtection()
-	return a.recoverPanic(a.logRequests(securityHeaders(csrf.Handler(a.loadUser(mux)))))
+	return a.recoverPanic(a.logRequests(a.securityHeaders(limitBody(csrf.Handler(a.loadUser(mux))))))
 }
 
 const authCleanupInterval = time.Hour

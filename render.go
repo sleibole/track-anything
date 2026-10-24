@@ -75,6 +75,7 @@ func (a *app) renderBlock(w http.ResponseWriter, r *http.Request, status int, pa
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "private, no-store")
 	w.WriteHeader(status)
 	buf.WriteTo(w)
 }

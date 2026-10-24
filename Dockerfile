@@ -1,4 +1,5 @@
-FROM golang:1.27 AS build
+# Keep this patch in step with the toolchain line in go.mod.
+FROM golang:1.27.3 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

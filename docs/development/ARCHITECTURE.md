@@ -20,7 +20,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 
 | Concern | Choice | Notes |
 | --- | --- | --- |
-| Language | Go 1.27 | `go.mod` requires 1.27. Method and wildcard routing use `net/http` |
+| Language | Go 1.27 | `go.mod` requires 1.27. The `toolchain` line and the Docker image pin the patched release, currently go1.27.3 |
 | HTTP routing | `net/http` `ServeMux` | Patterns like `GET /trackers/{id}` |
 | Templates | `html/template` | Auto-escaping, layouts via `{{block}}` / `{{template}}` |
 | Static files and templates | `embed` | Ship a single binary |
@@ -336,7 +336,7 @@ The binary embeds zone data with `import _ "time/tzdata"` so the IANA database e
 
 Prefill from the tracker's most recent entry by `OccurredAt`, then `id`, so a later row wins a tie. `latestEntry` is that query.
 
-A backfilled older entry must not win. Only the value carries forward. **Log again** posts to the same quick-log route as a count and copies that stored value. A number or duration in the request body is ignored. No previous value means the route refuses and the page does not show **Log again**.
+A backfilled older entry must not win. Only the value carries forward. A duration's **Log again** posts to the same quick-log route as a count and copies that stored value. A number or duration in that request body is ignored. A number tracker's **Log again** is a field prefilled with the stored value and posts to the entries route, so the submitted number is what is stored. A validation error is returned as that tracker's log control (`HX-Retarget`), not as a page-level message. No previous value means the quick route refuses and the page does not show **Log again**.
 
 A duration is stored as whole seconds and shown as `45 sec`, `25 min`, or `1 hr 10 min`. The form is hours (0–99), minutes (0–59), and seconds (0–59). Zero is rejected. A number has to be finite and within 1e9. Negative numbers are allowed.
 
@@ -390,8 +390,8 @@ POST   /trackers/{id}/delete      permanently delete, with confirmation (owner, 
 POST   /trackers/{id}/share       turn on or regenerate share link (owner)
 POST   /trackers/{id}/share/delete turn share link off (owner)
 
-POST   /trackers/{id}/quick       log now. A count records an event. A number or duration repeats the carried value. Log again uses this route.
-POST   /trackers/{id}/entries     log now with an optional note and, for a number or duration, a value. Owners may set the time.
+POST   /trackers/{id}/quick       log now. A count records an event. A number or duration repeats the carried value. A number in the body is ignored. Duration Log again uses this route.
+POST   /trackers/{id}/entries     log now with an optional note and, for a number or duration, a value. Owners may set the time. A number tracker's Log again posts its value field here.
 POST   /trackers/{id}/zero        record none for today (any member) or an earlier day (owner). Count trackers only.
 POST   /trackers/{id}/day         log noon on an earlier unlogged day (owner, count trackers). Refused when that day already has an entry or a recorded zero.
 POST   /entries/{eid}/undo        delete an entry created in the last 15 minutes (any member)
@@ -401,8 +401,8 @@ POST   /zeros/{zid}/undo          undo a recorded zero from the last 15 minutes 
 POST   /zeros/{zid}/delete        clear an older recorded zero (owner)
 
 GET    /s/{token}                 share page: name, icon, the same summary line as the card, log button, today's entries
-POST   /s/{token}/quick           log now via the link. A number or duration repeats the carried value.
-POST   /s/{token}/entries         log a number or duration now via the link. No note and no chosen time.
+POST   /s/{token}/quick           log now via the link. A number or duration repeats the carried value. A number in the body is ignored. Duration Log again uses this route.
+POST   /s/{token}/entries         log a number or duration now via the link. No note and no chosen time. A number tracker's Log again posts its value field here.
 POST   /s/{token}/zero            record none for today via the link. Count trackers only.
 POST   /s/{token}/entries/{eid}/undo  undo a recent entry via the link
 POST   /s/{token}/zeros/{zid}/undo    undo a recent recorded zero via the link
@@ -424,7 +424,7 @@ The render helper checks `HX-Request` and returns either the full page or a part
 - **Forms post, then redirect.** Every form works as a plain `POST` that redirects back to its page. With HTMX, the form also has `hx-post`; HTMX follows the redirect, the page comes back as its content block, and `<main>` is swapped in place. Handlers have one code path either way.
 - **Log button**: a small delegated handler in `app.js` updates the summary on tap before the response arrives. The optimistic line follows the tracker's summary display: the next Times today count, "Done today", or "Last" at the current time. The server response replaces it. If the request fails or never reaches the server, the previous line is restored and a short inline message says it was not saved. Nothing is queued. The Done today attribute value is `done`. The later offline path is separate. See Offline logging.
 - **Tracker pages refresh themselves.** Home, the tracker page, and the share page include a hidden element that re-fetches the page's own GET every 30 seconds, and when the tab becomes visible again (`hx-trigger="every 30s [trackerIdle()], visibilitychange[trackerIdle()] from:document"`). The response is the usual content block, swapped into `<main>`, so the element replaces itself and its timer starts over. `trackerIdle()` in `app.js` skips the refresh while the tab is hidden, a field in the page has focus, any `<details>` is open, or another HTMX request is in flight. Any other HTMX request aborts a refresh already on its way, so it cannot land after a log. Edit forms, the household page, settings, and account screens do not refresh.
-- **Errors swap too.** The `htmx-config` meta tag swaps 4xx responses, so a validation message or "too late to undo" appears in place.
+- **Errors swap too.** The `htmx-config` meta tag swaps 4xx responses, so a validation message or "too late to undo" appears in place. A number **Log again** error sends `HX-Retarget` for that tracker's log control, so the message stays on the card.
 - Signup, login, and change password stay full-page posts. A successful login has to replace the header, which lives outside the HTMX swap target. The Turnstile script is in the layout of those pages only. A failed submit is a new page with a new widget, because the previous token cannot be reused. If an HTMX response does include the form, `app.js` renders a widget for any `.cf-turnstile` element that is not already mounted.
 - Owner deletes, member removal, promotion, invite regeneration, leaving a household, and moving a tracker use `hx-confirm`.
 
@@ -484,13 +484,18 @@ The range is a `chartSpan`. Empty or `30d` is `chartDays` (30). `90d` is 90 loca
 
 `GET /trackers/{id}/export` is owner-only. Someone who cannot see the tracker gets a 404. A member gets the usual owner refusal. The body is `text/csv` from `encoding/csv`. Columns, in order: `type`, `occurred_at`, `day`, `value`, `unit`, `duration_seconds`, `duration`, `note`, `recorded_by`, `via_link`.
 
-`type` is `entry` or `recorded_zero`. `occurred_at` is UTC RFC3339 for an entry and empty for a recorded zero. `day` is the exporter's local calendar day. `value` and `unit` are set for a number entry. `duration_seconds` is the stored length and `duration` is the same length in words. `recorded_by` is an email, empty for a share link. `via_link` is `true` or `false`. Rows are oldest first. A recorded zero is its own row, so it is not dropped from a count export.
+`type` is `entry` or `recorded_zero`. `occurred_at` is UTC RFC3339 for an entry and empty for a recorded zero. `day` is the exporter's local calendar day. `value` and `unit` are set for a number entry. `duration_seconds` is the stored length and `duration` is the same length in words. `recorded_by` is an email, empty for a share link. `via_link` is `true` or `false`. Rows are oldest first. A recorded zero is its own row, so it is not dropped from a count export. `note`, `unit`, and `recorded_by` gain a leading `'` when they start with `=`, `+`, `-`, `@`, tab, or carriage return. The other columns do not, so a negative `value` stays numeric. The apostrophe is part of the field. To recover the original text, strip one leading `'` only when the remainder starts with one of those characters.
 
 ## Security
 
 - Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`. The database stores the sha256 of the cookie value, with an expiry. `ENV=dev` turns off `Secure`.
 - CSRF: `http.CrossOriginProtection` on all non-GET requests, including share-link posts.
 - Response headers on every page: `X-Content-Type-Options: nosniff`, `Content-Security-Policy: frame-ancestors 'none'`, and `Referrer-Policy: same-origin`. Share pages replace the referrer policy with `no-referrer` and add `X-Robots-Tag: noindex`. There is no broader content-security policy.
+- Production (`ENV=prod`) also sends `Strict-Transport-Security: max-age=15552000`. Dev does not. There is no `includeSubDomains` and no `preload`. The header does not redirect HTTP to HTTPS; the public edge does that. If the edge strips this header, set the same value there. Do not publish two different `max-age` values.
+- Request bodies other than `GET`, `HEAD`, and `OPTIONS` are limited to 256 KiB. A declared `Content-Length` above that, or a body that reads past it, is `413` and the handler does not run. The middleware does not parse the form.
+- HTML from `render`, the CSV export, and `/healthz` send `Cache-Control: private, no-store`. `GET /static/` and the splash images do not. Splash stays `public, max-age=86400`.
+- CSV export prefixes `'` on `note`, `unit`, and `recorded_by` when the field starts with `=`, `+`, `-`, `@`, tab, or carriage return. `value`, `duration_seconds`, `duration`, `type`, `occurred_at`, `day`, and `via_link` are unchanged, so a negative measurement stays a number. The apostrophe is part of the CSV field. To recover the original text, strip one leading `'` only when the remainder starts with one of those characters.
+- The binary is built with the Go patch in `go.mod`'s `toolchain` line and the matching `Dockerfile` `FROM`. That is currently go1.27.3.
 - **Share links are bearer tokens.** Anyone holding the URL can log entries. Link visitors can only undo entries from the last 15 minutes.
 - `html/template` escapes output.
 - Request logs record the route pattern for login links, verification links, share links, and invite links (`/login/link/{token}`, `/verify/{token}`, `/s/{token}`, `/join/{token}`). The raw token is not written.
@@ -590,7 +595,7 @@ trackanything container (Go binary, plain HTTP on $PORT)
 
 - **No TLS in the Go server.** It listens on plain HTTP (`ADDR`, or Dokku's `$PORT`).
 - **Health check**: `GET /healthz` needs no session. `200` and a body of `ok` means the process is up and SQLite answered `SELECT 1`. A failed database check is `503` with a generic body; the error is written to the process log. Dokku or the ingress can probe this path.
-- **Build**: a multi-stage `Dockerfile` (`CGO_ENABLED=0`, then a minimal image with the binary). Templates, static files, and time zone data are embedded.
+- **Build**: a multi-stage `Dockerfile` (`CGO_ENABLED=0`, then a minimal image with the binary). The build image is `golang:1.27.3`, the same patch as the `toolchain` line in `go.mod`. Templates, static files, and time zone data are embedded.
 - **Deploy**: `git push dokku main`.
 - **SQLite storage**: `dokku storage:mount` a host directory, e.g. `/var/lib/dokku/data/storage/trackanything:/data`, with `DB_PATH=/data/trackanything.db`. Exactly one instance.
 - **Host header must survive the chain**, for Dokku's routing and the CSRF origin check.
@@ -599,6 +604,7 @@ trackanything container (Go binary, plain HTTP on $PORT)
 - **Client IP.** The current production deployment sets `TRUSTED_IP_HEADER=Fly-Client-IP` because Fly Proxy is the trusted public ingress. Fly Proxy writes the original visitor address in `Fly-Client-IP`. Fly nginx overwrites that header before the request crosses WireGuard to Dokku, so a client-supplied value does not survive. `Fly-Client-IP` is one address, the same shape as `CF-Connecting-IP`. Leave `TRUSTED_IP_HEADER` empty until the origin cannot be reached except through the proxy that sets the header. `CF-Connecting-IP` stays valid when that proxy replaces the header itself. `X-Forwarded-For` is a list; the app uses the first address only when `TRUSTED_IP_HEADER` is set to `X-Forwarded-For` on purpose, after a proxy replaces the header rather than appending to it. The app does not fall back from one header to another and does not assume the configured header is present.
 - **Backups**: [Litestream](https://litestream.io) to S3-compatible storage, or a nightly `sqlite3 .backup` cron job on box to start. The choice can wait while phase 2 is built, but before the first public deploy a method and destination are chosen, configured, and tested by restoring a copy. Live from the first deploy, no exceptions. How long backups keep deleted data stays open until the phase 5 privacy policy.
 - **Before the first public deploy**: the production email relay sends a magic link end to end, and backups run and restore.
+- **Production checks are manual.** This repository does not contain the Fly, WireGuard, or Dokku configuration, and these notes do not prove the live chain. After a deploy, from a network that is not the homelab LAN, confirm: the house IP and Dokku port do not answer; `http://<public-host>/` redirects to HTTPS before any `Set-Cookie`; `https://<public-host>/` includes `strict-transport-security: max-age=15552000` and does not include `includeSubDomains` or `preload`; a browser login succeeds and the app log shows the public host; with `TRUSTED_IP_HEADER=Fly-Client-IP`, rate limiting sees the visitor address and a forged `Fly-Client-IP` or `X-Forwarded-For` at the public hostname does not change it; the session cookie is `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`, with no `Domain`; app logs show `{token}` for share, invite, login-link, and verify paths, and the proxy access logs are checked for the raw token. HTML and CSV responses are `cache-control: private, no-store`. `/static/app.js` is not. Splash stays `public, max-age=86400`.
 
 ### Later: hosting directly on Fly.io
 

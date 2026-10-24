@@ -2,6 +2,8 @@ module trackanything
 
 go 1.27.0
 
+toolchain go1.27.3
+
 require (
 	github.com/glebarez/sqlite v1.11.0
 	golang.org/x/crypto v0.57.0

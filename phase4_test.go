@@ -474,6 +474,84 @@ func TestTrackerCSV(t *testing.T) {
 	}
 }
 
+func TestNumberLogAgainSubmitsTheField(t *testing.T) {
+	ts, owner, _, h := sharedHouse(t)
+	club := owner.createTracker(h, "Weight", url.Values{"kind": {kindNumber}, "unit": {"lb"}})
+	path := fmt.Sprintf("/trackers/%d", club.ID)
+	if r := owner.post(path+"/entries", url.Values{"number": {"10"}}); r.status != http.StatusOK {
+		t.Fatalf("first log: %d", r.status)
+	}
+
+	page := owner.get(path).body
+	if !strings.Contains(page, `class="log-again"`) || !strings.Contains(page, `value="10"`) || !strings.Contains(page, ">Log again</button>") {
+		t.Fatal("log again field was not prefilled")
+	}
+	if !strings.Contains(page, fmt.Sprintf(`action="%s/entries"`, path)) || !strings.Contains(page, `name="log_again"`) {
+		t.Fatal("log again did not post the value field")
+	}
+	home := owner.get("/").body
+	if !strings.Contains(home, `class="log-again"`) || !strings.Contains(home, `value="10"`) || !strings.Contains(home, "Last value: 10 lb") {
+		t.Fatal("home card omitted the value field")
+	}
+
+	logged := owner.post(path+"/entries", url.Values{"number": {"12.5"}, "log_again": {"1"}, "back": {"/"}})
+	if logged.status != http.StatusOK || logged.url.Path != "/" {
+		t.Fatalf("log again: %d at %s", logged.status, logged.url)
+	}
+	if !strings.Contains(logged.body, "Last value: 12.5 lb") || !strings.Contains(logged.body, `value="12.5"`) {
+		t.Fatal("log again did not refresh the last value")
+	}
+	entries := ts.entries(t, club.ID)
+	last := entries[len(entries)-1]
+	if last.Number == nil || formatNumber(*last.Number) != "12.5" || last.Note != "" {
+		t.Fatalf("stored %+v", last)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, ts.srv.URL+path+"/entries", strings.NewReader(url.Values{
+		"number": {"nope"}, "log_again": {"1"}, "back": {"/"},
+	}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	resp, err := owner.c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fragment := string(body)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("bad number: %d %s", resp.StatusCode, fragment)
+	}
+	if resp.Header.Get("HX-Retarget") != fmt.Sprintf("#log-%d", club.ID) || resp.Header.Get("HX-Reswap") != "outerHTML" {
+		t.Fatalf("retarget %q reswap %q", resp.Header.Get("HX-Retarget"), resp.Header.Get("HX-Reswap"))
+	}
+	if !strings.Contains(fragment, "Enter a valid number.") || !strings.Contains(fragment, "Last value: 12.5 lb") || !strings.Contains(fragment, `id="log-`) {
+		t.Fatalf("error left the tracker: %s", fragment)
+	}
+	if strings.Contains(fragment, "Your trackers") || strings.Contains(fragment, "<h1") {
+		t.Fatal("error replaced the page")
+	}
+	if len(ts.entries(t, club.ID)) != 2 {
+		t.Fatal("invalid number was stored")
+	}
+
+	plain := owner.post(path+"/entries", url.Values{"number": {""}, "log_again": {"1"}})
+	if plain.status != http.StatusUnprocessableEntity || !strings.Contains(plain.body, "Enter a number.") || strings.Contains(plain.body, `role="alert" class="error">Enter a number.</p></main>`) {
+		t.Fatal("plain submit put the error outside the tracker")
+	}
+	logAt := strings.Index(plain.body, `id="log-`)
+	errAt := strings.Index(plain.body, "Enter a number.")
+	if logAt < 0 || errAt < logAt {
+		t.Fatal("plain error was not inside the log control")
+	}
+}
+
 func csvRows(t *testing.T, b *browser, trackerID uint) [][]string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, b.ts.srv.URL+fmt.Sprintf("/trackers/%d/export", trackerID), nil)

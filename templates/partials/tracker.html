@@ -1,11 +1,26 @@
 {{/* Tracker fragments shared by home, the tracker page, and the share page. */}}
 
+{{define "logControlFragment"}}{{template "logControl" .Data}}{{end}}
+
 {{define "logControl"}}
-<div class="log-control" data-tracker>
+<div class="log-control" id="log-{{.Tracker.ID}}" data-tracker>
   <p class="tracker-summary" data-summary data-count="{{.Count}}" data-summary-display="{{.Tracker.SummaryMode}}" data-time-zone="{{.Zone}}">{{.Summary}}</p>
   {{with .Carry}}<p class="carry">{{.}}</p>{{end}}
   <div class="log-buttons">
-    {{if .LogAgain}}
+    {{if and .LogAgain .Tracker.IsNumber}}
+    <form class="log-again" method="post" action="{{.EntriesURL}}" hx-post="{{.EntriesURL}}" data-quick>
+      {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
+      <input type="hidden" name="log_again" value="1">
+      <div class="log-again-field">
+        <span class="with-unit">
+          <input type="number" name="number" step="any" inputmode="decimal" value="{{.CarryValue}}" aria-label="Value{{with .Tracker.Unit}} in {{.}}{{end}}"{{if .Error}} aria-invalid="true"{{end}} required>
+          <span>{{.Tracker.Unit}}</span>
+        </span>
+        {{with .Error}}<p role="alert" class="error">{{.}}</p>{{end}}
+      </div>
+      <button type="submit">Log again</button>
+    </form>
+    {{else if .LogAgain}}
     <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick>
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <button type="submit">Log again</button>
@@ -25,6 +40,7 @@
     </form>
     {{end}}
   </div>
+  {{if and .Error (not .Tracker.IsNumber)}}<p role="alert" class="error">{{.Error}}</p>{{end}}
 </div>
 {{end}}
 

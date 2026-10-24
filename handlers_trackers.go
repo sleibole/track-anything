@@ -81,12 +81,14 @@ type trackerCard struct {
 	QuickURL       string
 	UndoURL        string // set while the viewer's latest entry can still be undone
 	Back           string // where the log and undo buttons return; empty means the tracker page
+	EntriesURL     string // number Log again posts the value field here
 	Carry          string // "Last value: 10 lb" or "Last duration: 42 min"; empty when nothing carries forward
 	CarryValue     string // number input, without the unit
 	CarryHours     string
 	CarryMinutes   string
 	CarrySeconds   string
-	LogAgain       bool   // one tap repeats Carry; false when there is no previous value
+	LogAgain       bool   // a duration repeats Carry in one tap; a number shows the value field. False when there is no previous value
+	Error          string // validation message for this tracker; empty when the last submit worked
 	Reorder        bool   // dashboard only: the card has a handle for the viewer's own order
 	HouseholdLabel string // dashboard only: household name on a shared tracker; empty on a personal one
 	HouseholdURL   string
@@ -136,16 +138,18 @@ func cardFor(t Tracker, s todayState, latest *Entry, now time.Time, loc *time.Lo
 		summaryAt = &s.Entries[0].OccurredAt
 	}
 	c := trackerCard{
-		Tracker:  t,
-		Count:    s.Count,
-		Summary:  summaryLine(t.SummaryDisplay, s.Count, s.Zero != nil, summaryAt, loc, now),
-		Zone:     loc.String(),
-		Link:     fmt.Sprintf("/trackers/%d", t.ID),
-		QuickURL: fmt.Sprintf("/trackers/%d/quick", t.ID),
+		Tracker:    t,
+		Count:      s.Count,
+		Summary:    summaryLine(t.SummaryDisplay, s.Count, s.Zero != nil, summaryAt, loc, now),
+		Zone:       loc.String(),
+		Link:       fmt.Sprintf("/trackers/%d", t.ID),
+		QuickURL:   fmt.Sprintf("/trackers/%d/quick", t.ID),
+		EntriesURL: fmt.Sprintf("/trackers/%d/entries", t.ID),
 	}
 	if viewerID == nil {
 		c.Link = ""
 		c.QuickURL = "/s/" + *t.ShareToken + "/quick"
+		c.EntriesURL = "/s/" + *t.ShareToken + "/entries"
 	}
 	var undoable *Entry
 	for i, e := range s.Entries {
@@ -579,6 +583,24 @@ func (a *app) handleShowTracker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, http.StatusOK, "tracker_show.html", p)
+}
+
+// applyInlineLogError keeps a failed number Log again on this tracker: the message
+// sits in the card, and the field keeps what was typed.
+func applyInlineLogError(c *trackerCard, r *http.Request, t Tracker, msg string) {
+	c.Back = r.PostFormValue("back")
+	c.Error = msg
+	if t.IsNumber() {
+		c.CarryValue = r.PostFormValue("number")
+	}
+}
+
+// writeLogControl swaps just this tracker's log control. HX-Retarget keeps a
+// validation error on the card instead of replacing the page.
+func (a *app) writeLogControl(w http.ResponseWriter, r *http.Request, status int, page string, c trackerCard) {
+	w.Header().Set("HX-Retarget", fmt.Sprintf("#log-%d", c.Tracker.ID))
+	w.Header().Set("HX-Reswap", "outerHTML")
+	a.renderBlock(w, r, status, page, "logControlFragment", c)
 }
 
 // renderTrackerError shows the tracker page again with a message above the log form.

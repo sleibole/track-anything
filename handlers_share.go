@@ -85,6 +85,11 @@ func (a *app) renderShareForm(w http.ResponseWriter, r *http.Request, status int
 		p.Hours = r.PostFormValue("hours")
 		p.Minutes = r.PostFormValue("minutes")
 		p.Seconds = r.PostFormValue("seconds")
+		// Log again failed in its own field. Keep the message on that control.
+		if r.PostFormValue("log_again") == "1" {
+			applyInlineLogError(&p.Card, r, t, msg)
+			p.Error = ""
+		}
 	} else {
 		p.NumberValue = card.CarryValue
 		p.Hours = card.CarryHours
@@ -137,6 +142,16 @@ func (a *app) handleShareLogEntry(w http.ResponseWriter, r *http.Request) {
 	}
 	number, duration, msg := readEntryValue(r, t)
 	if msg != "" {
+		if r.PostFormValue("log_again") == "1" && r.Header.Get("HX-Request") == "true" {
+			c, err := a.card(t, loc, a.now(), nil)
+			if err != nil {
+				a.serverError(w, r, err)
+				return
+			}
+			applyInlineLogError(&c, r, t, msg)
+			a.writeLogControl(w, r, http.StatusUnprocessableEntity, "share.html", c)
+			return
+		}
 		a.renderShareForm(w, r, http.StatusUnprocessableEntity, t, loc, msg, true)
 		return
 	}

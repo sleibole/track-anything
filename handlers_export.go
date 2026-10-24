@@ -53,6 +53,7 @@ func (a *app) handleExportTracker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(exportFilename(t)))
 	cw := csv.NewWriter(w)
 	if err := cw.Write(exportHeader); err != nil {
@@ -91,7 +92,7 @@ func exportRows(t Tracker, entries []Entry, zeros []RecordedZero, emails map[uin
 		value, unit, seconds, words := "", "", "", ""
 		if e.Number != nil {
 			value = formatNumber(*e.Number)
-			unit = t.Unit
+			unit = csvText(t.Unit)
 		}
 		if e.DurationSec != nil {
 			seconds = strconv.Itoa(*e.DurationSec)
@@ -104,8 +105,8 @@ func exportRows(t Tracker, entries []Entry, zeros []RecordedZero, emails map[uin
 				e.OccurredAt.UTC().Format(time.RFC3339),
 				localDay(e.OccurredAt, loc),
 				value, unit, seconds, words,
-				e.Note,
-				recordedBy(e.RecordedByID, emails),
+				csvText(e.Note),
+				csvText(recordedBy(e.RecordedByID, emails)),
 				csvBool(e.ViaLink),
 			},
 		})
@@ -123,7 +124,7 @@ func exportRows(t Tracker, entries []Entry, zeros []RecordedZero, emails map[uin
 				z.Day,
 				"", "", "", "",
 				"",
-				recordedBy(z.RecordedByID, emails),
+				csvText(recordedBy(z.RecordedByID, emails)),
 				csvBool(z.ViaLink),
 			},
 		})
@@ -155,6 +156,24 @@ func recordedBy(id *uint, emails map[uint]string) string {
 		return ""
 	}
 	return emails[*id]
+}
+
+// csvText prefixes a leading apostrophe when s starts with a character
+// spreadsheets treat as a formula. encoding/csv keeps that apostrophe in
+// the field. A reader that wants the original text strips one leading '
+// only when the remainder starts with the same characters. A value that
+// already begins with a normal character, including a typed apostrophe,
+// is left unchanged. Numeric columns do not use this helper.
+func csvText(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + s
+	default:
+		return s
+	}
 }
 
 func csvBool(v bool) string {

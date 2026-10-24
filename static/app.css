@@ -590,6 +590,65 @@ html[data-reordering] * {
   margin: 0;
 }
 
+/* A number's Log again field stacks until the tracker itself is wide enough to sit beside the button. */
+.log-control {
+  container-type: inline-size;
+  container-name: log-control;
+}
+
+.log-buttons:has(> form.log-again) {
+  flex-wrap: wrap;
+}
+
+.log-buttons > form.log-again {
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.log-again-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.log-again-field .error {
+  margin: 0;
+}
+
+.log-again .with-unit {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.log-control > .error {
+  margin: 0.75rem 0 0;
+}
+
+@container log-control (min-width: 400px) {
+  .log-buttons:has(.log-again) {
+    align-items: flex-start;
+  }
+
+  .log-buttons > form.log-again {
+    flex-direction: row;
+    flex: 1 1 auto;
+    align-items: flex-start;
+  }
+
+  .log-buttons > form.log-again button {
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
+
 .carry {
   margin: -0.25rem 0 0.75rem;
   color: var(--pico-muted-color);

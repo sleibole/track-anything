@@ -12,6 +12,7 @@ import (
 )
 
 func (a *app) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "private, no-store")
 	sqlDB, err := a.db.DB()
 	if err == nil {
 		var one int
