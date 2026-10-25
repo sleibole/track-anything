@@ -19,6 +19,9 @@ type sharePage struct {
 	Minutes     string
 	Seconds     string
 	Error       string
+	LogDataRev  string
+	LogViewRev  string
+	OOBLog      bool
 }
 
 func (p sharePage) Tracker() Tracker { return p.Card.Tracker }
@@ -61,16 +64,23 @@ func (a *app) renderShare(w http.ResponseWriter, r *http.Request, status int, t 
 }
 
 func (a *app) renderShareForm(w http.ResponseWriter, r *http.Request, status int, t Tracker, loc *time.Location, msg string, posted bool) {
-	now := a.now()
-	today, err := a.loadToday(t, loc, now)
+	p, err := a.buildShare(t, loc, msg, posted, r)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
+	a.render(w, r, status, "share.html", p)
+}
+
+func (a *app) buildShare(t Tracker, loc *time.Location, msg string, posted bool, r *http.Request) (sharePage, error) {
+	now := a.now()
+	today, err := a.loadToday(t, loc, now)
+	if err != nil {
+		return sharePage{}, err
+	}
 	card, err := a.cardView(t, today, loc, now, nil)
 	if err != nil {
-		a.serverError(w, r, err)
-		return
+		return sharePage{}, err
 	}
 	p := sharePage{
 		Card:    card,
@@ -99,12 +109,22 @@ func (a *app) renderShareForm(w http.ResponseWriter, r *http.Request, status int
 			p.Card.Notice = goalNoticeFrom(r.URL.Query(), t.ID)
 		}
 	}
-	a.render(w, r, status, "share.html", p)
+	stampShare(&p)
+	return p, nil
 }
 
 func (a *app) handleShare(w http.ResponseWriter, r *http.Request) {
 	t, loc, ok := a.sharedTracker(w, r)
 	if !ok {
+		return
+	}
+	if isTrackerRefresh(r) {
+		p, err := a.buildShare(t, loc, "", false, r)
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		a.writeShareRefresh(w, r, p)
 		return
 	}
 	a.renderShare(w, r, http.StatusOK, t, loc, "")
@@ -129,7 +149,7 @@ func (a *app) handleShareQuickLog(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, shareURL(t), http.StatusSeeOther)
+	a.returnToPage(w, r, shareURL(t), t.ID, "")
 }
 
 // handleShareLogEntry logs a number or duration at the current time.
@@ -195,7 +215,7 @@ func (a *app) handleShareZero(w http.ResponseWriter, r *http.Request) {
 		a.renderShare(w, r, http.StatusUnprocessableEntity, t, loc, "Today already has entries, so it can't be none.")
 		return
 	}
-	http.Redirect(w, r, shareURL(t), http.StatusSeeOther)
+	a.returnToPage(w, r, shareURL(t), t.ID, "")
 }
 
 func (a *app) handleShareUndoEntry(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +236,7 @@ func (a *app) handleShareUndoEntry(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, shareURL(t), http.StatusSeeOther)
+	a.returnToPage(w, r, shareURL(t), t.ID, "")
 }
 
 func (a *app) handleShareUndoZero(w http.ResponseWriter, r *http.Request) {
@@ -237,5 +257,5 @@ func (a *app) handleShareUndoZero(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, shareURL(t), http.StatusSeeOther)
+	a.returnToPage(w, r, shareURL(t), t.ID, "")
 }

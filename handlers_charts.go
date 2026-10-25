@@ -141,10 +141,16 @@ func (a *app) handleCharts(w http.ResponseWriter, r *http.Request) {
 			a.serverError(w, r, err)
 			return
 		}
+		redeemed, err := a.redemptionCount(primary.ID)
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
 		st := progressStateOf(amounts, primary.Goal, primary.Unit)
 		p.Lifetime = st.Headline
 		if st.HasGoal {
-			p.LifetimeDetail = st.Completed + ". " + st.Earned + "."
+			p.Lifetime += " toward next goal"
+			p.LifetimeDetail = st.Completed + ". " + st.Earned + ". " + rewardsLine(rewardsAvailable(earnedGoals(amounts, primary.Goal), redeemed), redeemed)
 		}
 	}
 

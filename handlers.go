@@ -164,6 +164,9 @@ func stampGoalNotices(cards []trackerCard, r *http.Request) {
 	}
 	msg := goalNoticeFrom(r.URL.Query(), id)
 	if msg == "" {
+		msg = rewardNoticeFrom(r.URL.Query(), id)
+	}
+	if msg == "" {
 		return
 	}
 	for i := range cards {
@@ -184,8 +187,14 @@ func (a *app) handleHome(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	if isTrackerRefresh(r) {
+		a.writeHomeRefresh(w, r, cards)
+		return
+	}
 	stampGoalNotices(cards, r)
-	a.render(w, r, http.StatusOK, "dashboard.html", dashboardPage{Cards: cards})
+	page := dashboardPage{Cards: cards}
+	fillMarkers(&page)
+	a.render(w, r, http.StatusOK, "dashboard.html", page)
 }
 
 type householdGroup struct {
@@ -196,9 +205,17 @@ type householdGroup struct {
 }
 
 type dashboardPage struct {
-	Cards []trackerCard
-	Name  string // the name field, kept when creating a household fails
-	Error string
+	Cards     []trackerCard
+	Name      string // the name field, kept when creating a household fails
+	Error     string
+	Order     string // tracker ids in list order, comma-separated
+	OrderRev  string
+	EmptyRev  string
+	Removed   []string // element ids to delete on a refresh
+	SwapOrder bool
+	SwapEmpty bool
+	ShowEmpty bool // no trackers; kept when Cards is narrowed to a refresh fragment
+	OOB       bool // marker elements carry hx-swap-oob
 }
 
 func (p dashboardPage) HasTrackers() bool { return len(p.Cards) > 0 }
@@ -230,6 +247,9 @@ func (a *app) dashboard(u *User) ([]trackerCard, error) {
 		}
 		return iok && pi < pj
 	})
+	for i := range cards {
+		stampCard(&cards[i])
+	}
 	return cards, nil
 }
 

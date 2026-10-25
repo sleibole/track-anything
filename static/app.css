@@ -510,6 +510,32 @@ html[data-reordering] * {
   margin-bottom: 1rem;
 }
 
+/* A changed tracker gets a tint that fades. The overlay does not affect layout. */
+[data-highlight] {
+  position: relative;
+}
+
+[data-highlight].is-changed::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--pico-primary) 16%, transparent);
+  animation: tracker-changed 1s ease-out forwards;
+}
+
+@keyframes tracker-changed {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-highlight].is-changed::after {
+    animation: none;
+  }
+}
+
 .tracker-card-head {
   display: flex;
   align-items: flex-start;
@@ -694,6 +720,22 @@ button[data-occurrence][aria-busy="true"] .icon {
 .goal-meta {
   margin: -0.35rem 0 0.75rem;
   color: var(--pico-muted-color);
+}
+
+.redeem-form {
+  margin: 0 0 0.75rem;
+}
+
+.redeem-form details {
+  margin-bottom: 0.5rem;
+}
+
+.redeem-form button {
+  margin-bottom: 0;
+}
+
+.reward-history {
+  margin-top: 1.25rem;
 }
 
 .entry-running {

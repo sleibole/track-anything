@@ -297,6 +297,9 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /trackers/{id}/share/delete", a.requireUser(a.handleShareOff))
 	mux.HandleFunc("GET /trackers/{id}/export", a.requireUser(a.handleExportTracker))
 
+	mux.HandleFunc("POST /trackers/{id}/redeem", a.requireUser(a.handleRedeemReward))
+	mux.HandleFunc("POST /trackers/{id}/redemptions/{rid}/undo", a.requireUser(a.handleUndoRedemption))
+
 	mux.HandleFunc("POST /trackers/{id}/quick", a.requireUser(a.handleQuickLog))
 	mux.HandleFunc("POST /trackers/{id}/entries", a.requireUser(a.handleLogEntry))
 	mux.HandleFunc("POST /trackers/{id}/zero", a.requireUser(a.handleRecordZero))

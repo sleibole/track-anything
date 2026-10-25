@@ -106,6 +106,11 @@ func trackerIcon(v string) (template.HTML, error) {
 	return icon(v)
 }
 
+// inplace marks a tracker form whose HTMX success replaces that tracker in place.
+func inplaceAttr() template.HTMLAttr {
+	return `data-inplace hx-sync="closest [data-tracker-id]:replace"`
+}
+
 // nav is an in-app link. href is last so tests can match href="...">label</a>.
 // Boosting this anchor swaps #content and pushes the URL. It does not boost
 // child links, and it is not used for login, signup, or file downloads.
@@ -118,4 +123,5 @@ var templateFuncs = template.FuncMap{
 	"trackerIcon":       trackerIcon,
 	"startupImageLinks": startupImageLinks,
 	"nav":               nav,
+	"inplace":           inplaceAttr,
 }

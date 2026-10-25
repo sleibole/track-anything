@@ -157,11 +157,200 @@ window.trackerIdle = function () {
   return !(active && content.contains(active) && active.matches("input, textarea, select"));
 };
 
-// A tap or form submit wins over a refresh already on its way, so a stale page can't land after it.
-document.addEventListener("htmx:beforeRequest", (event) => {
-  if (event.detail.elt.matches("[data-refresh]")) return;
-  document.querySelectorAll("[data-refresh]").forEach((el) => htmx.trigger(el, "htmx:abort"));
+// The poller's own request still has .htmx-request when its response arrives.
+// That must not throw the response away. A field focused or a section opened
+// after the request started still does.
+function refreshStillSafe() {
+  if (document.documentElement.dataset.reordering === "1") return false;
+  if (document.visibilityState !== "visible") return false;
+  const content = document.getElementById("content");
+  if (!content || content.querySelector("details[open]")) return false;
+  if (content.querySelector(".htmx-request:not([data-refresh])")) return false;
+  const active = document.activeElement;
+  return !(active && content.contains(active) && active.matches("input, textarea, select"));
+}
+
+// View revs tell the server which trackers the page already shows.
+window.trackerRefreshVals = function () {
+  const ids = [];
+  const revs = [];
+  document.querySelectorAll("[data-view-rev]").forEach((el) => {
+    if (!el.id) return;
+    ids.push(el.id);
+    revs.push(el.dataset.viewRev || "");
+  });
+  return { present: ids.join(","), rev: revs.join(",") };
+};
+
+// In-place tracker updates. A newer action or a focused field drops a refresh
+// that was already on the way. Scroll correction runs only for these updates.
+const trackerRequests = new WeakMap();
+let trackerEpoch = 0;
+const actionEpoch = new Map();
+const openTrackerRequests = new Set();
+document.addEventListener("scroll", () => {
+  for (const info of openTrackerRequests) {
+    if (info.closed) continue;
+    if (Math.abs(window.scrollY - info.scrollY) > 2) info.moved = true;
+  }
+}, { passive: true, capture: true });
+
+document.addEventListener("htmx:afterRequest", (event) => {
+  const info = trackerRequests.get(event.detail.xhr);
+  if (!info || event.detail.successful) return;
+  info.closed = true;
+  info.skip = true;
+  openTrackerRequests.delete(info);
 });
+
+document.addEventListener("htmx:beforeRequest", (event) => {
+  const elt = event.detail.elt;
+  if (!elt || !elt.matches) return;
+  const info = { scrollY: window.scrollY, moved: false, closed: false };
+  if (elt.matches("[data-refresh]")) {
+    info.kind = "refresh";
+    info.epoch = trackerEpoch;
+    trackerRequests.set(event.detail.xhr, info);
+    openTrackerRequests.add(info);
+    return;
+  }
+  const inplace = elt.matches("[data-inplace]") ? elt : elt.closest?.("[data-inplace]");
+  trackerEpoch++;
+  document.querySelectorAll("[data-refresh]").forEach((el) => htmx.trigger(el, "htmx:abort"));
+  if (!inplace) return;
+  const root = elt.closest("[data-tracker-id]");
+  const id = root ? root.dataset.trackerId : "";
+  const n = (actionEpoch.get(id) || 0) + 1;
+  actionEpoch.set(id, n);
+  info.kind = "action";
+  info.id = id;
+  info.epoch = n;
+  trackerRequests.set(event.detail.xhr, info);
+  openTrackerRequests.add(info);
+});
+
+document.addEventListener("htmx:beforeSwap", (event) => {
+  const info = trackerRequests.get(event.detail.xhr);
+  if (!info) return;
+  info.closed = true;
+  openTrackerRequests.delete(info);
+  if (info.kind === "refresh" && (info.epoch !== trackerEpoch || !refreshStillSafe())) {
+    event.detail.shouldSwap = false;
+    info.skip = true;
+    return;
+  }
+  if (info.kind === "action" && actionEpoch.get(info.id) !== info.epoch) {
+    event.detail.shouldSwap = false;
+    info.skip = true;
+    return;
+  }
+  info.revs = snapshotTrackerRevs();
+  info.anchor = captureScrollAnchor();
+});
+
+document.addEventListener("htmx:afterSwap", (event) => {
+  const info = trackerRequests.get(event.detail.xhr);
+  if (!info || info.skip) return;
+  if (info.kind === "refresh") applyTrackerOrder();
+  restoreScrollAnchor(info);
+});
+
+// HTMX settles class about 20ms after the swap and would wipe a class added earlier.
+document.addEventListener("htmx:afterSettle", (event) => {
+  const info = trackerRequests.get(event.detail.xhr);
+  if (!info || info.skip || info.highlighted) return;
+  info.highlighted = true;
+  highlightChangedTrackers(info.revs);
+});
+
+function snapshotTrackerRevs() {
+  const map = new Map();
+  document.querySelectorAll("[data-tracker-rev]").forEach((el) => {
+    if (el.id) map.set(el.id, el.dataset.trackerRev || "");
+  });
+  return map;
+}
+
+function captureScrollAnchor() {
+  const nodes = document.querySelectorAll("[data-scroll-anchor]");
+  let above = null;
+  for (const el of nodes) {
+    if (!el.id) continue;
+    if (el.getBoundingClientRect().top <= 1) above = el;
+    else return packAnchor(above || el);
+  }
+  return above ? packAnchor(above) : null;
+}
+
+function packAnchor(el) {
+  const next = nextAnchor(el, 1);
+  const prev = nextAnchor(el, -1);
+  return {
+    id: el.id,
+    top: el.getBoundingClientRect().top,
+    next: next ? next.id : "",
+    prev: prev ? prev.id : "",
+  };
+}
+
+function nextAnchor(el, dir) {
+  const nodes = [...document.querySelectorAll("[data-scroll-anchor]")].filter((node) => node.id);
+  const i = nodes.indexOf(el);
+  if (i < 0) return null;
+  return nodes[i + dir] || null;
+}
+
+function restoreScrollAnchor(info) {
+  const saved = info.anchor;
+  if (!saved || info.moved) return;
+  let el = document.getElementById(saved.id);
+  if (!el && saved.next) el = document.getElementById(saved.next);
+  if (!el && saved.prev) el = document.getElementById(saved.prev);
+  if (!el) return;
+  const delta = el.getBoundingClientRect().top - saved.top;
+  if (Math.abs(delta) < 1) return;
+  window.scrollBy(0, delta);
+}
+
+function applyTrackerOrder() {
+  const order = document.getElementById("tracker-order");
+  const list = document.getElementById("tracker-list");
+  if (!order || !list || !order.dataset.order) return;
+  for (const id of order.dataset.order.split(",")) {
+    if (!id) continue;
+    const el = document.getElementById("tracker-" + id);
+    if (el && el.parentElement === list) list.appendChild(el);
+  }
+}
+
+const highlightTimers = new WeakMap();
+
+function highlightChangedTrackers(before) {
+  if (!before) return;
+  const dirty = new Set();
+  document.querySelectorAll("[data-tracker-rev]").forEach((el) => {
+    if (!el.id || before.get(el.id) === el.dataset.trackerRev) return;
+    const root = el.closest("[data-tracker-id]");
+    const id = root && root.dataset.trackerId;
+    if (id) dirty.add(id);
+  });
+  dirty.forEach((id) => {
+    const el = document.querySelector(`[data-highlight="${CSS.escape(id)}"]`);
+    if (el) flashTracker(el);
+  });
+}
+
+function flashTracker(el) {
+  el.classList.remove("is-changed");
+  void el.offsetWidth;
+  el.classList.add("is-changed");
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  clearTimeout(highlightTimers.get(el));
+  highlightTimers.set(
+    el,
+    setTimeout(() => el.classList.remove("is-changed"), reduce ? 1000 : 1100),
+  );
+}
 
 // clockInZone matches Go's "3:04 PM": hour without a leading zero, and a normal space before AM/PM.
 function clockInZone(date, timeZone) {

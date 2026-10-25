@@ -95,11 +95,19 @@ type trackerCard struct {
 	ProgressMax    string // the goal, already formatted
 	GoalsCompleted string // "1 goal completed"; empty when there is no goal
 	TotalEarned    string // "40 points total earned"; empty when the headline is the total
+	Rewards        string // "1 reward available · 2 redeemed."; empty when there is no goal
+	CanRedeem      bool   // a household member, an active goal, and at least one reward left
+	RedeemToken    string // one redeem submission; not part of the refresh rev
+	RewardError    string // a failed redeem, shown beside that action
+	RewardNote     string // the note from a failed redeem, kept in the field
 	Notice         string // "Goal completed!" after an entry that finished one or more goals
 	Error          string // validation message for this tracker; empty when the last submit worked
 	Reorder        bool   // dashboard only: the card has a handle for the viewer's own order
 	HouseholdLabel string // dashboard only: household name on a shared tracker; empty on a personal one
 	HouseholdURL   string
+	DataRev        string // displayed values, used to highlight a real change. Undo windows are not part of it
+	ViewRev        string // displayed values plus undo controls, used to decide whether a refresh swaps the card
+	OOB            string // out-of-band swap for a refresh fragment; empty on a full page
 }
 
 // card builds a tracker's card. viewerID is nil for a share-link visitor.
@@ -130,7 +138,28 @@ func (a *app) cardView(t Tracker, s todayState, loc *time.Location, now time.Tim
 		return trackerCard{}, err
 	}
 	applyCumulative(&c, t, amounts)
+	redeemed, err := a.redemptionCount(t.ID)
+	if err != nil {
+		return trackerCard{}, err
+	}
+	applyRewards(&c, t, amounts, redeemed, viewerID != nil)
+	if c.CanRedeem {
+		key, err := newRequestKey()
+		if err != nil {
+			return trackerCard{}, err
+		}
+		c.RedeemToken = key
+	}
 	return c, nil
+}
+
+func applyRewards(c *trackerCard, t Tracker, amounts []float64, redeemed int64, member bool) {
+	if !t.IsCumulative() || t.Goal == nil || *t.Goal <= 0 {
+		return
+	}
+	avail := rewardsAvailable(earnedGoals(amounts, t.Goal), redeemed)
+	c.Rewards = rewardsLine(avail, redeemed)
+	c.CanRedeem = member && avail.Sign() > 0
 }
 
 func applyCumulative(c *trackerCard, t Tracker, amounts []float64) {
@@ -144,8 +173,12 @@ func applyCumulative(c *trackerCard, t Tracker, amounts []float64) {
 }
 
 func (a *app) entryNumbers(trackerID uint) ([]float64, error) {
+	return loadEntryAmounts(a.db, trackerID)
+}
+
+func loadEntryAmounts(db *gorm.DB, trackerID uint) ([]float64, error) {
 	var entries []Entry
-	err := a.db.Select("number").Where("tracker_id = ? AND number IS NOT NULL", trackerID).Find(&entries).Error
+	err := db.Select("number").Where("tracker_id = ? AND number IS NOT NULL", trackerID).Find(&entries).Error
 	if err != nil {
 		return nil, err
 	}
@@ -321,27 +354,40 @@ type historyDay struct {
 }
 
 type trackerPage struct {
-	Card           trackerCard
-	IsOwner        bool
-	Today          todayState
-	ZeroNew        bool
-	Entries        []entryView
-	History        []historyDay
-	ChartScript    template.HTML // daily count series; empty when there is nothing to plot
-	OverlayScript  template.HTML // overlay days; empty when no overlay is drawn
-	OverlayChoices []Tracker     // other count trackers this person can see
-	Overlay        *Tracker      // selected overlay; nil means none
-	OverlayID      uint          // 0 when none; safe to compare in the template
-	OverlayEmpty   bool          // selected overlay has no events in the chart window
-	PageURL        string        // this page, including ?overlay= when one is selected
-	NowValue       string        // default for the owner's time field
-	Note           string
-	NumberValue    string // log form; the carried value unless this render is correcting a post
-	Hours          string
-	Minutes        string
-	Seconds        string
-	Error          string
-	PeriodNote     string // cumulative history subtotal, set only when older entries exist
+	Card             trackerCard
+	IsOwner          bool
+	Today            todayState
+	ZeroNew          bool
+	Entries          []entryView
+	History          []historyDay
+	ChartScript      template.HTML // daily count series; empty when there is nothing to plot
+	OverlayScript    template.HTML // overlay days; empty when no overlay is drawn
+	OverlayChoices   []Tracker     // other count trackers this person can see
+	Overlay          *Tracker      // selected overlay; nil means none
+	OverlayID        uint          // 0 when none; safe to compare in the template
+	OverlayEmpty     bool          // selected overlay has no events in the chart window
+	PageURL          string        // this page, including ?overlay= when one is selected
+	NowValue         string        // default for the owner's time field
+	Note             string
+	NumberValue      string // log form; the carried value unless this render is correcting a post
+	Hours            string
+	Minutes          string
+	Seconds          string
+	Error            string
+	PeriodNote       string // cumulative history subtotal, set only when older entries exist
+	Redemptions      []redemptionView
+	CanUndoRewards   bool
+	RewardGap        string // redeemed ahead of goals earned; detail page only
+	RewardWindowNote string // history dates do not limit the redemption list
+	LogDataRev       string
+	LogViewRev       string
+	TrendDataRev     string
+	TrendViewRev     string
+	HistoryDataRev   string
+	HistoryViewRev   string
+	OOBLog           bool
+	OOBTrend         bool
+	OOBHistory       bool
 }
 
 func (p trackerPage) Tracker() Tracker { return p.Card.Tracker }
@@ -450,6 +496,25 @@ func (a *app) trackerPage(t Tracker, role string, u *User, overlay *Tracker) (tr
 			stampRunning(p.History[i].Entries, labels)
 		}
 		p.PeriodNote = historySubtotalNote(lifetime, from, t.Unit)
+		rows, err := a.listRedemptions(t.ID)
+		if err != nil {
+			return p, err
+		}
+		p.Redemptions, err = a.redemptionViews(rows, loc, now)
+		if err != nil {
+			return p, err
+		}
+		p.CanUndoRewards = len(rows) > 0
+		var amounts []float64
+		for _, e := range lifetime {
+			if e.Number != nil {
+				amounts = append(amounts, *e.Number)
+			}
+		}
+		p.RewardGap = rewardGapText(int64(len(rows)), earnedGoals(amounts, t.Goal), t.Goal != nil && *t.Goal > 0)
+		if p.PeriodNote != "" && len(rows) > 0 {
+			p.RewardWindowNote = "Every redemption. The dates in History do not limit this list."
+		}
 	}
 	choices, err := visibleCountTrackers(a.db, u.ID, t.ID)
 	if err != nil {
@@ -481,6 +546,7 @@ func (a *app) trackerPage(t Tracker, role string, u *User, overlay *Tracker) (tr
 		}
 		p.OverlayScript = embedded
 	}
+	stampTrackerRegions(&p)
 	return p, nil
 }
 
@@ -640,7 +706,14 @@ func (a *app) handleShowTracker(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	if isTrackerRefresh(r) {
+		a.writeTrackerRefresh(w, r, p)
+		return
+	}
 	p.Card.Notice = goalNoticeFrom(r.URL.Query(), t.ID)
+	if p.Card.Notice == "" {
+		p.Card.Notice = rewardNoticeFrom(r.URL.Query(), t.ID)
+	}
 	a.render(w, r, http.StatusOK, "tracker_show.html", p)
 }
 

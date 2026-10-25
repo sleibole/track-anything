@@ -158,6 +158,71 @@ func goalsLabel(n *big.Int) string {
 	return n.String() + " goals completed"
 }
 
+func earnedGoals(amounts []float64, goal *float64) *big.Int {
+	if goal == nil || *goal <= 0 {
+		return big.NewInt(0)
+	}
+	return goalsCompleted(sumRats(amounts), ratFromFloat(*goal))
+}
+
+// rewardsAvailable is max(0, goals earned − redemptions). Earned stays a big
+// integer so the same decimal division that counts goals is not rounded again.
+func rewardsAvailable(earned *big.Int, redeemed int64) *big.Int {
+	if earned == nil || earned.Sign() <= 0 {
+		return big.NewInt(0)
+	}
+	if redeemed < 0 {
+		redeemed = 0
+	}
+	avail := new(big.Int).Sub(earned, big.NewInt(redeemed))
+	if avail.Sign() < 0 {
+		return big.NewInt(0)
+	}
+	return avail
+}
+
+func rewardsLine(available *big.Int, redeemed int64) string {
+	if available == nil {
+		available = big.NewInt(0)
+	}
+	return rewardCount(available) + " available · " + strconv.FormatInt(redeemed, 10) + " redeemed."
+}
+
+func rewardCount(n *big.Int) string {
+	if n != nil && n.Cmp(big.NewInt(1)) == 0 {
+		return "1 reward"
+	}
+	if n == nil {
+		return "0 rewards"
+	}
+	return n.String() + " rewards"
+}
+
+func redeemedRewards(n int64) string {
+	if n == 1 {
+		return "1 reward redeemed"
+	}
+	return strconv.FormatInt(n, 10) + " rewards redeemed"
+}
+
+// rewardGapText explains a redeemed count that is ahead of goals earned.
+// An empty string means the tracker is not in that state.
+func rewardGapText(redeemed int64, earned *big.Int, hasGoal bool) string {
+	if redeemed <= 0 {
+		return ""
+	}
+	if !hasGoal {
+		return redeemedRewards(redeemed) + ". New redemptions stay off until a goal is set."
+	}
+	if earned == nil {
+		earned = big.NewInt(0)
+	}
+	if big.NewInt(redeemed).Cmp(earned) <= 0 {
+		return ""
+	}
+	return redeemedRewards(redeemed) + "; current points qualify for " + earned.String() + "."
+}
+
 // completedDelta is how many goals the new amounts finished.
 // An empty string means the completed count did not rise.
 func completedDelta(before, after []float64, goal float64) string {
@@ -307,6 +372,36 @@ func goalNoticeFrom(q url.Values, trackerID uint) string {
 		}
 	}
 	return goalNoticeText(n)
+}
+
+func rewardNoticeFrom(q url.Values, trackerID uint) string {
+	if q.Get("notice") != "reward" {
+		return ""
+	}
+	if raw := q.Get("tracker"); raw != "" && parseID(raw) != trackerID {
+		return ""
+	}
+	switch q.Get("result") {
+	case "redeemed":
+		return "Reward redeemed."
+	case "undone":
+		return "Redemption undone."
+	default:
+		return ""
+	}
+}
+
+func withRewardNotice(raw string, trackerID uint, result string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	q := u.Query()
+	q.Set("notice", "reward")
+	q.Set("result", result)
+	q.Set("tracker", strconv.FormatUint(uint64(trackerID), 10))
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func withNotice(raw string, trackerID uint, n string) string {

@@ -5,12 +5,11 @@
   <a role="button" class="secondary outline" {{nav "/trackers/new"}}>{{icon "plus"}} New tracker</a>
 </div>
 {{template "installHint"}}
-<div class="tracker-list" data-reorder-list data-reorder-url="/trackers/order">
+<div class="tracker-list" id="tracker-list" data-reorder-list data-reorder-url="/trackers/order">
 {{range .Data.Cards}}{{template "card" .}}{{end}}
 </div>
-{{if not .Data.HasTrackers}}
-<p class="muted">No trackers yet. <a {{nav "/trackers/new"}}>Create one</a> to start logging.</p>
-{{end}}
+{{template "trackerOrder" .Data}}
+{{template "trackerEmpty" .Data}}
 <details class="new-household"{{if .Data.Error}} open{{end}}>
   <summary>New household</summary>
   {{with .Data.Error}}<p role="alert" class="error">{{.}}</p>{{end}}
@@ -23,4 +22,23 @@
   </form>
 </details>
 <script src="/static/reorder.js"></script>
+{{end}}
+
+{{define "homeRefresh"}}
+{{range .Data.Cards}}{{template "card" .}}{{end}}
+{{range .Data.Removed}}<div hx-swap-oob="delete:#{{.}}"></div>{{end}}
+{{if .Data.SwapOrder}}{{template "trackerOrder" .Data}}{{end}}
+{{if .Data.SwapEmpty}}{{template "trackerEmpty" .Data}}{{end}}
+{{end}}
+
+{{define "trackerOrder"}}
+<div id="tracker-order" data-view-rev="{{.OrderRev}}" data-order="{{.Order}}" hidden{{if .OOB}} hx-swap-oob="outerHTML"{{end}}></div>
+{{end}}
+
+{{define "trackerEmpty"}}
+{{if not .ShowEmpty}}
+<div id="tracker-empty" data-view-rev="{{.EmptyRev}}" hidden{{if .OOB}} hx-swap-oob="outerHTML"{{end}}></div>
+{{else}}
+<p id="tracker-empty" class="muted" data-view-rev="{{.EmptyRev}}"{{if .OOB}} hx-swap-oob="outerHTML"{{end}}>No trackers yet. <a {{nav "/trackers/new"}}>Create one</a> to start logging.</p>
+{{end}}
 {{end}}

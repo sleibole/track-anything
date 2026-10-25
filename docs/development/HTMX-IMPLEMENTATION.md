@@ -14,7 +14,7 @@ Do not set `hx-boost` on `<body>` or `<main>`. Login and signup live inside `<ma
 
 `<main>` sets `hx-history-elt`, `hx-target="#content"`, and `hx-swap="innerHTML show:none"`. History saves and restores the inner HTML of `#content`, not the body. A cache miss GETs the URL with `HX-Request` and swaps that partial into `#content`. It must not become a document reload. The saved history item also stores the document title from the partial.
 
-`show:none` on `<main>` is what log forms and the 30-second refresh inherit, so those updates do not scroll. Page links override it with `show:window:top`.
+`show:none` on `<main>` is what log forms inherit, so a response that still swaps `#content` does not scroll. Page links override it with `show:window:top`. The 30-second refresh does not use that swap: it targets itself with `hx-swap="none"` and updates trackers out of band. A successful in-place log does the same with `HX-Reswap: none`.
 
 The `htmx-config` meta tag swaps 2xx, 3xx, and 4xx responses. A 204 is not swapped. A 5xx is not swapped. A number **Log again** error still sends `HX-Retarget` for that tracker's log control. That is the one swap smaller than the page.
 

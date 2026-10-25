@@ -1,8 +1,16 @@
 {{define "title"}}{{.Data.Tracker.Name}} · Track Anything{{end}}
 {{define "content"}}
+{{template "autoRefresh" (printf "/s/%s" .Data.Token)}}
+{{template "shareBody" .}}
+{{end}}
+
+{{define "shareRefresh"}}
+{{if .Data.OOBLog}}{{template "shareBody" .}}{{end}}
+{{end}}
+
+{{define "shareBody"}}
 {{with .Data}}
-{{template "autoRefresh" (printf "/s/%s" .Token)}}
-<section class="tracker-log share-page">
+<section class="tracker-log share-page" id="tracker-log-{{.Tracker.ID}}" data-tracker-id="{{.Tracker.ID}}" data-highlight="{{.Tracker.ID}}" data-scroll-anchor data-tracker-rev="{{.LogDataRev}}" data-view-rev="{{.LogViewRev}}"{{if .OOBLog}} hx-swap-oob="outerHTML"{{end}}>
   {{template "trackerTitle" .Tracker}}
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
   {{template "logControl" .Card}}
@@ -10,15 +18,15 @@
   {{if .Tracker.IsCount}}
   {{with .Today.Zero}}
     {{if $.Data.ZeroNew}}
-    <form method="post" action="/s/{{$.Data.Token}}/zeros/{{.ID}}/undo" hx-post="/s/{{$.Data.Token}}/zeros/{{.ID}}/undo" class="inline"><button type="submit" class="quiet">Undo none</button></form>
+    <form method="post" action="/s/{{$.Data.Token}}/zeros/{{.ID}}/undo" hx-post="/s/{{$.Data.Token}}/zeros/{{.ID}}/undo" class="inline" {{inplace}}><button type="submit" class="quiet">Undo none</button></form>
     {{end}}
   {{else}}{{if eq .Today.Count 0}}
-    <form method="post" action="/s/{{.Token}}/zero" hx-post="/s/{{.Token}}/zero" class="inline"><button type="submit" class="quiet">Record none for today</button></form>
+    <form method="post" action="/s/{{.Token}}/zero" hx-post="/s/{{.Token}}/zero" class="inline" {{inplace}}><button type="submit" class="quiet">Record none for today</button></form>
   {{end}}{{end}}
   {{else}}
   <details class="log-details"{{if or .Error (and (not .Card.LogAgain) (not .Tracker.IsCumulative))}} open{{end}}>
     <summary>{{if .Tracker.IsCumulative}}Add an amount{{else if .Tracker.IsDuration}}Log a duration{{else}}Log a value{{end}}</summary>
-    <form method="post" action="/s/{{.Token}}/entries" hx-post="/s/{{.Token}}/entries">
+    <form method="post" action="/s/{{.Token}}/entries" hx-post="/s/{{.Token}}/entries" {{inplace}}>
       {{template "valueFields" .}}
       <button type="submit" data-occurrence>{{if .Tracker.IsCumulative}}{{.Tracker.AddLabel}}{{else}}Log{{end}}</button>
     </form>

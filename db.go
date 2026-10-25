@@ -55,6 +55,7 @@ func migrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&User{}, &Session{}, &LoginToken{}, &VerificationToken{},
 		&Household{}, &HouseholdMember{}, &Tracker{}, &Entry{}, &RecordedZero{}, &TrackerOrder{},
+		&Redemption{}, &RewardRequest{},
 	)
 }
 

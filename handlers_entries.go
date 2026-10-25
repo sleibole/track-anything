@@ -137,7 +137,7 @@ func (a *app) handleQuickLog(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	redirectBack(w, r, trackerURL(t))
+	a.returnToPage(w, r, trackerURL(t), t.ID, "")
 }
 
 // parseEntryTime reads an owner's time field in their zone.
@@ -259,18 +259,16 @@ func (a *app) handleLogEntry(w http.ResponseWriter, r *http.Request) {
 // redirectAfterEntry returns to the page the entry was logged from.
 // A cumulative goal that the new amount finished adds a one-time notice.
 func (a *app) redirectAfterEntry(w http.ResponseWriter, r *http.Request, t Tracker, fallback string, before []float64) {
-	to := redirectTarget(r, fallback)
+	notice := ""
 	if t.IsCumulative() && t.Goal != nil && *t.Goal > 0 {
 		after, err := a.entryNumbers(t.ID)
 		if err != nil {
 			a.serverError(w, r, err)
 			return
 		}
-		if n := completedDelta(before, after, *t.Goal); n != "" {
-			to = withNotice(to, t.ID, n)
-		}
+		notice = completedDelta(before, after, *t.Goal)
 	}
-	http.Redirect(w, r, to, http.StatusSeeOther)
+	a.returnToPage(w, r, fallback, t.ID, notice)
 }
 
 // renderNumberLogError keeps a failed Log again inside the tracker that was submitted.
@@ -342,7 +340,7 @@ func (a *app) handleLogHistoryDay(w http.ResponseWriter, r *http.Request) {
 		a.renderTrackerError(w, r, t, role, msg)
 		return
 	}
-	redirectBack(w, r, trackerURL(t))
+	a.returnToPage(w, r, trackerURL(t), t.ID, "")
 }
 
 // logGapDay writes an entry when the local day has no entries and no recorded zero.
@@ -420,7 +418,7 @@ func (a *app) handleRecordZero(w http.ResponseWriter, r *http.Request) {
 		a.renderTrackerError(w, r, t, role, "That day already has entries, so it can't be none.")
 		return
 	}
-	redirectBack(w, r, trackerURL(t))
+	a.returnToPage(w, r, trackerURL(t), t.ID, "")
 }
 
 // entryForUser loads an entry on a tracker the user can see. ok is false when it has
@@ -451,7 +449,7 @@ func (a *app) handleUndoEntry(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	redirectBack(w, r, trackerURL(t))
+	a.returnToPage(w, r, trackerURL(t), t.ID, "")
 }
 
 func (a *app) handleEditEntry(w http.ResponseWriter, r *http.Request) {
@@ -496,7 +494,7 @@ func (a *app) handleEditEntry(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	redirectBack(w, r, trackerURL(t))
+	a.returnToPage(w, r, trackerURL(t), t.ID, "")
 }
 
 func (a *app) handleDeleteEntry(w http.ResponseWriter, r *http.Request) {
@@ -512,7 +510,7 @@ func (a *app) handleDeleteEntry(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	redirectBack(w, r, trackerURL(t))
+	a.returnToPage(w, r, trackerURL(t), t.ID, "")
 }
 
 func (a *app) zeroForUser(w http.ResponseWriter, r *http.Request) (z RecordedZero, t Tracker, role string, ok bool) {
@@ -541,7 +539,7 @@ func (a *app) handleUndoZero(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	redirectBack(w, r, trackerURL(t))
+	a.returnToPage(w, r, trackerURL(t), t.ID, "")
 }
 
 func (a *app) handleDeleteZero(w http.ResponseWriter, r *http.Request) {
@@ -557,5 +555,5 @@ func (a *app) handleDeleteZero(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	redirectBack(w, r, trackerURL(t))
+	a.returnToPage(w, r, trackerURL(t), t.ID, "")
 }

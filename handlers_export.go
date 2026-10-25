@@ -32,6 +32,11 @@ func (a *app) handleExportTracker(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	var redemptions []Redemption
+	if err := a.db.Where("tracker_id = ?", t.ID).Order("redeemed_at, id").Find(&redemptions).Error; err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 	emails, err := a.emailsFor(entries)
 	if err != nil {
 		a.serverError(w, r, err)
@@ -47,7 +52,19 @@ func (a *app) handleExportTracker(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	rows, err := exportRows(t, entries, zeros, emails, loc)
+	for _, rd := range redemptions {
+		if rd.UserID == nil {
+			continue
+		}
+		if _, ok := emails[*rd.UserID]; ok {
+			continue
+		}
+		var u User
+		if err := a.db.Select("id, email").Take(&u, *rd.UserID).Error; err == nil {
+			emails[u.ID] = u.Email
+		}
+	}
+	rows, err := exportTrackerRows(t, entries, zeros, redemptions, emails, loc)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
@@ -87,7 +104,11 @@ type exportItem struct {
 }
 
 func exportRows(t Tracker, entries []Entry, zeros []RecordedZero, emails map[uint]string, loc *time.Location) ([][]string, error) {
-	items := make([]exportItem, 0, len(entries)+len(zeros))
+	return exportTrackerRows(t, entries, zeros, nil, emails, loc)
+}
+
+func exportTrackerRows(t Tracker, entries []Entry, zeros []RecordedZero, redemptions []Redemption, emails map[uint]string, loc *time.Location) ([][]string, error) {
+	items := make([]exportItem, 0, len(entries)+len(zeros)+len(redemptions))
 	for _, e := range entries {
 		value, unit, seconds, words := "", "", "", ""
 		if e.Number != nil {
@@ -126,6 +147,20 @@ func exportRows(t Tracker, entries []Entry, zeros []RecordedZero, emails map[uin
 				"",
 				csvText(recordedBy(z.RecordedByID, emails)),
 				csvBool(z.ViaLink),
+			},
+		})
+	}
+	for _, rd := range redemptions {
+		items = append(items, exportItem{
+			at: rd.RedeemedAt,
+			row: []string{
+				"redemption",
+				rd.RedeemedAt.UTC().Format(time.RFC3339),
+				localDay(rd.RedeemedAt, loc),
+				"", "", "", "",
+				csvText(rd.Note),
+				csvText(recordedBy(rd.UserID, emails)),
+				"false",
 			},
 		})
 	}

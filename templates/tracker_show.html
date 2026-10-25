@@ -1,102 +1,144 @@
 {{define "title"}}{{.Data.Tracker.Name}} · Track Anything{{end}}
 {{define "content"}}
-{{with .Data}}
-{{template "autoRefresh" .PageURL}}
-<div class="tracker-page">
-  <section class="tracker-log">
-    <div class="page-head">
-      {{template "trackerTitle" .Tracker}}
-      {{if .IsOwner}}<a aria-label="Edit tracker" title="Edit tracker" {{nav (printf "/trackers/%d/edit" .Tracker.ID)}}>{{icon "pencil"}}</a>{{end}}
-    </div>
-    {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
-    {{template "logControl" .Card}}
-
-    {{if .Tracker.IsCount}}
-    {{with .Today.Zero}}
-      {{if $.Data.ZeroNew}}
-      <form method="post" action="/zeros/{{.ID}}/undo" hx-post="/zeros/{{.ID}}/undo" class="inline"><button type="submit" class="quiet">Undo none</button></form>
-      {{else if $.Data.IsOwner}}
-      <form method="post" action="/zeros/{{.ID}}/delete" hx-post="/zeros/{{.ID}}/delete" class="inline"><button type="submit" class="quiet">Clear none</button></form>
-      {{end}}
-    {{else}}{{if eq .Today.Count 0}}
-      <form method="post" action="/trackers/{{.Tracker.ID}}/zero" hx-post="/trackers/{{.Tracker.ID}}/zero" class="inline"><button type="submit" class="quiet">Record none for today</button></form>
-    {{end}}{{end}}
-    {{end}}
-
-    <details class="log-details"{{if or .Error .Note (and (not .Tracker.IsCount) (not .Tracker.IsCumulative) (not .Card.LogAgain))}} open{{end}}>
-      <summary>{{if .Tracker.IsCumulative}}{{if .IsOwner}}Add an amount, note, or time{{else}}Add an amount or note{{end}}{{else if .Tracker.IsDuration}}{{if .IsOwner}}Log a duration, note, or time{{else}}Log a duration or note{{end}}{{else if .Tracker.IsNumber}}{{if .IsOwner}}Log with a note or specific time{{else}}Log a value or note{{end}}{{else}}{{if .IsOwner}}Log with a note or time{{else}}Log with a note{{end}}{{end}}</summary>
-      <form method="post" action="/trackers/{{.Tracker.ID}}/entries" hx-post="/trackers/{{.Tracker.ID}}/entries">
-        {{template "valueFields" .}}
-        {{if .IsOwner}}<label>{{icon "calendar"}} When <input type="datetime-local" name="time" value="{{.NowValue}}"></label>{{end}}
-        <label>Note <input type="text" name="note" value="{{.Note}}" maxlength="500"></label>
-        <button type="submit" data-occurrence>{{if .Tracker.IsCumulative}}{{.Tracker.AddLabel}}{{else}}Log{{end}}</button>
-      </form>
-    </details>
-
-    <h2>Today</h2>
-    <ul class="entries">
-      {{range .Entries}}{{template "entry" .}}{{else}}<li class="muted">{{if .Today.Zero}}Recorded as none.{{else}}Nothing logged yet.{{end}}</li>{{end}}
-    </ul>
-  </section>
-
+{{template "autoRefresh" .Data.PageURL}}
+<div class="tracker-page" data-tracker-id="{{.Data.Tracker.ID}}">
+  {{template "trackerLogRegion" .}}
   <div class="tracker-side">
-  <section class="tracker-trend">
-    <h2>Trend</h2>
-    {{if .OverlayChoices}}
-    <details class="overlay-picker">
-      <summary>Show events from
-        {{if .Overlay}}<span class="tracker-icon">{{trackerIcon .Overlay.Icon}}</span> {{.Overlay.Name}}{{else}}None{{end}}
-      </summary>
-      <ul>
-        <li><a href="/trackers/{{.Tracker.ID}}" hx-get="/trackers/{{.Tracker.ID}}" hx-target="#content" hx-swap="innerHTML show:none" hx-push-url="true"{{if not .Overlay}} aria-current="page"{{end}}>None</a></li>
-        {{range .OverlayChoices}}
-        <li><a href="/trackers/{{$.Data.Tracker.ID}}?overlay={{.ID}}" hx-get="/trackers/{{$.Data.Tracker.ID}}?overlay={{.ID}}" hx-target="#content" hx-swap="innerHTML show:none" hx-push-url="true"{{if eq .ID $.Data.OverlayID}} aria-current="page"{{end}}><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</a></li>
-        {{end}}
-      </ul>
-    </details>
-    {{end}}
-    {{if .ChartScript}}
-    <p class="muted">{{if .Tracker.IsCount}}Count per day. A gap is a day with nothing logged.{{else if .Tracker.IsDuration}}Duration over the last 30 days. Each point is one entry.{{else if .Tracker.IsCumulative}}Running total over the last 30 days. Each point is the total earned through that entry, including anything earlier.{{else}}Value over the last 30 days{{with .Tracker.Unit}}, in {{.}}{{end}}. Each point is one entry.{{end}}{{if and .Overlay (not .OverlayEmpty)}} Shaded bands mark {{.Overlay.Name}} events on those days.{{end}}</p>
-    {{if .OverlayEmpty}}<p class="muted">No {{.Overlay.Name}} events in the last 30 days.</p>{{end}}
-    <div class="chart-frame">
-      <canvas id="trend-canvas" role="img" aria-label="{{if .Tracker.IsCount}}Count per day for the last 30 days. A gap is a day with nothing logged. Zero is a recorded none.{{else if .Tracker.IsDuration}}Duration over the last 30 days. Each point is one entry.{{else if .Tracker.IsCumulative}}Running total over the last 30 days. Each point is the total earned through that entry, including anything earlier.{{else}}Values over the last 30 days. Each point is one entry.{{end}}{{if .Overlay}} Shaded bands mark {{.Overlay.Name}} events.{{end}}"></canvas>
-      {{if .Overlay}}<p class="chart-tip" hidden></p>{{end}}
-    </div>
-    {{.ChartScript}}
-    {{.OverlayScript}}
-    <script src="/static/chart.js"></script>
-    {{else}}
-    <p class="muted">Nothing logged in the last 30 days.</p>
-    {{end}}
-  </section>
-  <section class="tracker-history">
-    <h2>History</h2>
-    {{with .PeriodNote}}<p class="muted">{{.}}</p>{{end}}
-    {{range .History}}
-    <div class="history-day{{if not .Logged}} unlogged{{end}}">
-      <div class="day-head">
-        <h3>{{.Label}}</h3>
-        {{with .Zero}}{{if and $.Data.IsOwner $.Data.Tracker.IsCount}}
-        <form method="post" action="/zeros/{{.ID}}/delete" hx-post="/zeros/{{.ID}}/delete" class="inline"><button type="submit" class="quiet">Clear</button></form>
-        {{end}}{{end}}
-        {{if and $.Data.IsOwner $.Data.Tracker.IsCount (not .Logged)}}
-        <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/day" hx-post="/trackers/{{$.Data.Tracker.ID}}/day" class="inline">
-          <input type="hidden" name="day" value="{{.Day}}">
-          <button type="submit" class="quiet" data-occurrence>{{$.Data.Tracker.Label}}</button>
-        </form>
-        <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/zero" hx-post="/trackers/{{$.Data.Tracker.ID}}/zero" class="inline">
-          <input type="hidden" name="day" value="{{.Day}}">
-          <button type="submit" class="quiet">Record none</button>
-        </form>
-        {{end}}
-        {{if $.Data.Tracker.IsCount}}<span class="day-summary">{{.Summary}}</span>{{end}}
-      </div>
-      {{if .Entries}}<ul class="entries">{{range .Entries}}{{template "entry" .}}{{end}}</ul>{{end}}
-    </div>
-    {{end}}
-    {{if .IsOwner}}<p class="export"><a href="/trackers/{{.Tracker.ID}}/export">Download CSV</a></p>{{end}}
-  </section>
+    {{template "trackerTrendRegion" .}}
+    {{template "trackerHistoryRegion" .}}
   </div>
 </div>
+{{end}}
+
+{{define "trackerRefresh"}}
+{{if .Data.OOBLog}}{{template "trackerLogRegion" .}}{{end}}
+{{if .Data.OOBTrend}}{{template "trackerTrendRegion" .}}{{end}}
+{{if .Data.OOBHistory}}{{template "trackerHistoryRegion" .}}{{end}}
+{{end}}
+
+{{define "trackerLogRegion"}}
+{{with .Data}}
+<section class="tracker-log" id="tracker-log-{{.Tracker.ID}}" data-highlight="{{.Tracker.ID}}" data-scroll-anchor data-tracker-rev="{{.LogDataRev}}" data-view-rev="{{.LogViewRev}}"{{if .OOBLog}} hx-swap-oob="outerHTML"{{end}}>
+  <div class="page-head">
+    {{template "trackerTitle" .Tracker}}
+    {{if .IsOwner}}<a aria-label="Edit tracker" title="Edit tracker" {{nav (printf "/trackers/%d/edit" .Tracker.ID)}}>{{icon "pencil"}}</a>{{end}}
+  </div>
+  {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
+  {{template "logControl" .Card}}
+
+  {{if .Tracker.IsCount}}
+  {{with .Today.Zero}}
+    {{if $.Data.ZeroNew}}
+    <form method="post" action="/zeros/{{.ID}}/undo" hx-post="/zeros/{{.ID}}/undo" class="inline" {{inplace}}><button type="submit" class="quiet">Undo none</button></form>
+    {{else if $.Data.IsOwner}}
+    <form method="post" action="/zeros/{{.ID}}/delete" hx-post="/zeros/{{.ID}}/delete" class="inline" {{inplace}}><button type="submit" class="quiet">Clear none</button></form>
+    {{end}}
+  {{else}}{{if eq .Today.Count 0}}
+    <form method="post" action="/trackers/{{.Tracker.ID}}/zero" hx-post="/trackers/{{.Tracker.ID}}/zero" class="inline" {{inplace}}><button type="submit" class="quiet">Record none for today</button></form>
+  {{end}}{{end}}
+  {{end}}
+
+  <details class="log-details"{{if or .Error .Note (and (not .Tracker.IsCount) (not .Tracker.IsCumulative) (not .Card.LogAgain))}} open{{end}}>
+    <summary>{{if .Tracker.IsCumulative}}{{if .IsOwner}}Add an amount, note, or time{{else}}Add an amount or note{{end}}{{else if .Tracker.IsDuration}}{{if .IsOwner}}Log a duration, note, or time{{else}}Log a duration or note{{end}}{{else if .Tracker.IsNumber}}{{if .IsOwner}}Log with a note or specific time{{else}}Log a value or note{{end}}{{else}}{{if .IsOwner}}Log with a note or time{{else}}Log with a note{{end}}{{end}}</summary>
+    <form method="post" action="/trackers/{{.Tracker.ID}}/entries" hx-post="/trackers/{{.Tracker.ID}}/entries" {{inplace}}>
+      {{template "valueFields" .}}
+      {{if .IsOwner}}<label>{{icon "calendar"}} When <input type="datetime-local" name="time" value="{{.NowValue}}"></label>{{end}}
+      <label>Note <input type="text" name="note" value="{{.Note}}" maxlength="500"></label>
+      <button type="submit" data-occurrence>{{if .Tracker.IsCumulative}}{{.Tracker.AddLabel}}{{else}}Log{{end}}</button>
+    </form>
+  </details>
+
+  <h2>Today</h2>
+  <ul class="entries">
+    {{range .Entries}}{{template "entry" .}}{{else}}<li class="muted">{{if .Today.Zero}}Recorded as none.{{else}}Nothing logged yet.{{end}}</li>{{end}}
+  </ul>
+  {{if and .Tracker.IsCumulative .Redemptions}}
+  <section class="reward-history">
+    <h2>Rewards</h2>
+    {{with .RewardGap}}<p class="muted">{{.}}</p>{{end}}
+    {{with .RewardWindowNote}}<p class="muted">{{.}}</p>{{end}}
+    <ul class="entries">
+      {{range .Redemptions}}
+      <li class="entry">
+        <span class="entry-time">{{.When}}</span>
+        {{with .Note}}<span class="entry-note">{{.}}</span>{{end}}
+        {{with .By}}<small class="muted">by {{.}}</small>{{end}}
+        {{if $.Data.CanUndoRewards}}
+        <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/redemptions/{{.ID}}/undo" hx-post="/trackers/{{$.Data.Tracker.ID}}/redemptions/{{.ID}}/undo" class="inline" hx-confirm="Undo this redemption?" {{inplace}}>
+          <button type="submit" class="quiet">Undo redemption</button>
+        </form>
+        {{end}}
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+
+{{define "trackerTrendRegion"}}
+{{with .Data}}
+<section class="tracker-trend" id="tracker-trend-{{.Tracker.ID}}" data-scroll-anchor data-tracker-rev="{{.TrendDataRev}}" data-view-rev="{{.TrendViewRev}}"{{if .OOBTrend}} hx-swap-oob="outerHTML"{{end}}>
+  <h2>Trend</h2>
+  {{if .OverlayChoices}}
+  <details class="overlay-picker">
+    <summary>Show events from
+      {{if .Overlay}}<span class="tracker-icon">{{trackerIcon .Overlay.Icon}}</span> {{.Overlay.Name}}{{else}}None{{end}}
+    </summary>
+    <ul>
+      <li><a href="/trackers/{{.Tracker.ID}}" hx-get="/trackers/{{.Tracker.ID}}" hx-target="#content" hx-swap="innerHTML show:none" hx-push-url="true"{{if not .Overlay}} aria-current="page"{{end}}>None</a></li>
+      {{range .OverlayChoices}}
+      <li><a href="/trackers/{{$.Data.Tracker.ID}}?overlay={{.ID}}" hx-get="/trackers/{{$.Data.Tracker.ID}}?overlay={{.ID}}" hx-target="#content" hx-swap="innerHTML show:none" hx-push-url="true"{{if eq .ID $.Data.OverlayID}} aria-current="page"{{end}}><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</a></li>
+      {{end}}
+    </ul>
+  </details>
+  {{end}}
+  {{if .ChartScript}}
+  <p class="muted">{{if .Tracker.IsCount}}Count per day. A gap is a day with nothing logged.{{else if .Tracker.IsDuration}}Duration over the last 30 days. Each point is one entry.{{else if .Tracker.IsCumulative}}Running total over the last 30 days. Each point is the total earned through that entry, including anything earlier.{{else}}Value over the last 30 days{{with .Tracker.Unit}}, in {{.}}{{end}}. Each point is one entry.{{end}}{{if and .Overlay (not .OverlayEmpty)}} Shaded bands mark {{.Overlay.Name}} events on those days.{{end}}</p>
+  {{if .OverlayEmpty}}<p class="muted">No {{.Overlay.Name}} events in the last 30 days.</p>{{end}}
+  <div class="chart-frame">
+    <canvas id="trend-canvas" role="img" aria-label="{{if .Tracker.IsCount}}Count per day for the last 30 days. A gap is a day with nothing logged. Zero is a recorded none.{{else if .Tracker.IsDuration}}Duration over the last 30 days. Each point is one entry.{{else if .Tracker.IsCumulative}}Running total over the last 30 days. Each point is the total earned through that entry, including anything earlier.{{else}}Values over the last 30 days. Each point is one entry.{{end}}{{if .Overlay}} Shaded bands mark {{.Overlay.Name}} events.{{end}}"></canvas>
+    {{if .Overlay}}<p class="chart-tip" hidden></p>{{end}}
+  </div>
+  {{.ChartScript}}
+  {{.OverlayScript}}
+  <script src="/static/chart.js"></script>
+  {{else}}
+  <p class="muted">Nothing logged in the last 30 days.</p>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+
+{{define "trackerHistoryRegion"}}
+{{with .Data}}
+<section class="tracker-history" id="tracker-history-{{.Tracker.ID}}" data-scroll-anchor data-tracker-rev="{{.HistoryDataRev}}" data-view-rev="{{.HistoryViewRev}}"{{if .OOBHistory}} hx-swap-oob="outerHTML"{{end}}>
+  <h2>History</h2>
+  {{with .PeriodNote}}<p class="muted">{{.}}</p>{{end}}
+  {{range .History}}
+  <div class="history-day{{if not .Logged}} unlogged{{end}}" id="day-{{$.Data.Tracker.ID}}-{{.Day}}" data-scroll-anchor>
+    <div class="day-head">
+      <h3>{{.Label}}</h3>
+      {{with .Zero}}{{if and $.Data.IsOwner $.Data.Tracker.IsCount}}
+      <form method="post" action="/zeros/{{.ID}}/delete" hx-post="/zeros/{{.ID}}/delete" class="inline" {{inplace}}><button type="submit" class="quiet">Clear</button></form>
+      {{end}}{{end}}
+      {{if and $.Data.IsOwner $.Data.Tracker.IsCount (not .Logged)}}
+      <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/day" hx-post="/trackers/{{$.Data.Tracker.ID}}/day" class="inline" {{inplace}}>
+        <input type="hidden" name="day" value="{{.Day}}">
+        <button type="submit" class="quiet" data-occurrence>{{$.Data.Tracker.Label}}</button>
+      </form>
+      <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/zero" hx-post="/trackers/{{$.Data.Tracker.ID}}/zero" class="inline" {{inplace}}>
+        <input type="hidden" name="day" value="{{.Day}}">
+        <button type="submit" class="quiet">Record none</button>
+      </form>
+      {{end}}
+      {{if $.Data.Tracker.IsCount}}<span class="day-summary">{{.Summary}}</span>{{end}}
+    </div>
+    {{if .Entries}}<ul class="entries">{{range .Entries}}{{template "entry" .}}{{end}}</ul>{{end}}
+  </div>
+  {{end}}
+  {{if .IsOwner}}<p class="export"><a href="/trackers/{{.Tracker.ID}}/export">Download CSV</a></p>{{end}}
+</section>
 {{end}}
 {{end}}

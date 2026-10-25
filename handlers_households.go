@@ -131,7 +131,9 @@ func (a *app) renderDashboardError(w http.ResponseWriter, r *http.Request, u *Us
 		a.serverError(w, r, err)
 		return
 	}
-	a.render(w, r, http.StatusUnprocessableEntity, "dashboard.html", dashboardPage{Cards: cards, Name: name, Error: msg})
+	page := dashboardPage{Cards: cards, Name: name, Error: msg}
+	fillMarkers(&page)
+	a.render(w, r, http.StatusUnprocessableEntity, "dashboard.html", page)
 }
 
 func (a *app) handleCreateHousehold(w http.ResponseWriter, r *http.Request) {

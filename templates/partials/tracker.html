@@ -4,17 +4,29 @@
 
 {{define "logControl"}}
 <div class="log-control" id="log-{{.Tracker.ID}}" data-tracker>
-  <p class="tracker-summary" data-summary data-count="{{.Count}}" data-summary-display="{{.Tracker.SummaryMode}}" data-time-zone="{{.Zone}}">{{.Summary}}</p>
+  <p class="tracker-summary" data-summary data-count="{{.Count}}" data-summary-display="{{.Tracker.SummaryMode}}" data-time-zone="{{.Zone}}">{{.Summary}}{{if .GoalProgress}} toward next goal{{end}}</p>
   {{with .Notice}}<p role="status" class="saved">{{.}}</p>{{end}}
   {{if .GoalProgress}}
-  <progress class="goal-progress" value="{{.ProgressValue}}" max="{{.ProgressMax}}" aria-label="{{.Summary}}">{{.Summary}}</progress>
+  <progress class="goal-progress" value="{{.ProgressValue}}" max="{{.ProgressMax}}" aria-label="{{.Summary}} toward next goal">{{.Summary}}</progress>
   {{end}}
-  {{with .GoalsCompleted}}<p class="goal-meta">{{.}}</p>{{end}}
-  {{with .TotalEarned}}<p class="goal-meta">{{.}}</p>{{end}}
+  {{with .Rewards}}<p class="goal-meta">{{.}}</p>{{end}}
+  {{if .GoalsCompleted}}<p class="goal-meta">{{.GoalsCompleted}}{{with .TotalEarned}} · {{.}}{{end}}</p>{{end}}
+  {{with .RewardError}}<p role="alert" class="error">{{.}}</p>{{end}}
+  {{if .CanRedeem}}
+  <form class="redeem-form" method="post" action="/trackers/{{.Tracker.ID}}/redeem" hx-post="/trackers/{{.Tracker.ID}}/redeem" {{inplace}}>
+    {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
+    <input type="hidden" name="request" value="{{.RedeemToken}}">
+    <details{{if .RewardNote}} open{{end}}>
+      <summary>Add a note</summary>
+      <label>Note <input type="text" name="note" value="{{.RewardNote}}" maxlength="500"></label>
+    </details>
+    <button type="submit" class="secondary outline">Redeem reward</button>
+  </form>
+  {{end}}
   {{with .Carry}}<p class="carry">{{.}}</p>{{end}}
   <div class="log-buttons">
     {{if and .Tracker.IsNumber (or .LogAgain .NumberField)}}
-    <form class="log-again" method="post" action="{{.EntriesURL}}" hx-post="{{.EntriesURL}}" data-quick>
+    <form class="log-again" method="post" action="{{.EntriesURL}}" hx-post="{{.EntriesURL}}" data-quick {{inplace}}>
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <input type="hidden" name="log_again" value="1">
       <div class="log-again-field">
@@ -27,7 +39,7 @@
       <button type="submit" data-occurrence>{{if .LogAgain}}Log again{{else}}{{.Tracker.Label}}{{end}}</button>
     </form>
     {{else if .Tracker.IsCumulative}}
-    <form class="log-again" method="post" action="{{.EntriesURL}}" hx-post="{{.EntriesURL}}">
+    <form class="log-again" method="post" action="{{.EntriesURL}}" hx-post="{{.EntriesURL}}" {{inplace}}>
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <input type="hidden" name="add_amount" value="1">
       <div class="log-again-field">
@@ -40,12 +52,12 @@
       <button type="submit" data-occurrence>{{.Tracker.AddLabel}}</button>
     </form>
     {{else if .LogAgain}}
-    <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick>
+    <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick {{inplace}}>
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <button type="submit" data-occurrence>Log again</button>
     </form>
     {{else if .Tracker.IsCount}}
-    <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick>
+    <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick {{inplace}}>
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <button type="submit" data-occurrence>{{.Tracker.Label}}</button>
     </form>
@@ -53,7 +65,7 @@
     <a role="button" {{nav .Link}}>{{.Tracker.Label}}</a>
     {{end}}
     {{with .UndoURL}}
-    <form method="post" action="{{.}}" hx-post="{{.}}">
+    <form method="post" action="{{.}}" hx-post="{{.}}" {{inplace}}>
       {{with $.Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <button type="submit" class="secondary outline" data-occurrence>{{icon "arrow-back-up"}} Undo</button>
     </form>
@@ -64,7 +76,7 @@
 {{end}}
 
 {{define "card"}}
-<article class="tracker-card{{with .Tracker.Accent}} accent-{{.}}{{end}}"{{if .Reorder}} data-reorder-item data-id="{{.Tracker.ID}}"{{end}}>
+<article class="tracker-card{{with .Tracker.Accent}} accent-{{.}}{{end}}" id="tracker-{{.Tracker.ID}}" data-tracker-id="{{.Tracker.ID}}" data-highlight="{{.Tracker.ID}}" data-scroll-anchor data-tracker-rev="{{.DataRev}}" data-view-rev="{{.ViewRev}}"{{if .Reorder}} data-reorder-item data-id="{{.Tracker.ID}}"{{end}}{{if .OOB}} hx-swap-oob="{{.OOB}}"{{end}}>
   <div class="tracker-card-head">
     {{if .Reorder}}<button type="button" class="drag-handle" data-drag-handle aria-label="Drag to reorder this tracker">{{icon "grip-vertical"}}</button>{{end}}
     <div class="tracker-card-title">
@@ -76,9 +88,10 @@
 </article>
 {{end}}
 
-{{/* Re-fetches the page content every 30 seconds, and when the tab comes back, unless someone is editing. */}}
+{{/* Re-fetches changed trackers every 30 seconds, and when the tab comes back, unless someone is editing.
+    The response is out-of-band swaps. This element stays put, so the timer is not duplicated. */}}
 {{define "autoRefresh"}}
-<div hidden data-refresh hx-get="{{.}}" hx-trigger="every 30s [trackerIdle()], visibilitychange[trackerIdle()] from:document" hx-target="#content" hx-swap="innerHTML show:none"></div>
+<div hidden id="tracker-refresh" data-refresh hx-get="{{.}}" hx-trigger="every 30s [trackerIdle()], visibilitychange[trackerIdle()] from:document" hx-target="this" hx-swap="none" hx-sync="this:drop" hx-vals="js:{present: window.trackerRefreshVals().present, rev: window.trackerRefreshVals().rev}"></div>
 {{end}}
 
 {{define "trackerTitle"}}
@@ -104,21 +117,21 @@
 {{end}}
 
 {{define "entry"}}
-<li class="entry">
+<li class="entry" id="entry-{{.ID}}" data-scroll-anchor>
   <span class="entry-time">{{.Time}}</span>
   {{with .Value}}<span class="entry-value">— {{.}}</span>{{end}}
   {{with .Running}}<span class="entry-running">{{.}}</span>{{end}}
   {{with .Note}}<span class="entry-note">{{.}}</span>{{end}}
   {{if .By}}<small class="muted">{{if .ViaLink}}via share link{{else}}by {{.By}}{{end}}</small>{{end}}
   {{with .UndoURL}}
-  <form method="post" action="{{.}}" hx-post="{{.}}" class="inline">
+  <form method="post" action="{{.}}" hx-post="{{.}}" class="inline" {{inplace}}>
     <button type="submit" class="quiet" data-occurrence>Undo</button>
   </form>
   {{end}}
   {{if .Owner}}
   <details class="entry-edit">
     <summary>Edit</summary>
-    <form method="post" action="/entries/{{.ID}}" hx-post="/entries/{{.ID}}">
+    <form method="post" action="/entries/{{.ID}}" hx-post="/entries/{{.ID}}" {{inplace}}>
       <label>When <input type="datetime-local" name="time" value="{{.TimeValue}}" required></label>
       {{if or (eq .Kind "number") (eq .Kind "cumulative")}}
       <label>{{if eq .Kind "cumulative"}}Amount{{else}}Value{{end}}
@@ -138,7 +151,7 @@
       <label>Note <input type="text" name="note" value="{{.Note}}" maxlength="500"></label>
       <button type="submit">Save</button>
     </form>
-    <form method="post" action="/entries/{{.ID}}/delete" hx-post="/entries/{{.ID}}/delete" hx-confirm="Delete this entry?">
+    <form method="post" action="/entries/{{.ID}}/delete" hx-post="/entries/{{.ID}}/delete" hx-confirm="Delete this entry?" {{inplace}}>
       <button type="submit" class="quiet">{{icon "trash"}} Delete entry</button>
     </form>
   </details>

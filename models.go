@@ -143,3 +143,25 @@ type RecordedZero struct {
 	ViaLink      bool
 	CreatedAt    time.Time // drives the undo window
 }
+
+// Redemption is one reward taken from a cumulative tracker's completed goals.
+// Goals earned stay derived from entries. This row is not a point balance.
+// UserID is who redeemed it. It is not a foreign key: deleting a user later
+// must not delete the redemption. The email is looked up while the user exists.
+type Redemption struct {
+	ID         uint
+	TrackerID  uint  `gorm:"index;not null"`
+	UserID     *uint `gorm:"index"`
+	Note       string
+	RequestKey string    `gorm:"uniqueIndex;not null"`
+	RedeemedAt time.Time `gorm:"not null"`
+	CreatedAt  time.Time
+}
+
+// RewardRequest remembers a redeem submission after its redemption is undone.
+// A retry of that same request does not create another redemption.
+type RewardRequest struct {
+	RequestKey string `gorm:"primaryKey"`
+	TrackerID  uint   `gorm:"not null;index"`
+	CreatedAt  time.Time
+}

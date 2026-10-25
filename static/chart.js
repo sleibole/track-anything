@@ -11,7 +11,7 @@
       const next = document.getElementById("trend-canvas");
       const nextCount = document.getElementById("count-chart");
       const nextValue = document.getElementById("value-chart");
-      if (!next) return;
+      if (!next || (window.Chart && window.Chart.getChart(next))) return;
       if (nextCount) drawCountChart(next, nextCount);
       else if (nextValue) drawValueChart(next, nextValue);
     };
@@ -37,13 +37,24 @@
 
   if (!window.__countChartBound) {
     window.__countChartBound = true;
-    document.addEventListener("htmx:beforeSwap", function () {
-      if (!window.Chart) return;
-      const canvas = document.getElementById("trend-canvas");
-      const existing = canvas && window.Chart.getChart(canvas);
-      if (existing) existing.destroy();
+    document.addEventListener("htmx:beforeSwap", function (event) {
+      const target = event.detail && event.detail.target;
+      // A background refresh targets the hidden poller. Leave a live chart alone.
+      if (!target || (target.matches && target.matches("[data-refresh]"))) return;
+      destroyChartUnder(target);
+    });
+    document.addEventListener("htmx:oobBeforeSwap", function (event) {
+      destroyChartUnder(event.detail && event.detail.target);
     });
     document.addEventListener("htmx:afterSettle", bootCountChart);
+  }
+
+  function destroyChartUnder(target) {
+    if (!window.Chart || !target || !target.querySelector) return;
+    const canvas = target.id === "trend-canvas" ? target : target.querySelector("#trend-canvas");
+    if (!canvas) return;
+    const existing = window.Chart.getChart(canvas);
+    if (existing) existing.destroy();
   }
 
   function cssVar(name, fallback) {
