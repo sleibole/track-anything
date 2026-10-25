@@ -1,7 +1,11 @@
 /* Brand colors for Pico 2.1.1. Load this after pico.min.css.
    Typography, spacing, layout, and component rules stay in Pico.
    These selectors match Pico's so they override its color tokens
-   and still follow the system scheme, including an explicit data-theme. */
+   and still follow the system scheme, including an explicit data-theme.
+
+   Surfaces step the way a card sits on the page: the page is the
+   ground, the card is lifted, and a field is set into the card.
+   The card edge is a soft line. The control outline is stronger. */
 
 :host(:not([data-theme="dark"])),
 :root:not([data-theme="dark"]),
@@ -9,7 +13,7 @@
   --pico-background-color: #fafaf7;
   --pico-color: #1e293b;
   --pico-text-selection-color: rgba(94, 234, 212, 0.45);
-  --pico-muted-border-color: #e7e5e4;
+  --pico-muted-border-color: #e4dfd6;
   --pico-primary: #0f766e;
   --pico-primary-background: #0f766e;
   --pico-primary-border: var(--pico-primary-background);
@@ -20,6 +24,7 @@
   --pico-primary-hover-underline: var(--pico-primary-hover);
   --pico-primary-focus: #0f766e;
   --pico-primary-inverse: #fff;
+  --pico-box-shadow: 0 0.0625rem 0.25rem rgba(30, 41, 59, 0.05), 0 0.5rem 1.25rem rgba(30, 41, 59, 0.06);
   --pico-h1-color: #1e293b;
   --pico-h2-color: #1e293b;
   --pico-h3-color: #1e293b;
@@ -27,26 +32,34 @@
   --pico-h5-color: #334155;
   --pico-h6-color: #475569;
   --pico-card-background-color: #fff;
-  --pico-card-sectioning-background-color: #fff;
-  --pico-form-element-background-color: #fff;
+  --pico-card-border-color: #e4dfd6;
+  --pico-card-sectioning-background-color: #f3f1ea;
+  --pico-form-element-background-color: #f4f3ee;
+  --pico-form-element-selected-background-color: #d8f3ee;
+  --pico-form-element-border-color: #8a8478;
   --pico-form-element-color: #1e293b;
   --pico-form-element-active-background-color: #fff;
   --pico-form-element-active-border-color: var(--pico-primary);
   --pico-form-element-focus-color: var(--pico-primary);
   --pico-dropdown-background-color: #fff;
-  --pico-dropdown-border-color: #e7e5e4;
+  --pico-dropdown-border-color: #8a8478;
+  --pico-dropdown-hover-background-color: #f3f1ea;
+  --pico-modal-overlay-background-color: rgba(30, 41, 59, 0.4);
 }
 
 /* Lighter teal for links, outlines, and focus. Filled controls stay
    #0f766e so the white label, check, and switch thumb keep contrast.
-   Mint is the hover and focus accent, not a fill behind white text. */
+   Mint is the hover and focus accent, not a fill behind white text.
+   Muted text is a step lighter than Pico's so it stays readable on
+   the lifted card. */
 @media only screen and (prefers-color-scheme: dark) {
   :host(:not([data-theme])),
   :root:not([data-theme]) {
-    --pico-background-color: #13171f;
+    --pico-background-color: #10141c;
     --pico-color: #c2c7d0;
     --pico-text-selection-color: rgba(94, 234, 212, 0.28);
-    --pico-muted-border-color: #202632;
+    --pico-muted-color: #8b96a8;
+    --pico-muted-border-color: #3a4860;
     --pico-primary: #2dd4bf;
     --pico-primary-background: #0f766e;
     --pico-primary-border: var(--pico-primary-background);
@@ -57,29 +70,36 @@
     --pico-primary-hover-underline: var(--pico-primary-hover);
     --pico-primary-focus: #5eead4;
     --pico-primary-inverse: #fff;
+    --pico-box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.35);
     --pico-h1-color: #f0f1f3;
     --pico-h2-color: #e0e3e7;
     --pico-h3-color: #c2c7d0;
     --pico-h4-color: #b3b9c5;
     --pico-h5-color: #a4acba;
     --pico-h6-color: #8891a4;
-    --pico-card-background-color: #181c25;
-    --pico-card-sectioning-background-color: rgb(26, 30.5, 40.25);
-    --pico-form-element-background-color: rgb(28, 33, 43.5);
+    --pico-card-background-color: #1c2533;
+    --pico-card-border-color: #3a4860;
+    --pico-card-sectioning-background-color: #273140;
+    --pico-form-element-background-color: #131820;
+    --pico-form-element-selected-background-color: #14564f;
+    --pico-form-element-border-color: #6d7e96;
     --pico-form-element-color: #e0e3e7;
-    --pico-form-element-active-background-color: rgb(26, 30.5, 40.25);
+    --pico-form-element-active-background-color: #1c2533;
     --pico-form-element-active-border-color: #2dd4bf;
     --pico-form-element-focus-color: #2dd4bf;
-    --pico-dropdown-background-color: #181c25;
-    --pico-dropdown-border-color: #202632;
+    --pico-dropdown-background-color: #1c2533;
+    --pico-dropdown-border-color: #6d7e96;
+    --pico-dropdown-hover-background-color: #273140;
+    --pico-modal-overlay-background-color: rgba(8, 10, 14, 0.72);
   }
 }
 
 [data-theme="dark"] {
-  --pico-background-color: #13171f;
+  --pico-background-color: #10141c;
   --pico-color: #c2c7d0;
   --pico-text-selection-color: rgba(94, 234, 212, 0.28);
-  --pico-muted-border-color: #202632;
+  --pico-muted-color: #8b96a8;
+  --pico-muted-border-color: #3a4860;
   --pico-primary: #2dd4bf;
   --pico-primary-background: #0f766e;
   --pico-primary-border: var(--pico-primary-background);
@@ -90,21 +110,33 @@
   --pico-primary-hover-underline: var(--pico-primary-hover);
   --pico-primary-focus: #5eead4;
   --pico-primary-inverse: #fff;
+  --pico-box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.35);
   --pico-h1-color: #f0f1f3;
   --pico-h2-color: #e0e3e7;
   --pico-h3-color: #c2c7d0;
   --pico-h4-color: #b3b9c5;
   --pico-h5-color: #a4acba;
   --pico-h6-color: #8891a4;
-  --pico-card-background-color: #181c25;
-  --pico-card-sectioning-background-color: rgb(26, 30.5, 40.25);
-  --pico-form-element-background-color: rgb(28, 33, 43.5);
+  --pico-card-background-color: #1c2533;
+  --pico-card-border-color: #3a4860;
+  --pico-card-sectioning-background-color: #273140;
+  --pico-form-element-background-color: #131820;
+  --pico-form-element-selected-background-color: #14564f;
+  --pico-form-element-border-color: #6d7e96;
   --pico-form-element-color: #e0e3e7;
-  --pico-form-element-active-background-color: rgb(26, 30.5, 40.25);
+  --pico-form-element-active-background-color: #1c2533;
   --pico-form-element-active-border-color: #2dd4bf;
   --pico-form-element-focus-color: #2dd4bf;
-  --pico-dropdown-background-color: #181c25;
-  --pico-dropdown-border-color: #202632;
+  --pico-dropdown-background-color: #1c2533;
+  --pico-dropdown-border-color: #6d7e96;
+  --pico-dropdown-hover-background-color: #273140;
+  --pico-modal-overlay-background-color: rgba(8, 10, 14, 0.72);
+}
+
+/* Pico paints a card fill and shadow, and draws the border only on
+   section headers. The wrapper edge is the soft line. */
+article {
+  border: var(--pico-border-width) solid var(--pico-card-border-color);
 }
 
 /* The inline style in the layout is the pre-paint color. Pico sets the
