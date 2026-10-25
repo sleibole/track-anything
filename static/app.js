@@ -1,5 +1,23 @@
 // Small browser behaviors that HTMX doesn't cover. Keep this file short.
 
+// HTMX updates the document title from the fragment and leaves <head> in place.
+// The fragment carries this page's canonical, description, social, and robots
+// tags in an inert template. Copy them into <head> after a content swap and
+// when history restores that fragment.
+function syncPageMeta() {
+  const holder = document.querySelector("#content template[data-page-meta]");
+  if (!holder) return;
+  document.head.querySelectorAll("[data-page-meta]").forEach((node) => node.remove());
+  holder.content.querySelectorAll("[data-page-meta]").forEach((node) => {
+    document.head.appendChild(node.cloneNode(true));
+  });
+}
+
+document.addEventListener("htmx:afterSwap", (event) => {
+  if (event.detail?.target?.id === "content") syncPageMeta();
+});
+document.addEventListener("htmx:historyRestore", syncPageMeta);
+
 const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
 // Hidden fields on signup get the browser's IANA time zone.
@@ -503,95 +521,355 @@ document.addEventListener("htmx:afterSettle", (event) => {
   const root = event.detail?.target || document;
   ensureTurnstile(root);
   renderTurnstile(root);
-  syncInstallHint();
+  syncInstall();
 });
 
 document.addEventListener("htmx:historyRestore", () => {
   restoreTurnstile(document.getElementById("content") || document);
+  syncInstall();
 });
 
-// Home-screen install. The manifest makes the site installable; this offer
-// tells a phone how. iOS has no install dialog, so the line names Share.
-// Other phones get the browser menu, unless the browser offers its own prompt.
-const installModes = ["install-ios", "install-menu", "install-browser", "install-prompt"];
-let installPrompt = null;
+// Install help. The early listener in the layout stores beforeinstallprompt.
+// Nothing is written to localStorage: this window's display mode, plus
+// appinstalled for the current document, decides whether the footer is shown.
+const installDisplayModes = ["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"];
+let chosenPlatform = "";
+let installOpener = null;
 
-function installDismissed() {
-  try {
-    return localStorage.getItem("install-dismissed") === "1";
-  } catch {
-    return false;
+function runningInstalled() {
+  const state = window.trackInstall;
+  if (state && typeof state.runningInstalled === "function") return state.runningInstalled();
+  for (const mode of installDisplayModes) {
+    if (window.matchMedia(`(display-mode: ${mode})`).matches) return true;
   }
+  return window.navigator.standalone === true;
 }
 
-function rememberInstallDismissed() {
-  try {
-    localStorage.setItem("install-dismissed", "1");
-  } catch {
-    // A private session can refuse storage. The offer still closes for this page.
-  }
+function invitationHidden() {
+  const state = window.trackInstall;
+  return runningInstalled() || !!(state && state.sessionInstalled);
 }
 
-function phoneLike() {
-  return window.matchMedia("(pointer: coarse)").matches;
+function usablePrompt(event) {
+  return !!event && typeof event.prompt === "function";
 }
 
-function standaloneApp() {
-  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+function detectPlatform() {
+  const ua = navigator.userAgent || "";
+  // iPadOS can report a desktop Mac. Chrome on iOS still carries iPhone or iPad.
+  const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (iOS) return "ios";
+  if (/Android/i.test(ua)) return "android";
+  if (/Windows|Macintosh|Mac OS X|Linux|CrOS|X11/i.test(ua)) return "desktop";
+  return "unknown";
 }
 
-function isIos() {
-  if (/iPad|iPhone|iPod/.test(navigator.userAgent)) return true;
-  // iPadOS reports itself as a Mac, and a real Mac has no touch points.
-  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+function selectedPlatform() {
+  if (chosenPlatform === "ios" || chosenPlatform === "android" || chosenPlatform === "desktop") return chosenPlatform;
+  return detectPlatform();
 }
 
 function inAppBrowser() {
-  return /Instagram|FBAN|FBAV|FB_IAB|Line\/|Snapchat|TikTok|BytedanceWebview|LinkedInApp|Twitter/i.test(navigator.userAgent);
+  return /Instagram|FBAN|FBAV|FB_IAB|Line\/|Snapchat|TikTok|BytedanceWebview|LinkedInApp|Twitter|MicroMessenger|Pinterest|WhatsApp|GSA\//i.test(navigator.userAgent || "");
 }
 
-function clearInstallOffer() {
-  document.documentElement.classList.remove("install-offer", ...installModes);
+function safeInstallURL() {
+  try {
+    const url = new URL("/", location.origin);
+    if (url.username || url.password || url.search || url.hash) return "";
+    if (url.origin !== location.origin) return "";
+    return url.href;
+  } catch {
+    return "";
+  }
 }
 
-function syncInstallHint() {
-  if (!document.querySelector("[data-install-hint]") || !phoneLike() || standaloneApp() || installDismissed()) {
-    clearInstallOffer();
+function fillInstallURL(dialog) {
+  const node = dialog.querySelector("[data-install-url]");
+  if (node) node.textContent = safeInstallURL();
+}
+
+function announceInstall(message, kind) {
+  const el = document.querySelector("#install-dialog [data-install-status]");
+  if (!el) return;
+  el.classList.toggle("error", kind === "error");
+  el.textContent = "";
+  el.textContent = message;
+}
+
+function renderInstallDialog(dialog) {
+  const state = window.trackInstall || {};
+  const usable = usablePrompt(state.event) && !state.prompting;
+  const native = dialog.querySelector("[data-install-native]");
+  if (native) native.hidden = !usable;
+  const toggleWrap = dialog.querySelector("[data-install-other-wrap]");
+  const toggle = dialog.querySelector("[data-install-toggle]");
+  const manual = dialog.querySelector("[data-install-manual]");
+  const expanded = toggle && toggle.getAttribute("aria-expanded") === "true";
+  if (toggleWrap) toggleWrap.hidden = !usable;
+  if (manual) manual.hidden = usable && !expanded;
+  const kind = selectedPlatform();
+  dialog.querySelectorAll("[data-install-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.installPanel !== kind;
+  });
+  const known = kind === "ios" || kind === "android" || kind === "desktop";
+  const unknown = dialog.querySelector("[data-install-unknown]");
+  if (unknown) unknown.hidden = known;
+  const inApp = inAppBrowser();
+  const inAppNote = dialog.querySelector("[data-install-inapp]");
+  if (inAppNote) inAppNote.hidden = !inApp;
+  const copy = dialog.querySelector("[data-install-copy]");
+  const showCopy = kind === "ios" || inApp;
+  if (copy) copy.hidden = !showCopy;
+  if (showCopy) fillInstallURL(dialog);
+  dialog.querySelectorAll("[data-install-choose]").forEach((button) => {
+    button.setAttribute("aria-pressed", button.dataset.installChoose === kind ? "true" : "false");
+  });
+}
+
+function syncInstall() {
+  const hidden = invitationHidden();
+  document.documentElement.classList.toggle("install-session", hidden);
+  const footer = document.querySelector("[data-install-footer]");
+  if (footer) footer.hidden = hidden;
+  const dialog = document.getElementById("install-dialog");
+  if (!dialog) return;
+  if (hidden && runningInstalled() && dialog.open) dialog.close();
+  renderInstallDialog(dialog);
+}
+
+function lockInstallScroll() {
+  const body = document.body;
+  if (body.dataset.installScroll) return;
+  const y = window.scrollY;
+  const bar = window.innerWidth - document.documentElement.clientWidth;
+  body.dataset.installScroll = String(y);
+  body.style.position = "fixed";
+  body.style.top = `-${y}px`;
+  body.style.left = "0";
+  body.style.right = "0";
+  body.style.paddingRight = bar > 0 ? `${bar}px` : "";
+}
+
+function unlockInstallScroll() {
+  const body = document.body;
+  if (!body.dataset.installScroll) return null;
+  const y = Number(body.dataset.installScroll);
+  body.style.position = "";
+  body.style.top = "";
+  body.style.left = "";
+  body.style.right = "";
+  body.style.paddingRight = "";
+  delete body.dataset.installScroll;
+  return Number.isFinite(y) ? y : 0;
+}
+
+let installReleasing = false;
+
+function releaseInstallDialog() {
+  if (installReleasing) return;
+  installReleasing = true;
+  try {
+    const y = unlockInstallScroll();
+    const opener = installOpener;
+    installOpener = null;
+    if (opener && opener.isConnected && !opener.hidden && opener.offsetParent !== null) opener.focus();
+    if (y != null) window.scrollTo(0, y);
+  } finally {
+    installReleasing = false;
+  }
+}
+
+function bindInstallDialog(dialog) {
+  if (dialog.dataset.installBound === "1") return;
+  dialog.dataset.installBound = "1";
+  // This browser fires toggle and not close when a dialog shuts.
+  const onClosed = (event) => {
+    if (event.type === "toggle" && event.newState !== "closed") return;
+    releaseInstallDialog();
+  };
+  dialog.addEventListener("toggle", onClosed);
+  dialog.addEventListener("close", onClosed);
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+}
+
+function openInstallDialog(trigger) {
+  const dialog = document.getElementById("install-dialog");
+  if (!dialog || invitationHidden()) return;
+  bindInstallDialog(dialog);
+  installOpener = trigger instanceof HTMLElement ? trigger : null;
+  const status = dialog.querySelector("[data-install-status]");
+  if (status) {
+    status.textContent = "";
+    status.classList.remove("error");
+  }
+  syncInstall();
+  if (dialog.open) return;
+  lockInstallScroll();
+  try {
+    dialog.showModal();
+  } catch {
+    const y = unlockInstallScroll();
+    if (y != null) window.scrollTo(0, y);
     return;
   }
-  let mode = "install-menu";
-  if (installPrompt) mode = "install-prompt";
-  else if (inAppBrowser()) mode = "install-browser";
-  else if (isIos()) mode = "install-ios";
-  const root = document.documentElement;
-  for (const name of installModes) root.classList.toggle(name, name === mode);
-  root.classList.add("install-offer");
+  const prompt = dialog.querySelector("[data-install-prompt]");
+  const native = dialog.querySelector("[data-install-native]");
+  const close = dialog.querySelector("[data-install-close]");
+  if (native && !native.hidden && prompt) prompt.focus();
+  else if (close) close.focus();
 }
 
-window.addEventListener("beforeinstallprompt", (event) => {
-  if (!document.querySelector("[data-install-hint]") || !phoneLike() || standaloneApp() || installDismissed()) return;
-  event.preventDefault();
-  installPrompt = event;
-  syncInstallHint();
-});
+function startPrompt() {
+  const state = window.trackInstall;
+  if (!state || state.prompting || !usablePrompt(state.event)) return;
+  const event = state.event;
+  state.event = null;
+  state.prompting = true;
+  syncInstall();
+  let settled = false;
+  let reported = false;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    state.prompting = false;
+    syncInstall();
+  };
+  const fail = () => {
+    if (reported) return;
+    reported = true;
+    announceInstall("The install prompt could not be opened. Use the steps below.", "error");
+  };
+  try {
+    const prompted = event.prompt();
+    if (prompted && typeof prompted.catch === "function") prompted.catch(fail);
+    const choice = event.userChoice;
+    if (!choice || typeof choice.then !== "function") {
+      fail();
+      finish();
+      return;
+    }
+    choice.then((result) => {
+      if (reported) return;
+      reported = true;
+      if (result && result.outcome === "accepted") {
+        announceInstall("The browser is handling installation. This tab stays open.");
+      } else {
+        announceInstall("Install prompt closed.");
+      }
+    }).catch(fail).finally(finish);
+  } catch {
+    fail();
+    finish();
+  }
+}
 
-window.addEventListener("appinstalled", () => {
-  installPrompt = null;
-  rememberInstallDismissed();
-  clearInstallOffer();
-});
-
-document.addEventListener("click", (event) => {
-  if (event.target.closest("[data-install-dismiss]")) {
-    rememberInstallDismissed();
-    clearInstallOffer();
+function copyInstallLink() {
+  const dialog = document.getElementById("install-dialog");
+  if (!dialog) return;
+  const url = safeInstallURL();
+  fillInstallURL(dialog);
+  if (!url) {
+    announceInstall("Could not copy the link. Select the address below and copy it.", "error");
     return;
   }
-  if (!event.target.closest("[data-install-action]") || !installPrompt) return;
-  const prompt = installPrompt;
-  installPrompt = null;
-  prompt.prompt();
-  prompt.userChoice.finally(() => syncInstallHint());
-});
+  copyText(url).then(() => {
+    announceInstall("Link copied.");
+  }).catch(() => {
+    announceInstall("Could not copy the link. Select the address below and copy it.", "error");
+    const node = dialog.querySelector("[data-install-url]");
+    if (!node) return;
+    node.tabIndex = -1;
+    node.focus();
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+}
 
-syncInstallHint();
+if (!window.trackInstall || !window.trackInstall.uiBound) {
+  window.trackInstall = window.trackInstall || { event: null, prompting: false, sessionInstalled: false, notice: "" };
+  window.trackInstall.uiBound = true;
+  if (!window.trackInstall.listening) {
+    window.trackInstall.listening = true;
+    window.trackInstall.runningInstalled = runningInstalled;
+    window.addEventListener("beforeinstallprompt", (event) => {
+      if (runningInstalled() || typeof event.prompt !== "function") return;
+      event.preventDefault();
+      window.trackInstall.event = event;
+      window.trackInstall.sessionInstalled = false;
+      window.trackInstall.notice = "";
+      document.documentElement.classList.remove("install-session");
+      document.dispatchEvent(new Event("track-install"));
+    });
+    window.addEventListener("appinstalled", () => {
+      window.trackInstall.event = null;
+      window.trackInstall.sessionInstalled = true;
+      window.trackInstall.notice = "installed";
+      document.documentElement.classList.add("install-session");
+      document.dispatchEvent(new Event("track-install"));
+    });
+  }
+  for (const mode of installDisplayModes) {
+    const mq = window.matchMedia(`(display-mode: ${mode})`);
+    const onChange = () => syncInstall();
+    if (typeof mq.addEventListener === "function") mq.addEventListener("change", onChange);
+    else if (typeof mq.addListener === "function") mq.addListener(onChange);
+  }
+  document.addEventListener("track-install", () => {
+    const state = window.trackInstall;
+    if (state && state.notice === "installed") {
+      state.notice = "";
+      const dialog = document.getElementById("install-dialog");
+      if (dialog && dialog.open) announceInstall("This browser finished adding Track Anything.");
+    }
+    syncInstall();
+  });
+  document.addEventListener("htmx:beforeSwap", (event) => {
+    const dialog = document.getElementById("install-dialog");
+    const target = event.detail && event.detail.target;
+    if (!dialog || !dialog.open || !target || typeof target.contains !== "function") return;
+    if (target === dialog || target.contains(dialog)) dialog.close();
+  });
+  window.addEventListener("pageshow", () => syncInstall());
+  document.addEventListener("click", (event) => {
+    const open = event.target.closest("[data-install-open]");
+    if (open) {
+      openInstallDialog(open);
+      return;
+    }
+    if (event.target.closest("[data-install-close]")) {
+      document.getElementById("install-dialog")?.close();
+      return;
+    }
+    if (event.target.closest("[data-install-prompt]")) {
+      startPrompt();
+      return;
+    }
+    if (event.target.closest("[data-install-copy-button]")) {
+      copyInstallLink();
+      return;
+    }
+    const choose = event.target.closest("[data-install-choose]");
+    if (choose) {
+      chosenPlatform = choose.dataset.installChoose || "";
+      syncInstall();
+      return;
+    }
+    const toggle = event.target.closest("[data-install-toggle]");
+    if (toggle) {
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      const manual = document.getElementById("install-manual");
+      if (expanded && manual && manual.contains(document.activeElement)) toggle.focus();
+      toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+      syncInstall();
+    }
+  });
+}
+
+syncInstall();

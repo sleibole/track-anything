@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{block "title" .}}Track Anything{{end}}</title>
+  {{template "pageMeta" .}}
   <meta name="theme-color" content="#0F766E">
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="icon" href="/static/favicon.ico" sizes="any">
@@ -29,6 +30,42 @@
   <link rel="stylesheet" href="/static/theme.css">
   <link rel="stylesheet" href="/static/app.css">
   <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[234]..","swap":true},{"code":"...","swap":false,"error":true}]}'>
+  <script>
+    (function () {
+      if (window.trackInstall && window.trackInstall.listening) return;
+      var modes = ["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"];
+      function runningInstalled() {
+        for (var i = 0; i < modes.length; i++) {
+          if (window.matchMedia("(display-mode: " + modes[i] + ")").matches) return true;
+        }
+        return window.navigator.standalone === true;
+      }
+      var state = window.trackInstall = window.trackInstall || {};
+      state.event = null;
+      state.prompting = false;
+      state.sessionInstalled = false;
+      state.notice = "";
+      state.listening = true;
+      state.runningInstalled = runningInstalled;
+      if (runningInstalled()) document.documentElement.classList.add("install-session");
+      window.addEventListener("beforeinstallprompt", function (event) {
+        if (runningInstalled() || typeof event.prompt !== "function") return;
+        event.preventDefault();
+        state.event = event;
+        state.sessionInstalled = false;
+        state.notice = "";
+        document.documentElement.classList.remove("install-session");
+        document.dispatchEvent(new Event("track-install"));
+      });
+      window.addEventListener("appinstalled", function () {
+        state.event = null;
+        state.sessionInstalled = true;
+        state.notice = "installed";
+        document.documentElement.classList.add("install-session");
+        document.dispatchEvent(new Event("track-install"));
+      });
+    })();
+  </script>
   <script src="/static/htmx.min.js" defer></script>
   <script src="/static/app.js" defer></script>
   {{block "scripts" .}}{{end}}
@@ -56,9 +93,34 @@
   <main class="container" id="content" hx-history-elt hx-target="#content" hx-swap="innerHTML show:none">
     {{template "content" .}}
   </main>
+  {{template "installFooter"}}
   <template id="button-spinner">{{icon "loader"}}</template>
 </body>
 </html>
 {{end}}
 
-{{define "partial"}}<title>{{template "title" .}}</title>{{template "content" .}}{{end}}
+{{define "pageMeta"}}
+{{if .SEO.Indexable}}
+<link rel="canonical" href="{{.SEO.Canonical}}" data-page-meta>
+<meta name="description" content="{{.SEO.Description}}" data-page-meta>
+<meta property="og:type" content="website" data-page-meta>
+<meta property="og:site_name" content="Track Anything" data-page-meta>
+<meta property="og:title" content="{{.SEO.Title}}" data-page-meta>
+<meta property="og:description" content="{{.SEO.Description}}" data-page-meta>
+<meta property="og:url" content="{{.SEO.Canonical}}" data-page-meta>
+<meta property="og:image" content="{{.SEO.Image}}" data-page-meta>
+<meta property="og:image:alt" content="Track Anything icon" data-page-meta>
+<meta property="og:image:type" content="image/png" data-page-meta>
+<meta property="og:image:width" content="512" data-page-meta>
+<meta property="og:image:height" content="512" data-page-meta>
+<meta name="twitter:card" content="summary" data-page-meta>
+<meta name="twitter:title" content="{{.SEO.Title}}" data-page-meta>
+<meta name="twitter:description" content="{{.SEO.Description}}" data-page-meta>
+<meta name="twitter:image" content="{{.SEO.Image}}" data-page-meta>
+<meta name="twitter:image:alt" content="Track Anything icon" data-page-meta>
+{{else}}
+<meta name="robots" content="noindex" data-page-meta>
+{{end}}
+{{end}}
+
+{{define "partial"}}<title>{{template "title" .}}</title>{{template "content" .}}<template data-page-meta>{{template "pageMeta" .}}</template>{{end}}

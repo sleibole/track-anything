@@ -10,7 +10,7 @@ Do not set `hx-boost` on `<body>` or `<main>`. Login and signup live inside `<ma
 
 ## What the server returns
 
-`render` writes the `layout` template, or the `partial` template when `HX-Request` is set. The partial is a `<title>` plus the page's `content` block. HTMX removes the title from the fragment and sets `document.title`. The block is what lands in `#content`. A partial has no `<!doctype html>` and no header.
+`render` writes the `layout` template, or the `partial` template when `HX-Request` is set. The partial is a `<title>` plus the page's `content` block. HTMX removes the title from the fragment and sets `document.title`. The block is what lands in `#content`. A partial has no `<!doctype html>` and no header. It ends with an inert `<template data-page-meta>` holding that page's canonical, description, social, and robots tags. `static/app.js` copies those into `<head>` after a `#content` swap and when history restores the fragment, so the title and the discovery tags match the page on screen. `X-Robots-Tag` is a response header and applies to both shapes. `render` sends `Vary: HX-Request, Cookie` and `Cache-Control: private, no-store`, so a cache does not reuse a fragment as the document or one viewer's page as another's.
 
 `<main>` sets `hx-history-elt`, `hx-target="#content"`, and `hx-swap="innerHTML show:none"`. History saves and restores the inner HTML of `#content`, not the body. A cache miss GETs the URL with `HX-Request` and swaps that partial into `#content`. It must not become a document reload. The saved history item also stores the document title from the partial.
 
@@ -60,6 +60,8 @@ Share on and off, the time zone, and verification email `303` back to the page a
 ## Scripts
 
 `htmx.min.js` and `app.js` are in the layout head. They survive a swap.
+
+The install footer and dialog sit in the layout after `<main>`, so they are outside `#content` and are not stored in history. An inline script in the head listens for `beforeinstallprompt` while the first page loads. `app.js` keeps that event and binds the dialog once. A content swap does not add a second dialog or a second listener. If a swap would remove an open dialog, the scroll lock is cleared first.
 
 `reorder.js` is in the dashboard content, not the head. A home page reached by a swap still loads it. The file ignores a second run, and its listeners stay on `document`, so a cached return to Home can still drag.
 

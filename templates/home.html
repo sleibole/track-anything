@@ -1,11 +1,11 @@
+{{define "title"}}{{publicTitle}}{{end}}
 {{define "content"}}
 <hgroup>
-  <h1>Track Anything</h1>
-  <p>Track how often anything happens: dog meals, workouts, habits.</p>
+  <h1>{{publicTitle}}</h1>
+  <p>{{publicDescription}}</p>
 </hgroup>
 <p>
   <a href="/signup" role="button">Sign up</a>
   <a href="/login" role="button" class="secondary outline">Log in</a>
 </p>
-{{template "installHint"}}
 {{end}}

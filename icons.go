@@ -9,6 +9,7 @@ import (
 
 // Tabler icons (MIT, see icons/LICENSE). Each SVG was copied in with aria-hidden="true"
 // and class="icon" added, so icon-only buttons need their own aria-label.
+// share-up is not from that set: it is the Share glyph drawn for the install steps.
 //
 //go:embed icons/*.svg
 var iconFS embed.FS
@@ -124,4 +125,6 @@ var templateFuncs = template.FuncMap{
 	"startupImageLinks": startupImageLinks,
 	"nav":               nav,
 	"inplace":           inplaceAttr,
+	"publicTitle":       func() string { return publicTitle },
+	"publicDescription": func() string { return publicDescription },
 }

@@ -71,6 +71,7 @@ track-anything/
 ├── handlers_households.go # create, rename, leave, members, invite link, join, archived trackers
 ├── handlers_share.go   # share-link pages, no login
 ├── render.go           # template loading + render helper (full page vs HTMX partial)
+├── seo.go              # indexing, canonical URLs, robots.txt, and the sitemap
 ├── middleware.go       # request logging, panic recovery, security headers
 ├── templates/
 │   ├── layout.html     # ad and consent scripts live here, outside any HTMX swap target
@@ -89,11 +90,11 @@ track-anything/
 │   ├── join.html       # invitation confirm page
 │   ├── verify.html     # email confirmation; GET does not consume the token
 │   ├── message.html    # 404, 403, and other one-line answers
-│   └── partials/       # fragments shared by pages: card, log control, entry, Turnstile, home-screen offer
+│   └── partials/       # fragments shared by pages: card, log control, entry, Turnstile, install dialog
 ├── icons/              # Tabler SVGs we use, inlined by the icon template func
 ├── static/
 │   ├── htmx.min.js
-│   ├── app.js             # optimistic log line, idle refresh, Turnstile remount
+│   ├── app.js             # optimistic log line, idle refresh, Turnstile remount, install dialog
 │   ├── reorder.js         # dashboard drag-and-drop across the whole home list; posts the new order
 │   ├── chart.umd.min.js   # Chart.js 4.5.1 UMD, MIT. Loaded only by chart.js
 │   ├── chart.js           # draws the embedded series and overlay bands on the tracker page and /charts
@@ -458,6 +459,8 @@ GET    /billing                   not registered; upgrade, portal, and webhook a
 
 GET    /static/...                embedded files
 GET    /healthz                   no session; 200 `ok` when `SELECT 1` succeeds, otherwise 503 with no error text. There is no `/metrics` route
+GET    /robots.txt                crawler rules. Production allows `/` and names the sitemap. Any other ENV disallows everything
+GET    /sitemap.xml               production: the logged-out home URL. Any other ENV: an empty urlset
 ```
 
 Later offline sync reuses `POST /trackers/{id}/quick`, `POST /s/{token}/quick`, and, once it exists, `POST /trackers/{id}/repeat`. Those requests add a client id and the tap time. Without them, the posts behave as they do now. See Offline logging.
@@ -537,10 +540,10 @@ The range is a `chartSpan`. Empty or `30d` is `chartDays` (30). `90d` is 90 loca
 
 - Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`. The database stores the sha256 of the cookie value, with an expiry. `ENV=dev` turns off `Secure`.
 - CSRF: `http.CrossOriginProtection` on all non-GET requests, including share-link posts.
-- Response headers on every page: `X-Content-Type-Options: nosniff`, `Content-Security-Policy: frame-ancestors 'none'`, and `Referrer-Policy: same-origin`. Share pages replace the referrer policy with `no-referrer` and add `X-Robots-Tag: noindex`. There is no broader content-security policy.
+- Response headers on every page: `X-Content-Type-Options: nosniff`, `Content-Security-Policy: frame-ancestors 'none'`, and `Referrer-Policy: same-origin`. Share pages replace the referrer policy with `no-referrer` and set `X-Robots-Tag: noindex`. Which other responses send that robots header is under Public discovery. There is no broader content-security policy.
 - Production (`ENV=prod`) also sends `Strict-Transport-Security: max-age=15552000`. Dev does not. There is no `includeSubDomains` and no `preload`. The header does not redirect HTTP to HTTPS; the public edge does that. If the edge strips this header, set the same value there. Do not publish two different `max-age` values.
 - Request bodies other than `GET`, `HEAD`, and `OPTIONS` are limited to 256 KiB. A declared `Content-Length` above that, or a body that reads past it, is `413` and the handler does not run. The middleware does not parse the form.
-- HTML from `render`, the CSV export, and `/healthz` send `Cache-Control: private, no-store`. `GET /static/` and the splash images do not. Splash stays `public, max-age=86400`.
+- HTML from `render`, the CSV export, and `/healthz` send `Cache-Control: private, no-store`. HTML from `render` also sends `Vary: HX-Request, Cookie`, because a fragment and a full document share a URL and logged-in and logged-out home share `/`. `GET /static/` and the splash images do not send `private, no-store`. Splash stays `public, max-age=86400`. `GET /robots.txt` and `GET /sitemap.xml` send `Cache-Control: public, max-age=3600`.
 - CSV export prefixes `'` on `note`, `unit`, and `recorded_by` when the field starts with `=`, `+`, `-`, `@`, tab, or carriage return. `value`, `duration_seconds`, `duration`, `type`, `occurred_at`, `day`, and `via_link` are unchanged, so a negative measurement stays a number. The apostrophe is part of the CSV field. To recover the original text, strip one leading `'` only when the remainder starts with one of those characters.
 - The binary is built with the Go patch in `go.mod`'s `toolchain` line and the matching `Dockerfile` `FROM`. That is currently go1.27.3.
 - **Share links are bearer tokens.** Anyone holding the URL can log entries. Link visitors can only undo entries from the last 15 minutes.
@@ -551,6 +554,44 @@ The range is a `chartSpan`. Empty or `30d` is `chartDays` (30). `90d` is 90 loca
 - Authentication and verification mail is also limited to 3 messages per recipient address every 15 minutes. When that limit is hit, the response is the same as a successful send.
 - Cloudflare Turnstile protects signup, password login, magic-link requests, and change password. The browser widget is not sufficient: the server checks `cf-turnstile-response` with Siteverify before the action. Turnstile does not replace CSRF or the rate limits above. Those still run, and a failed verification still counts toward the rate limit.
 - The Paddle webhook is not built. Signature checking for it belongs with billing, in phase 5.
+
+## Public discovery
+
+The only indexable page is the logged-out home page, and only when `ENV` is `prod`. Its document title is Track Anything, which is also the fallback when a page does not set one. The description is the sentence under that heading. The canonical URL is `BASE_URL` plus `/`, and a query string is not part of it. Open Graph and Twitter tags use that same title, description, and URL. The image is the existing 512px app icon at `/static/icons/icon-512.png`. No other page sends a canonical URL, a description, or social tags. There is no keywords meta tag and no JSON-LD.
+
+Every other response sends `X-Robots-Tag: noindex`. A full document also has `<meta name="robots" content="noindex">`. That includes the logged-in home page, which is still `/`, plus signup, login, verification, settings, charts, households, trackers, invite links, share links, health checks, and unknown paths. A share link works without an account and stays private. `robots.txt` does not name those paths. `GET /static/` does not send the robots header, so the sharing icon can be fetched. In production, `/robots.txt` and `/sitemap.xml` do not send it either.
+
+When `ENV` is not `prod`, the home page is included in that noindex rule. `robots.txt` is `Disallow: /` and the sitemap is an empty urlset, so a development or preview process does not publish the production origin. `robots.txt` is not access control. Authentication and the tracker access checks are unchanged.
+
+`GET /robots.txt` in production allows crawling and names the sitemap. `GET /sitemap.xml` lists only the canonical home URL. It has no `lastmod`. It omits redirects, errors, and every noindex page.
+
+A `GET` or `HEAD` request whose path has a trailing slash is `301` to that path without the slash when the unslashed path is an exact route. The query string is kept. `/static/` is a subtree, so this does not bounce `/static` and `/static/` off each other. Go still answers `.`, `..`, and repeated slashes with its own `307`. An unknown path is `404` and the message page. It is not a successful empty shell.
+
+There is no service worker, so nothing turns a missing URL into a cached page or serves an old document title after a deploy. An HTMX fragment is not a document. It includes the page title and an inert template of that page's discovery tags. `static/app.js` copies the template into `<head>` after a content swap and when history restores the fragment.
+
+### Keeping it that way
+
+Change indexing in `seo.go`, the page title in that page's template, and the discovery tags in `pageMeta` in `templates/layout.html`. The same `pageMeta` block is what the HTMX fragment carries. A title that exists only in the full document is wrong after an in-app navigation. The layout's title fallback is Track Anything. Use it only when the page has no title of its own.
+
+A new route stays noindex. Leave `indexable` false for it. That includes account pages, anything behind `requireUser`, invite links, and share links. A share link works without an account and is still private. Do not put it in the sitemap. Do not name private paths in `robots.txt`. `robots.txt` is not access control, and authentication stays where it is.
+
+Index a page only when it is public, meant to be found, and the same document for every logged-out visitor. The logged-out production home is the only such page. Another one needs all of the following:
+
+- `indexable` is true only for that page's canonical URL, only for `GET` and `HEAD`, only when `ENV` is `prod`, and only when nobody is signed in.
+- The title is specific to the page. The description is a sentence the page already shows. Do not write a separate pitch, and do not add a keywords meta tag.
+- The canonical URL is absolute and built from `BASE_URL`. It uses the path the route serves. Leave off a query parameter that does not identify a different public page. Keep one that does, and put that same URL in the sitemap.
+- Social tags repeat that title, description, and canonical URL. The image has to be one the app already has. The home page uses `/static/icons/icon-512.png`. Do not invent an image, a rating, or a business.
+- Add JSON-LD only when a supported type matches content that is visible on the page and the markup has a clear purpose.
+- `GET /sitemap.xml` lists that canonical URL and no redirect, error, or noindex page. Use `lastmod` only when the page has a real timestamp. The static home page has none.
+- Extend `seo_test.go` for the new URL. Keep the existing checks for the logged-in home, share links, non-production, the sitemap, and trailing-slash redirects.
+
+When `ENV` is not `prod`, do not emit a canonical URL or social tags, do not write the production host into `robots.txt`, and leave the sitemap empty. `ENV=prod` and `BASE_URL` are what publish the origin. Do not hardcode a domain.
+
+HTML from `render` stays `Cache-Control: private, no-store` with `Vary: HX-Request, Cookie`. A fragment and a full document share a URL, and logged-in and logged-out home share `/`.
+
+A `GET` or `HEAD` path with a trailing slash still redirects `301` to the exact route and keeps the query. Do not register a catch-all that answers `GET` of a POST-only path with `200`, or that sends `/static` and `/static/` back and forth. An unknown path stays the `404` message page.
+
+Do not add a service worker that answers a missing URL with a cached page. The later offline worker prefers the network while it can reach the server, and it does not store account or share pages as public documents.
 
 ## SQLite
 
@@ -567,10 +608,11 @@ Set on connect:
 
 ## Installable web app
 
-- `manifest.webmanifest` with `name`, `id` and `start_url` of `/`, `display: "standalone"`, theme color `#0F766E`, and background `#FAFAF7`. Icons are the teal tally: 192 and 512 for `purpose: any`, and separate 192 and 512 maskable icons whose artwork sits inside the safe circle.
+- `manifest.webmanifest` with `name`, `id` and `start_url` of `/`, `display: "standalone"`, theme color `#0F766E`, and background `#FAFAF7`. The description is the logged-out home sentence. Icons are the teal tally: 192 and 512 for `purpose: any`, and separate 192 and 512 maskable icons whose artwork sits inside the safe circle.
 - Favicon (`favicon.ico`, 16 and 32 PNG, and `icon.svg`), Apple touch icons (180, and 120, 152, and 167), `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, and `mobile-web-app-capable`. iOS still adds the icon from Share → Add to Home Screen.
 - iOS shows an `apple-touch-startup-image` on home-screen launch when the image's pixel size matches the device and orientation. Those images are drawn from `static/icons/icon-512.png`, centered on white in light mode and on `#13171f` in dark mode, for current iPhone and iPad sizes. A size with no image still shows the blank screen. iPad Split View and Stage Manager do not match a full-screen image. Android's splash still comes from the manifest `background_color` and icons. Changing a startup image means removing the home-screen icon and adding it again; iOS keeps the image from the moment it was added.
-- The logged-out home and the dashboard include a short offer on a phone. When the browser fires `beforeinstallprompt`, the offer is an Add to Home Screen button that opens the browser's install dialog. On iPhone and iPad it names Share, then Add to Home Screen. Other phones point at the browser menu (Install app or Add to Home screen). A page opened inside another app's browser says to open Safari or Chrome. The offer is not shown on a computer, when the app is already open from the home screen, or after Not now. Not now is remembered in `localStorage` on that device. Login, settings, tracker pages, and share pages do not include it.
+- The shared layout footer has an Install app button on every full page, including login, settings, tracker pages, and share pages. It is a button styled as a link and opens one dialog. It is not a banner, and nothing stores a dismissal. The button is hidden when this window's display mode is `standalone`, `fullscreen`, `minimal-ui`, or `window-controls-overlay`, or when `navigator.standalone` is true. `appinstalled` hides it for the rest of that document only. A later `beforeinstallprompt` can show it again. An HTMX partial does not include the footer or the dialog. The `beforeinstallprompt` listener is an inline script in the layout head, so it is registered while the first page loads. `app.js` keeps the event and binds the dialog once.
+- The dialog says that adding Track Anything to the Home Screen, or installing it, is a convenient way to open it in its own window. It does not promise offline use, notifications, or faster loading. When the retained install event is still unused, the dialog's Install app button calls `prompt()` once from the click. Acceptance does not by itself show a success message. Dismissal leaves the manual steps available. The event is not reused. Without a usable event there is no install button. iPhone and iPad, including an iPad that reports a desktop user agent and Chrome on iOS, get Share, Add to Home Screen, Open as Web App, and Add. Share may be inside the Page Menu. A line says to try Safari if those steps are missing, and Copy link copies the site origin plus `/`, never the current URL. Android describes the browser menu. A computer describes an address-bar icon or a menu item. The wording stays conditional. Device buttons switch the steps. A page that looks like an in-app browser adds a hint and still shows the steps. When a usable prompt is available, the steps sit under Other ways to install.
 - No service worker through phase 5, so deploys do not leave stale CSS and JS. Add a minimal worker only if the install option is missing on a real phone, and that fallback does not cache pages. The later offline-logging worker is specified under Offline logging. While online it prefers the network, so a deploy still reaches the new pages.
 - The manifest is served as `application/manifest+json`.
 
@@ -686,9 +728,10 @@ What the suite has to pin down:
 - **CSV.** Count, number, and duration exports. Commas, quotes, and newlines in a note stay inside one field. A recorded zero is a `recorded_zero` row. A member is refused. Someone who cannot see the tracker gets a 404 and no rows. Timestamps and values match the stored history.
 - **Deletion (phase 5).** Permanent tracker delete removes the tracker and its entries, owner only, with confirmation.
 - **Ads and billing (phase 5).** No ad markup for ad-free users, users in the grace period, or on share/login/settings pages. The Paddle webhook rejects bad signatures and old timestamps, applies an event once even if delivered twice, ignores an older event arriving after a newer one, finds the user through `custom_data`, and sets and clears the plan. Tests build the `Paddle-Signature` header the way Paddle does, against a test secret, and the portal handler talks to a stub API URL.
-- **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes. The logged-out home and the dashboard include the home-screen offer. Login and settings do not. The layout links a light and a dark startup image for a known phone size, in portrait and landscape. That image is a PNG of the requested pixel size whose corner is the page background. An unknown splash size is a 404.
+- **Install.** The manifest is served with the right content type and names `standalone` and both icon sizes. The layout links the manifest, the icons, and a light and a dark startup image for a known phone size, in portrait and landscape. That image is a PNG of the requested pixel size whose corner is the page background. An unknown splash size is a 404. Full pages include one footer Install app button and one install dialog, including login, settings, and a share page. The dialog does not contain a share token. An HTMX partial does not include the dialog. The dialog names the iPhone, Android, and computer steps, Close, and Copy link. `app.js` listens for `beforeinstallprompt` and `appinstalled`, checks installed display modes including `navigator.standalone`, and builds the copy address from the origin and `/`. It does not store a dismissal.
 - **Offline logging (later).** A repeated sync with the same client id inserts one entry and returns it again on retry. `OccurredAt` is the tap time sent with that id. `CreatedAt` is the sync, and the undo window uses it. A member or share-link log that omits the client id still stores the server's current time. The cached snapshot is enough to show the tracker name, icon, and log button. History and charts are not required for the log tap.
 - **Health.** `GET /healthz` needs no session. It returns 200 `ok` when `SELECT 1` succeeds, and 503 with no database error text when that query fails. The failure is logged.
+- **Discovery.** With `ENV=prod`, the logged-out home page has the title Track Anything, the sentence from that page as its description, a canonical URL of `BASE_URL` plus `/`, and social tags pointing at the 512px icon. A query string is not part of the canonical URL. The same path with a session is noindex and has no canonical URL. Signup, login, a share link, settings, and healthz are noindex. `robots.txt` allows crawling and names the sitemap, without listing private paths. The sitemap contains only the canonical home URL and no `lastmod`. With any other `ENV`, the home page is noindex, `robots.txt` disallows everything, and the sitemap has no URLs. A trailing slash on an exact route is a 301 that keeps the query. An unknown path is a 404 message page. `GET` of a POST-only path stays 405. HTML sends `Vary: HX-Request, Cookie`. A partial keeps the title and is not a document. `/static/` does not send `X-Robots-Tag`.
 - **Metrics.** Not built. No test requests `/metrics`.
 
 ## Decision log

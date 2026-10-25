@@ -15,6 +15,8 @@ This is a small, practical guide, not a formal design system. Pico.css supplies 
 
 The site header stays on every page, including authentication. Page content sits in Pico's container, under that header, with ordinary spacing. Do not vertically center page content.
 
+The footer is one Install app control, styled as a link. It opens the install dialog. It is hidden when this window is already the installed app. A page that does not use the shared layout does not gain a footer for this.
+
 Dashboards, tracker history, and charts use the normal content width and align with the container. They are not squeezed into a form card. Home is a short stack of tracker cards in that width, not a calendar grid.
 
 ## Screens
@@ -207,7 +209,7 @@ When ads exist, they stay out of share, login, and settings pages, and out of th
 
 ## Responsive behavior
 
-Design the narrow screen first. There is still one web layout and no native app. On a phone, the logged-out home and the dashboard show a short offer to add the app to the device home screen. It can be dismissed. The manifest is specified in `ARCHITECTURE.md`. Offline logging, later, keeps this same log button.
+Design the narrow screen first. There is still one web layout and no native app. The footer Install app control opens a short dialog. On a phone it explains Share or the browser menu. On a computer it explains the address bar or the browser menu, and it shows the browser's install button when one is available. The dialog does not open by itself. The manifest is specified in `ARCHITECTURE.md`. Offline logging, later, keeps this same log button.
 
 On a phone, tracker cards stack, and the logging control is the first content on a tracker page. The trend follows, then history, so reviewing is a scroll down the same page. On Charts, the selectors stack and the chart fills the width. A tap on a day shows the count and any overlay for that day.
 

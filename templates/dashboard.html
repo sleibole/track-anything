@@ -1,10 +1,10 @@
+{{define "title"}}Your trackers · Track Anything{{end}}
 {{define "content"}}
 {{template "autoRefresh" "/"}}
 <div class="page-head">
   <h1>Your trackers</h1>
   <a role="button" class="secondary outline" {{nav "/trackers/new"}}>{{icon "plus"}} New tracker</a>
 </div>
-{{template "installHint"}}
 <div class="tracker-list" id="tracker-list" data-reorder-list data-reorder-url="/trackers/order">
 {{range .Data.Cards}}{{template "card" .}}{{end}}
 </div>

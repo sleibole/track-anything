@@ -15,7 +15,7 @@ Within `docs/development/`:
 
 - `PLAN.md` describes what Track Anything is and what we're building.
 - `DESIGN.md` defines visual design and UI/UX conventions.
-- `ARCHITECTURE.md` records technical and implementation decisions.
+- `ARCHITECTURE.md` records technical and implementation decisions. Public discovery in that file is how indexing, page metadata, `robots.txt`, and the sitemap stay correct.
 - `SUMMARY-DISPLAY.md` records how the summary display setting was built. The behavior itself is in the three documents above.
 - `WORKTREES.md` describes Cursor worktrees and isolated agent development servers.
 
@@ -259,7 +259,7 @@ Undo and delete recompute the line from the entries that remain. Removing the on
 
 ## Installable web app
 
-Home-screen install is part of the first version because it is just static files. A phone sees a short offer on the logged-out home and the dashboard: a button when the browser can install, otherwise the Share or browser-menu steps. Phases 0–5 ship no service worker, so a deploy does not leave stale cached pages. Add a minimal worker only if a real phone lacks the install option, and that fallback does not cache pages. The later offline-logging enhancement is when a caching worker is planned: it stores the shell and enough of the already loaded trackers to log, and while online it prefers the network. The install option only appears over HTTPS, so it is verified on trackanything.io after the phase 2 deploy.
+Home-screen install is part of the first version. The manifest makes the site installable. Pages that use the shared layout have an Install app control in the footer. It opens a dialog with the steps for this device, and the browser's own install button when that browser offers one. It is not a banner, and closing it is not remembered. The control is hidden when this window is already the installed app. Phases 0–5 ship no service worker, so a deploy does not leave stale cached pages. Add a minimal worker only if a real phone lacks the install option, and that fallback does not cache pages. The later offline-logging enhancement is when a caching worker is planned: it stores the shell and enough of the already loaded trackers to log, and while online it prefers the network. The install prompt only appears over HTTPS, so it is verified on trackanything.io after the phase 2 deploy.
 
 ## Business model
 

@@ -1,13 +1,61 @@
-{{/* Phone-only offer to add the app to the home screen. app.js chooses which line to show. */}}
-{{define "installHint"}}
-<aside class="install-hint" data-install-hint>
-  <p data-install-ios>Add Track Anything to your home screen. Tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</p>
-  <p data-install-menu>Add Track Anything to your home screen. Open the browser menu and tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
-  <p data-install-browser>To add Track Anything to your home screen, open this page in Safari or Chrome.</p>
-  <p data-install-prompt>Add Track Anything to your home screen.</p>
-  <div class="install-actions">
-    <button type="button" data-install-action>Add to Home Screen</button>
-    <button type="button" class="quiet" data-install-dismiss>Not now</button>
-  </div>
-</aside>
+{{/* Install help lives in the layout, outside #content, so an HTMX swap does not duplicate it. */}}
+{{define "installFooter"}}
+<footer class="site-footer container" data-install-footer>
+  <button type="button" class="footer-link" data-install-open aria-haspopup="dialog" aria-controls="install-dialog">Install app</button>
+</footer>
+<dialog id="install-dialog" class="install-dialog" aria-labelledby="install-title" aria-describedby="install-summary">
+  <article>
+    <header>
+      <div class="install-heading">
+        <img class="install-icon" src="/static/icons/icon-192.png" alt="" width="40" height="40">
+        <p id="install-title" class="install-title" role="heading" aria-level="2">Install Track Anything</p>
+      </div>
+      <button type="button" class="install-close" data-install-close aria-label="Close">
+        <svg aria-hidden="true" class="icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12" /><path d="M18 6l-12 12" /></svg>
+      </button>
+    </header>
+    <p id="install-summary">Add Track Anything to your Home Screen, or install it, for a convenient way to open it. It then opens in its own window.</p>
+    <p class="install-status" data-install-status role="status" aria-live="polite"></p>
+    <div data-install-native hidden>
+      <button type="button" data-install-prompt>Install app</button>
+    </div>
+    <div data-install-other-wrap hidden>
+      <button type="button" data-install-toggle aria-expanded="false" aria-controls="install-manual">Other ways to install</button>
+    </div>
+    <div id="install-manual" data-install-manual>
+      <fieldset class="install-choices">
+        <legend>Show steps for</legend>
+        <div class="install-choice-buttons">
+          <button type="button" data-install-choose="ios" aria-pressed="false">iPhone and iPad</button>
+          <button type="button" data-install-choose="android" aria-pressed="false">Android</button>
+          <button type="button" data-install-choose="desktop" aria-pressed="false">Computer</button>
+        </div>
+      </fieldset>
+      <p data-install-unknown hidden>Installation steps depend on the device. Not every browser can install the site.</p>
+      <div data-install-panel="ios" hidden>
+        <p class="install-panel-title">iPhone and iPad</p>
+        <ol>
+          <li>Open the Share menu, marked with the Share icon {{icon "share-up"}}. In some Safari layouts, Share is inside the Page Menu.</li>
+          <li>Choose <strong>Add to Home Screen</strong>. You may need to scroll through the actions.</li>
+          <li>If <strong>Open as Web App</strong> appears, leave it enabled.</li>
+          <li>Tap <strong>Add</strong>.</li>
+        </ol>
+        <p>Having trouble? Open this page in Safari and follow these steps.</p>
+      </div>
+      <div data-install-panel="android" hidden>
+        <p class="install-panel-title">Android</p>
+        <p>The browser menu may include <strong>Install app</strong> or <strong>Add to Home screen</strong>. The label varies, and not every browser offers it.</p>
+      </div>
+      <div data-install-panel="desktop" hidden>
+        <p class="install-panel-title">Computer</p>
+        <p>A supported browser may show an install icon in the address bar, or an installation option in its menu. Not every browser can install the site.</p>
+      </div>
+      <p data-install-inapp hidden>This page may be open inside another app. If you do not see a way to install, use that app's menu to open it in a full browser.</p>
+      <div data-install-copy hidden>
+        <button type="button" class="secondary outline" data-install-copy-button>Copy link</button>
+        <p class="muted"><span data-install-url></span></p>
+      </div>
+    </div>
+  </article>
+</dialog>
 {{end}}

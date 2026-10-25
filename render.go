@@ -48,6 +48,17 @@ type view struct {
 	User             *User
 	Data             any
 	TurnstileSiteKey string
+	SEO              seoTags
+}
+
+// seoTags is set only for the logged-out production home page.
+// Other documents stay noindex and do not advertise a canonical URL.
+type seoTags struct {
+	Indexable   bool
+	Title       string
+	Canonical   string
+	Description string
+	Image       string
 }
 
 // render writes a full page, or a title plus the content block for HTMX requests.
@@ -71,13 +82,22 @@ func (a *app) renderBlock(w http.ResponseWriter, r *http.Request, status int, pa
 
 	// Render to a buffer first so a template error doesn't send a half-written page.
 	var buf bytes.Buffer
-	if err := t.ExecuteTemplate(&buf, block, view{User: currentUser(r), Data: data, TurnstileSiteKey: a.cfg.TurnstileSiteKey}); err != nil {
+	if err := t.ExecuteTemplate(&buf, block, view{
+		User:             currentUser(r),
+		Data:             data,
+		TurnstileSiteKey: a.cfg.TurnstileSiteKey,
+		SEO:              a.seoTags(r),
+	}); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "private, no-store")
+	// A full document and a fragment share a URL, and logged-in and logged-out
+	// home share "/". private, no-store already refuses a shared cache; Vary
+	// is the contract if one stores the response anyway.
+	w.Header().Set("Vary", "HX-Request, Cookie")
 	w.WriteHeader(status)
 	buf.WriteTo(w)
 }

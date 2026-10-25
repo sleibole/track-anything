@@ -293,65 +293,255 @@ button.quiet:hover {
   color: var(--pico-color);
 }
 
-/* Hidden until app.js decides this phone should see the home-screen offer. */
-.install-hint {
+/* Footer install control. Hidden when this window is already the installed app. */
+.site-footer {
+  margin-top: 0.5rem;
+  padding-bottom: 1.75rem;
+  text-align: center;
+}
+
+.site-footer[hidden],
+html.install-session .site-footer {
   display: none;
-  margin: 0 0 1.25rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  background: var(--pico-card-background-color);
 }
 
-html.install-offer .install-hint {
-  display: block;
-}
-
-@media (display-mode: standalone) {
-  html.install-offer .install-hint {
+@media (display-mode: standalone),
+       (display-mode: fullscreen),
+       (display-mode: minimal-ui),
+       (display-mode: window-controls-overlay) {
+  .site-footer {
     display: none;
   }
 }
 
-.install-hint p {
-  display: none;
-  margin-bottom: 0.75rem;
-}
-
-html.install-ios .install-hint [data-install-ios],
-html.install-menu .install-hint [data-install-menu],
-html.install-browser .install-hint [data-install-browser],
-html.install-prompt .install-hint [data-install-prompt] {
-  display: block;
-}
-
-.install-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
-}
-
-.install-actions button {
+button.footer-link {
   width: auto;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.5rem 0.35rem;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--pico-primary);
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+button.footer-link:is(:hover, :active, :focus) {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--pico-primary-hover);
+}
+
+button.footer-link:focus-visible {
+  outline: 2px solid var(--pico-primary-focus);
+  outline-offset: 3px;
+}
+
+.install-dialog::backdrop {
+  background: transparent;
+}
+
+.install-dialog > article {
+  max-width: 28rem;
+  max-height: calc(100vh - 1rem);
+  max-height: calc(100dvh - 1rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  margin: max(0.5rem, env(safe-area-inset-top, 0px)) max(0.5rem, env(safe-area-inset-right, 0px)) max(0.5rem, env(safe-area-inset-bottom, 0px)) max(0.5rem, env(safe-area-inset-left, 0px));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.install-dialog > article > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.install-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.install-title {
+  margin: 0;
+  color: var(--pico-h2-color);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.install-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  border-radius: 0.55rem;
+}
+
+.install-close {
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--pico-border-radius);
+  background: transparent;
+  box-shadow: none;
+  color: var(--pico-color);
+  line-height: 1;
+}
+
+.install-close,
+.install-close:is(:hover, :active, :focus) {
+  border-color: transparent;
+  box-shadow: none;
+  /* Filled Pico buttons set --pico-color to white. Use the heading color. */
+  color: var(--pico-h1-color);
+}
+
+.install-close:is(:hover, :active, :focus) {
+  background: var(--pico-card-sectioning-background-color);
+}
+
+.install-close:focus-visible,
+.install-dialog [data-install-toggle]:focus-visible,
+.install-dialog [data-install-prompt]:focus-visible,
+.install-dialog [data-install-copy-button]:focus-visible,
+.install-choice-buttons button:focus-visible {
+  outline: 2px solid var(--pico-primary-focus);
+  outline-offset: 2px;
+}
+
+.install-status:empty {
+  display: none;
   margin: 0;
 }
 
-.install-actions [data-install-action] {
-  display: none;
+.install-dialog [data-install-prompt],
+.install-dialog [data-install-copy-button] {
+  width: 100%;
+  margin-bottom: 0.25rem;
 }
 
-html.install-prompt .install-actions [data-install-action] {
-  display: inline-block;
+.install-dialog [data-install-toggle] {
+  width: auto;
+  margin: 0.15rem 0 0.75rem;
+  padding: 0.35rem 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--pico-primary);
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
-.install-hint button.quiet {
-  padding: 0.4rem 0.2rem;
+.install-dialog [data-install-toggle]:is(:hover, :active, :focus) {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--pico-primary-hover);
 }
 
-.install-hint button.quiet:focus-visible {
-  outline: 2px solid var(--pico-primary);
+.install-choices {
+  margin-bottom: 0.85rem;
+}
+
+.install-choices legend {
+  margin-bottom: 0.2rem;
+  color: var(--pico-color);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.install-choice-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+}
+
+.install-choice-buttons button {
+  width: auto;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.35rem 0.1rem;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--pico-primary);
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.install-choice-buttons button:is(:hover, :active, :focus) {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--pico-primary-hover);
+}
+
+.install-choice-buttons button[aria-pressed="true"],
+.install-choice-buttons button[aria-pressed="true"]:is(:hover, :active, :focus) {
+  color: var(--pico-h1-color);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.install-panel-title {
+  margin-bottom: 0.4rem;
+  color: var(--pico-h3-color);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.install-dialog ol {
+  margin-bottom: 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.install-dialog li {
+  margin-bottom: 0.35rem;
+}
+
+.install-dialog [data-install-url] {
+  overflow-wrap: anywhere;
+}
+
+.install-dialog [data-install-url]:focus {
+  outline: 2px solid var(--pico-primary-focus);
   outline-offset: 2px;
+}
+
+@media (max-height: 32rem) {
+  .install-dialog > article > header {
+    padding-block: 0.4rem;
+  }
+
+  .install-icon {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .install-title {
+    font-size: 1.1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .install-dialog,
+  .install-dialog > article {
+    animation: none;
+    transition: none;
+  }
 }
 
 .page-head {

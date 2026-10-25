@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Track Anything",
   "short_name": "Track Anything",
-  "description": "Track how often anything happens.",
+  "description": "Track how often anything happens: dog meals, workouts, habits.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -43,8 +43,8 @@ The SQLite file is created at `data/trackanything.db`.
 | --- | --- | --- |
 | `ADDR` | `:8080` | Listen address. If `ADDR` is unset, `PORT` is used as `:$PORT`. |
 | `DB_PATH` | `data/trackanything.db` | SQLite file. |
-| `ENV` | `dev` | `dev` or `prod`. `dev` turns off the `Secure` cookie flag so `http://localhost` works. |
-| `BASE_URL` | `http://localhost:8080` | Public origin used in emailed links. Required in production, and it must be `https`. |
+| `ENV` | `dev` | `dev` or `prod`. `dev` turns off the `Secure` cookie flag so `http://localhost` works. Anything other than `prod` is kept out of search indexes. |
+| `BASE_URL` | `http://localhost:8080` | Public origin for emailed links, the canonical home URL, and the sitemap. Required in production, and it must be `https`. |
 | `SMTP_HOST` | empty | Empty logs links to the console. Set it to send mail. |
 | `SMTP_PORT` | `587` | Implicit TLS on `465`; STARTTLS otherwise. Production refuses to send without TLS. |
 | `SMTP_USER` | empty | SMTP username. |
