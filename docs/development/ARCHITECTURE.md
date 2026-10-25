@@ -225,8 +225,9 @@ type Tracker struct {
     Accent         string     // empty means no accent. Allow-list only.
     LogLabel       string     // empty means "+ Log". A few words, 24 characters at most.
     SummaryDisplay string     `gorm:"not null;default:times"` // "times", "done", or "last". Empty means times. Presentation only.
-    Kind           string     `gorm:"not null;default:count"` // "count", "number", or "duration"
-    Unit           string     // number trackers only: "kg", "lb". At most 16 characters. Empty for the other kinds.
+    Kind           string     `gorm:"not null;default:count"` // "count", "number", "duration", or "cumulative"
+    Unit           string     // number and cumulative trackers: "kg", "lb", "points". At most 16 characters. Empty for count and duration. Optional for cumulative.
+    Goal           *float64   // cumulative only. Nil means no repeating goal. Changing it does not change entries.
     ShareToken     *string    `gorm:"uniqueIndex"` // nil = no share link
     Position       int        // order within the household. Lower comes first. Shared by everyone who can see it.
     ArchivedAt     *time.Time // archived trackers are hidden; archiving also clears ShareToken
@@ -247,7 +248,7 @@ type Entry struct {
     RecordedByID *uint     // nil when logged through a share link
     ViaLink      bool
     Note         string
-    Number       *float64 // number trackers
+    Number       *float64 // number trackers, and the amount earned on a cumulative tracker
     DurationSec  *int     // duration trackers, whole seconds
     CreatedAt    time.Time // drives the 15-minute undo window
     UpdatedAt    time.Time
@@ -358,9 +359,11 @@ Prefill from the tracker's most recent entry by `OccurredAt`, then `id`, so a la
 
 A backfilled older entry must not win. Only the value carries forward. A duration's **Log again** posts to the same quick-log route as a count and copies that stored value. A number or duration in that request body is ignored. A number tracker's **Log again** is a field prefilled with the stored value and posts to the entries route, so the submitted number is what is stored. A validation error is returned as that tracker's log control (`HX-Retarget`), not as a page-level message. No previous value means the quick route refuses and the page does not show **Log again**. The home card still shows an empty number field beside the log label, and that field posts to the entries route.
 
-A duration is stored as whole seconds and shown as `45 sec`, `25 min`, or `1 hr 10 min`. The form is hours (0–99), minutes (0–59), and seconds (0–59). Zero is rejected. A number has to be finite and within 1e9. Negative numbers are allowed.
+A duration is stored as whole seconds and shown as `45 sec`, `25 min`, or `1 hr 10 min`. The form is hours (0–99), minutes (0–59), and seconds (0–59). Zero is rejected. A number has to be finite and within 1e9. Negative numbers are allowed on a number tracker.
 
-The kind can change only while the tracker has no entries and no recorded zeros. The update is refused otherwise, and nothing is guessed for old rows. The unit can still change. A unit on a count or duration tracker is rejected. Empty kind means count.
+A cumulative entry stores its amount in `Number`, the same way, and the total is the sum of those amounts. Zero is allowed. A negative amount is rejected. There is no balance column. `Goal` is an optional positive number on the tracker. Goals completed is the lifetime total divided by the goal, rounded down, and current progress is the remainder. The arithmetic uses the decimal text `formatNumber` already shows, so a total that lands on the goal has progress zero. Changing or clearing `Goal` reloads that math and does not write entries. A chart point's `y` is the running total through that entry, including entries before the chart window. The window does not replace the lifetime total on the card, the tracker page, or the charts page. When the history list omits older entries, the page names that shorter sum on its own line. An entry that increases the completed-goal count redirects with `notice=goal`. The next page says "Goal completed!" or "2 goals completed!". A request without that query does not.
+
+The kind can change only while the tracker has no entries and no recorded zeros. The update is refused otherwise, and nothing is guessed for old rows. The unit can still change. A unit on a count or duration tracker is rejected. A goal is stored only for a cumulative tracker. Empty kind means count. `AutoMigrate` adds `goal` as a nullable column. Existing trackers and entries stay as they are.
 
 ## Routes
 
@@ -484,13 +487,13 @@ A tracker icon is not looked up the same way. `Icon` is either empty (render the
 
 ## Charts
 
-The trend is on `GET /trackers/{id}`. A count is events per day. A number or duration is one point per entry, not a daily sum, over the same 30 local days. One overlay is `?overlay=` on this same page. `GET /charts` draws that same chart for a longer preset range. Event-relative alignment is a later idea in `PLAN.md` and is not computed here.
+The trend is on `GET /trackers/{id}`. A count is events per day. A number or duration is one point per entry, not a daily sum, over the same 30 local days. A cumulative chart is the lifetime running total, one point per entry, over that same window. One overlay is `?overlay=` on this same page. `GET /charts` draws that same chart for a longer preset range. Event-relative alignment is a later idea in `PLAN.md` and is not computed here.
 
 `chartSeries` in `days.go` builds the series from `countsByDay`, so a day's count means the same thing as a history row. The window is the `chartDays` (30) local days ending today, in the viewer's stored zone, oldest first. History stays the previous `historyDays` and does not include today. Week and month views are not built; a later one should bucket these days instead of counting events a second way.
 
 Each day is `{day, label, count}`. `day` is `YYYY-MM-DD`. `label` is `Jan 2`, for the axis. `count` is a number when that day was logged, including `0` for a recorded zero, and `null` when nothing was logged. The day stays in the series either way, so the axis does not close up around a gap. `json.Marshal` escapes `<`, `>`, and `&`. The page embeds that JSON in `<script type="application/json" id="count-chart">`.
 
-`static/chart.js` is included in the tracker content only when a chart element is present. It loads the vendored Chart.js 4.5.1 UMD build (`static/chart.umd.min.js`, MIT) from `/static` and draws a line. For a count, `spanGaps` is false, so a null breaks the line, and a point is drawn at zero, so a recorded zero is not an empty stretch. A number or duration chart is a second JSON element, `id="value-chart"`: `{kind, unit, days, points}`. `points` are `{x, y, day, label, text}`, oldest first. `x` is days from the start of the window. `y` is the number, or seconds. `text` is what the tooltip reads. The number axis does not start at zero. The duration axis starts at zero. Its ticks step on a round number of seconds, minutes, or hours, and use the same words as `formatDuration`. The chart does not animate. After an HTMX swap, including the 30-second refresh and a log, the wrapper destroys the previous chart and draws the new series. If the window has nothing to plot, the page says "Nothing logged in the last 30 days." and does not load Chart.js. The log form is a normal POST and does not use either script. Home and the share page do not include the trend. The series is only rendered by `GET /trackers/{id}` after `trackerForUser`, so someone who cannot see the tracker gets a 404 and no chart data.
+`static/chart.js` is included in the tracker content only when a chart element is present. It loads the vendored Chart.js 4.5.1 UMD build (`static/chart.umd.min.js`, MIT) from `/static` and draws a line. For a count, `spanGaps` is false, so a null breaks the line, and a point is drawn at zero, so a recorded zero is not an empty stretch. A number, duration, or cumulative chart is a second JSON element, `id="value-chart"`: `{kind, unit, days, points}`. `points` are `{x, y, day, label, text}`, oldest first. `x` is days from the start of the window. `y` is the number, the running total, or seconds. `text` is what the tooltip reads. For a cumulative tracker, `y` and `text` are the lifetime total through that entry, and entries before the window are included in the total even though they are not points. The number and cumulative axes do not start at zero. The duration axis starts at zero. Its ticks step on a round number of seconds, minutes, or hours, and use the same words as `formatDuration`. The chart does not animate. After an HTMX swap, including the 30-second refresh and a log, the wrapper destroys the previous chart and draws the new series. If the window has nothing to plot, the page says "Nothing logged in the last 30 days." and does not load Chart.js. The log form is a normal POST and does not use either script. Home and the share page do not include the trend. The series is only rendered by `GET /trackers/{id}` after `trackerForUser`, so someone who cannot see the tracker gets a 404 and no chart data.
 
 An overlay is one other active count tracker the viewer can see. The picker lists those trackers, excluding this one, with the icon and the name. Archived trackers are not listed. `?overlay=` is checked with `trackerForUser`. An id the viewer cannot see, an archived tracker, or a tracker whose kind is not `count` is a 404 with no name and no dates. This tracker's own id, or a missing id, means no overlay. The choice is not stored.
 
@@ -506,7 +509,7 @@ The range is a `chartSpan`. Empty or `30d` is `chartDays` (30). `90d` is 90 loca
 
 `GET /trackers/{id}/export` is owner-only. Someone who cannot see the tracker gets a 404. A member gets the usual owner refusal. The body is `text/csv` from `encoding/csv`. Columns, in order: `type`, `occurred_at`, `day`, `value`, `unit`, `duration_seconds`, `duration`, `note`, `recorded_by`, `via_link`.
 
-`type` is `entry` or `recorded_zero`. `occurred_at` is UTC RFC3339 for an entry and empty for a recorded zero. `day` is the exporter's local calendar day. `value` and `unit` are set for a number entry. `duration_seconds` is the stored length and `duration` is the same length in words. `recorded_by` is an email, empty for a share link. `via_link` is `true` or `false`. Rows are oldest first. A recorded zero is its own row, so it is not dropped from a count export. `note`, `unit`, and `recorded_by` gain a leading `'` when they start with `=`, `+`, `-`, `@`, tab, or carriage return. The other columns do not, so a negative `value` stays numeric. The apostrophe is part of the field. To recover the original text, strip one leading `'` only when the remainder starts with one of those characters.
+`type` is `entry` or `recorded_zero`. `occurred_at` is UTC RFC3339 for an entry and empty for a recorded zero. `day` is the exporter's local calendar day. `value` and `unit` are set for a number entry and for a cumulative amount. `duration_seconds` is the stored length and `duration` is the same length in words. `recorded_by` is an email, empty for a share link. `via_link` is `true` or `false`. Rows are oldest first. A recorded zero is its own row, so it is not dropped from a count export. `note`, `unit`, and `recorded_by` gain a leading `'` when they start with `=`, `+`, `-`, `@`, tab, or carriage return. The other columns do not, so a negative `value` stays numeric. The apostrophe is part of the field. To recover the original text, strip one leading `'` only when the remainder starts with one of those characters.
 
 ## Security
 

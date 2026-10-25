@@ -16,11 +16,11 @@
     <form method="post" action="/s/{{.Token}}/zero" hx-post="/s/{{.Token}}/zero" class="inline"><button type="submit" class="quiet">Record none for today</button></form>
   {{end}}{{end}}
   {{else}}
-  <details class="log-details"{{if or .Error (not .Card.LogAgain)}} open{{end}}>
-    <summary>{{if .Tracker.IsDuration}}Log a duration{{else}}Log a value{{end}}</summary>
+  <details class="log-details"{{if or .Error (and (not .Card.LogAgain) (not .Tracker.IsCumulative))}} open{{end}}>
+    <summary>{{if .Tracker.IsCumulative}}Add an amount{{else if .Tracker.IsDuration}}Log a duration{{else}}Log a value{{end}}</summary>
     <form method="post" action="/s/{{.Token}}/entries" hx-post="/s/{{.Token}}/entries">
       {{template "valueFields" .}}
-      <button type="submit" data-occurrence>Log</button>
+      <button type="submit" data-occurrence>{{if .Tracker.IsCumulative}}{{.Tracker.AddLabel}}{{else}}Log{{end}}</button>
     </form>
   </details>
   {{end}}

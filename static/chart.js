@@ -472,6 +472,7 @@
     const hasBands = !!(overlay && overlay.days.length > 0);
     const dayTip = !!(canvas.parentElement && canvas.parentElement.querySelector(".chart-tip"));
     const duration = chartData.kind === "duration";
+    const cumulative = chartData.kind === "cumulative";
     const primary = cssVar("--pico-primary", "#0f766e");
     const muted = cssVar("--pico-muted-color", "#5c6b7a");
     const grid = cssVar("--pico-muted-border-color", "rgba(128, 128, 128, 0.35)");
@@ -497,7 +498,7 @@
       data: {
         datasets: [
           {
-            label: duration ? "Duration" : "Value",
+            label: duration ? "Duration" : cumulative ? "Total earned" : "Value",
             data: points,
             tension: 0,
             borderColor: primary,

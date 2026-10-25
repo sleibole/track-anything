@@ -31,6 +31,7 @@ var trackerKinds = []choice{
 	{kindCount, "Count — each log is one event"},
 	{kindNumber, "Number — a value, such as weight"},
 	{kindDuration, "Duration — how long it took"},
+	{kindCumulative, "Cumulative — amounts that add up, such as points"},
 }
 
 // summaryDisplays is the create/edit choice. Empty is not a value; a missing field stores times.
@@ -89,6 +90,12 @@ type trackerCard struct {
 	CarrySeconds   string
 	LogAgain       bool   // a duration repeats Carry in one tap; a number's button says Log again. False when there is no previous value
 	NumberField    bool   // home shows the number input even when nothing carries forward. An inline error sets it so that field stays
+	GoalProgress   bool   // cumulative tracker with a repeating goal
+	ProgressValue  string // current progress toward the next goal, already formatted
+	ProgressMax    string // the goal, already formatted
+	GoalsCompleted string // "1 goal completed"; empty when there is no goal
+	TotalEarned    string // "40 points total earned"; empty when the headline is the total
+	Notice         string // "Goal completed!" after an entry that finished one or more goals
 	Error          string // validation message for this tracker; empty when the last submit worked
 	Reorder        bool   // dashboard only: the card has a handle for the viewer's own order
 	HouseholdLabel string // dashboard only: household name on a shared tracker; empty on a personal one
@@ -114,7 +121,41 @@ func (a *app) cardView(t Tracker, s todayState, loc *time.Location, now time.Tim
 			return trackerCard{}, err
 		}
 	}
-	return cardFor(t, s, latest, now, loc, viewerID), nil
+	c := cardFor(t, s, latest, now, loc, viewerID)
+	if !t.IsCumulative() {
+		return c, nil
+	}
+	amounts, err := a.entryNumbers(t.ID)
+	if err != nil {
+		return trackerCard{}, err
+	}
+	applyCumulative(&c, t, amounts)
+	return c, nil
+}
+
+func applyCumulative(c *trackerCard, t Tracker, amounts []float64) {
+	st := progressStateOf(amounts, t.Goal, t.Unit)
+	c.Summary = st.Headline
+	c.GoalProgress = st.HasGoal
+	c.ProgressValue = st.Progress
+	c.ProgressMax = st.Goal
+	c.GoalsCompleted = st.Completed
+	c.TotalEarned = st.Earned
+}
+
+func (a *app) entryNumbers(trackerID uint) ([]float64, error) {
+	var entries []Entry
+	err := a.db.Select("number").Where("tracker_id = ? AND number IS NOT NULL", trackerID).Find(&entries).Error
+	if err != nil {
+		return nil, err
+	}
+	amounts := make([]float64, 0, len(entries))
+	for _, e := range entries {
+		if e.Number != nil {
+			amounts = append(amounts, *e.Number)
+		}
+	}
+	return amounts, nil
 }
 
 // latestEntry is the entry with the latest OccurredAt. A later write of an older time does not win.
@@ -208,6 +249,7 @@ type entryView struct {
 	By          string // who logged it, when that isn't the viewer
 	UndoURL     string // set while it can be undone
 	Owner       bool   // show the owner's edit and delete controls
+	Running     string // cumulative: lifetime total as of this entry, such as "40 points total"
 }
 
 // entryViews labels entries for display. emails maps user IDs to addresses; a nil map
@@ -224,7 +266,7 @@ func entryViews(t Tracker, entries []Entry, loc *time.Location, now time.Time, v
 			Owner:     owner,
 		}
 		switch {
-		case t.IsNumber() && e.Number != nil:
+		case (t.IsNumber() || t.IsCumulative()) && e.Number != nil:
 			v.Value = formatMeasurement(*e.Number, t.Unit)
 			v.NumberValue = formatNumber(*e.Number)
 		case t.IsDuration() && e.DurationSec != nil && *e.DurationSec > 0:
@@ -299,6 +341,7 @@ type trackerPage struct {
 	Minutes        string
 	Seconds        string
 	Error          string
+	PeriodNote     string // cumulative history subtotal, set only when older entries exist
 }
 
 func (p trackerPage) Tracker() Tracker { return p.Card.Tracker }
@@ -396,6 +439,18 @@ func (a *app) trackerPage(t Tracker, role string, u *User, overlay *Tracker) (tr
 		}
 		p.History = logged
 	}
+	var lifetime []Entry
+	if t.IsCumulative() {
+		if err := a.db.Where("tracker_id = ?", t.ID).Order("occurred_at, id").Find(&lifetime).Error; err != nil {
+			return p, err
+		}
+		labels := runningLabels(lifetime, t.Unit)
+		stampRunning(p.Entries, labels)
+		for i := range p.History {
+			stampRunning(p.History[i].Entries, labels)
+		}
+		p.PeriodNote = historySubtotalNote(lifetime, from, t.Unit)
+	}
 	choices, err := visibleCountTrackers(a.db, u.ID, t.ID)
 	if err != nil {
 		return p, err
@@ -404,6 +459,8 @@ func (a *app) trackerPage(t Tracker, role string, u *User, overlay *Tracker) (tr
 	var script template.HTML
 	if t.IsCount() {
 		script, err = countChartScript(today, older, zeros, loc)
+	} else if t.IsCumulative() {
+		script, err = embedValueChart(lifetime, t, loc, today.Day, chartDays)
 	} else {
 		script, err = valueChartScript(append(append([]Entry{}, today.Entries...), older...), t, loc, today.Day)
 	}
@@ -583,6 +640,7 @@ func (a *app) handleShowTracker(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	p.Card.Notice = goalNoticeFrom(r.URL.Query(), t.ID)
 	a.render(w, r, http.StatusOK, "tracker_show.html", p)
 }
 
@@ -591,9 +649,11 @@ func (a *app) handleShowTracker(w http.ResponseWriter, r *http.Request) {
 func applyInlineLogError(c *trackerCard, r *http.Request, t Tracker, msg string) {
 	c.Back = r.PostFormValue("back")
 	c.Error = msg
-	if t.IsNumber() {
+	if t.IsNumber() || t.IsCumulative() {
 		c.CarryValue = r.PostFormValue("number")
-		c.NumberField = true
+		if t.IsNumber() {
+			c.NumberField = true
+		}
 	}
 }
 
@@ -641,7 +701,8 @@ type trackerForm struct {
 	SummaryDisplay string
 	Kind           string
 	Unit           string
-	KindLocked     bool // history exists, so the kind cannot change
+	Goal           string // cumulative repeating goal; blank means none
+	KindLocked     bool   // history exists, so the kind cannot change
 	Error          string
 	Icons          []choice
 	Accents        []choice
@@ -683,6 +744,7 @@ func readTrackerForm(r *http.Request, f *trackerForm) string {
 		f.Kind = kindCount
 	}
 	f.Unit = strings.TrimSpace(r.PostFormValue("unit"))
+	f.Goal = strings.TrimSpace(r.PostFormValue("goal"))
 	switch {
 	case f.Name == "":
 		return "Give the tracker a name."
@@ -699,9 +761,20 @@ func readTrackerForm(r *http.Request, f *trackerForm) string {
 	case !listed(trackerKinds, f.Kind):
 		return "Pick a kind from the list."
 	case f.Kind == kindNumber:
+		if f.Goal != "" {
+			return "A goal is only for a cumulative tracker."
+		}
 		return validUnit(f.Unit)
+	case f.Kind == kindCumulative:
+		if msg := validUnitText(f.Unit); msg != "" {
+			return msg
+		}
+		_, msg := parseGoal(f.Goal)
+		return msg
+	case f.Goal != "":
+		return "A goal is only for a cumulative tracker."
 	case f.Unit != "":
-		return "A unit is only for a number tracker."
+		return "A unit is only for a number or cumulative tracker."
 	}
 	return ""
 }
@@ -760,6 +833,7 @@ func (a *app) handleCreateTracker(w http.ResponseWriter, r *http.Request) {
 		SummaryDisplay: f.SummaryDisplay,
 		Kind:           f.Kind,
 		Unit:           unitForKind(f.Kind, f.Unit),
+		Goal:           goalForKind(f.Kind, f.Goal),
 		Position:       last + 1,
 	}
 	if err := a.db.Create(&t).Error; err != nil {
@@ -793,6 +867,7 @@ func (a *app) editForm(t Tracker) trackerForm {
 		SummaryDisplay: t.SummaryDisplay,
 		Kind:           t.Kind,
 		Unit:           t.Unit,
+		Goal:           goalInput(t.Goal),
 		Kinds:          trackerKinds,
 		Icons:          trackerIcons,
 		Accents:        trackerAccents,
@@ -875,10 +950,19 @@ func (a *app) trackerHasHistory(trackerID uint) (bool, error) {
 }
 
 func unitForKind(kind, unit string) string {
-	if kind == kindNumber {
+	if kind == kindNumber || kind == kindCumulative {
 		return unit
 	}
 	return ""
+}
+
+// goalColumn is the value stored for Goal. A nil clears the column.
+func goalColumn(kind, raw string) any {
+	g := goalForKind(kind, raw)
+	if g == nil {
+		return nil
+	}
+	return *g
 }
 
 func (a *app) handleUpdateTracker(w http.ResponseWriter, r *http.Request) {
@@ -911,7 +995,7 @@ func (a *app) handleUpdateTracker(w http.ResponseWriter, r *http.Request) {
 	}
 	err = a.db.Model(&t).Updates(map[string]any{
 		"name": f.Name, "icon": f.Icon, "accent": f.Accent, "log_label": f.LogLabel, "summary_display": f.SummaryDisplay,
-		"kind": f.Kind, "unit": unitForKind(f.Kind, f.Unit),
+		"kind": f.Kind, "unit": unitForKind(f.Kind, f.Unit), "goal": goalColumn(f.Kind, f.Goal),
 	}).Error
 	if err != nil {
 		a.serverError(w, r, err)

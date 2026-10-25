@@ -43,6 +43,8 @@
   <p class="muted">Choose a tracker to see its history.</p>
   {{else}}
   <h2 class="tracker-title"><span class="tracker-icon">{{trackerIcon .Primary.Icon}}</span> {{.Primary.Name}}</h2>
+  {{with .Lifetime}}<p class="tracker-summary">{{.}}</p>{{end}}
+  {{with .LifetimeDetail}}<p class="goal-meta">{{.}}</p>{{end}}
   {{if .ChartScript}}
   <p class="muted">{{.ChartNote}}</p>
   {{if .OverlayNote}}<p class="muted">{{.OverlayNote}}</p>{{end}}

@@ -36,7 +36,12 @@
       <label data-unit-field>
         Unit
         <input type="text" name="unit" value="{{.Unit}}" maxlength="16" placeholder="lb" aria-describedby="unit-help">
-        <small id="unit-help">For a number, such as lb, kg, or °F.</small>
+        <small id="unit-help">For a number or a cumulative tracker, such as lb or points.</small>
+      </label>
+      <label data-goal-field>
+        Repeating goal
+        <input type="number" name="goal" min="0" step="any" inputmode="decimal" value="{{.Goal}}" placeholder="32" aria-describedby="goal-help">
+        <small id="goal-help">Optional. The goal repeats, and any extra amount counts toward the next one. Changing or removing it recalculates progress from the full total. Entries stay as they are.</small>
       </label>
     </div>
     <fieldset class="picker">
@@ -60,9 +65,9 @@
     <label>
       Button label
       <input type="text" name="log_label" value="{{.LogLabel}}" maxlength="24" placeholder="+ Log" aria-describedby="label-help">
-      <small id="label-help">A few words, like "+ Ate".</small>
+      <small id="label-help">A few words, like "+ Ate". Leave this empty on a cumulative tracker to use “Add” and the unit.</small>
     </label>
-    <fieldset>
+    <fieldset data-summary-field>
       <legend>Summary display</legend>
       {{range .Summaries}}
       <label>

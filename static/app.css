@@ -683,6 +683,24 @@ button[data-occurrence][aria-busy="true"] .icon {
   color: var(--pico-muted-color);
 }
 
+.goal-progress {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  margin: -0.35rem 0 0.75rem;
+  accent-color: var(--pico-primary);
+}
+
+.goal-meta {
+  margin: -0.35rem 0 0.75rem;
+  color: var(--pico-muted-color);
+}
+
+.entry-running {
+  color: var(--pico-muted-color);
+  font-variant-numeric: tabular-nums;
+}
+
 .with-unit {
   display: flex;
   align-items: center;

@@ -25,6 +25,8 @@ type chartsPage struct {
 	ChartScript    template.HTML
 	OverlayScript  template.HTML
 	ChartNote      string
+	Lifetime       string // cumulative lifetime headline; a range does not change it
+	LifetimeDetail string // goals completed and total earned, when a goal is set
 	OverlayNote    string // set when the overlay has no events in the window
 	EmptyNote      string
 	Aria           string
@@ -133,6 +135,19 @@ func (a *app) handleCharts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if primary.IsCumulative() {
+		amounts, err := a.entryNumbers(primary.ID)
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		st := progressStateOf(amounts, primary.Goal, primary.Unit)
+		p.Lifetime = st.Headline
+		if st.HasGoal {
+			p.LifetimeDetail = st.Completed + ". " + st.Earned + "."
+		}
+	}
+
 	loc := location(u.TimeZone)
 	now := a.now().In(loc)
 	last := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
@@ -211,6 +226,9 @@ func chartSentences(t Tracker, span chartSpan) (note, aria string) {
 		}
 		note += ". Each point is one entry."
 		aria = note
+	case t.IsCumulative():
+		note = "Running total over " + span.Phrase + ". Each point is the total earned through that entry, including anything earlier."
+		aria = note
 	default:
 		note = "Count per day over " + span.Phrase + ". A gap is a day with nothing logged."
 		aria = "Count per day for " + span.Phrase + ". A gap is a day with nothing logged. Zero is a recorded none."
@@ -226,8 +244,12 @@ func (a *app) loadChartScript(t Tracker, loc *time.Location, lastDay string, n i
 		return "", err
 	}
 	var entries []Entry
-	if err := a.db.Where("tracker_id = ? AND occurred_at >= ? AND occurred_at < ?", t.ID, start, end).
-		Order("occurred_at, id").Find(&entries).Error; err != nil {
+	q := a.db.Where("tracker_id = ? AND occurred_at >= ? AND occurred_at < ?", t.ID, start, end)
+	if t.IsCumulative() {
+		// Earlier amounts stay in the running total. The window only chooses which points are drawn.
+		q = a.db.Where("tracker_id = ? AND occurred_at < ?", t.ID, end)
+	}
+	if err := q.Order("occurred_at, id").Find(&entries).Error; err != nil {
 		return "", err
 	}
 	if !t.IsCount() {

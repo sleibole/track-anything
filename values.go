@@ -126,6 +126,14 @@ func validUnit(unit string) string {
 	if unit == "" {
 		return "Give a number tracker a unit, such as lb or °F."
 	}
+	return validUnitText(unit)
+}
+
+// validUnitText checks a unit that may be empty. Cumulative trackers can omit it.
+func validUnitText(unit string) string {
+	if unit == "" {
+		return ""
+	}
 	if utf8.RuneCountInString(unit) > maxUnit {
 		return fmt.Sprintf("Keep the unit to %d characters.", maxUnit)
 	}
@@ -166,7 +174,12 @@ type valueChart struct {
 // valuePoints keeps each observation in the same window as the count chart.
 // Entries outside the window, and entries with no value for this kind, are left out.
 // Points are oldest first so the line follows time.
+// A cumulative tracker plots the lifetime running total. Entries before the window
+// still count toward that total, so the line does not drop what was already earned.
 func valuePoints(entries []Entry, t Tracker, loc *time.Location, lastDay string, n int) ([]valuePoint, []axisDay, error) {
+	if t.IsCumulative() {
+		return cumulativePoints(entries, t, loc, lastDay, n)
+	}
 	start, end, err := chartWindow(lastDay, loc, n)
 	if err != nil {
 		return nil, nil, err
@@ -230,4 +243,58 @@ func observation(e Entry, t Tracker) (y float64, text string, ok bool) {
 	default:
 		return 0, "", false
 	}
+}
+
+// cumulativePoints draws the lifetime running total. Amounts before the window
+// raise the first point. Amounts after the window are left out of both.
+func cumulativePoints(entries []Entry, t Tracker, loc *time.Location, lastDay string, n int) ([]valuePoint, []axisDay, error) {
+	start, end, err := chartWindow(lastDay, loc, n)
+	if err != nil {
+		return nil, nil, err
+	}
+	first := start.In(loc)
+	days := make([]axisDay, n)
+	for i := range n {
+		date := first.AddDate(0, 0, i)
+		days[i] = axisDay{Day: date.Format(dayLayout), Label: date.Format("Jan 2"), X: float64(i) + 0.5}
+	}
+	pts := append([]Entry(nil), entries...)
+	slices.SortFunc(pts, func(a, b Entry) int {
+		if c := a.OccurredAt.Compare(b.OccurredAt); c != 0 {
+			return c
+		}
+		switch {
+		case a.ID < b.ID:
+			return -1
+		case a.ID > b.ID:
+			return 1
+		default:
+			return 0
+		}
+	})
+	total := sumRats(nil)
+	points := make([]valuePoint, 0, len(pts))
+	dayLen := 24 * time.Hour
+	for _, e := range pts {
+		if e.Number == nil || !e.OccurredAt.Before(end) {
+			continue
+		}
+		total.Add(total, ratFromFloat(*e.Number))
+		if e.OccurredAt.Before(start) {
+			continue
+		}
+		exact := formatRat(total)
+		y, err := strconv.ParseFloat(exact, 64)
+		if err != nil {
+			continue
+		}
+		points = append(points, valuePoint{
+			X:     e.OccurredAt.Sub(start).Seconds() / dayLen.Seconds(),
+			Y:     y,
+			Day:   localDay(e.OccurredAt, loc),
+			Label: e.OccurredAt.In(loc).Format("Jan 2, 3:04 PM"),
+			Text:  formatMeasurement(*e.Number, t.Unit) + " · " + exact + " total",
+		})
+	}
+	return points, days, nil
 }

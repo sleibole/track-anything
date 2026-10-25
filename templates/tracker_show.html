@@ -23,13 +23,13 @@
     {{end}}{{end}}
     {{end}}
 
-    <details class="log-details"{{if or .Error .Note (and (not .Tracker.IsCount) (not .Card.LogAgain))}} open{{end}}>
-      <summary>{{if .Tracker.IsDuration}}{{if .IsOwner}}Log a duration, note, or time{{else}}Log a duration or note{{end}}{{else if .Tracker.IsNumber}}{{if .IsOwner}}Log with a note or specific time{{else}}Log a value or note{{end}}{{else}}{{if .IsOwner}}Log with a note or time{{else}}Log with a note{{end}}{{end}}</summary>
+    <details class="log-details"{{if or .Error .Note (and (not .Tracker.IsCount) (not .Tracker.IsCumulative) (not .Card.LogAgain))}} open{{end}}>
+      <summary>{{if .Tracker.IsCumulative}}{{if .IsOwner}}Add an amount, note, or time{{else}}Add an amount or note{{end}}{{else if .Tracker.IsDuration}}{{if .IsOwner}}Log a duration, note, or time{{else}}Log a duration or note{{end}}{{else if .Tracker.IsNumber}}{{if .IsOwner}}Log with a note or specific time{{else}}Log a value or note{{end}}{{else}}{{if .IsOwner}}Log with a note or time{{else}}Log with a note{{end}}{{end}}</summary>
       <form method="post" action="/trackers/{{.Tracker.ID}}/entries" hx-post="/trackers/{{.Tracker.ID}}/entries">
         {{template "valueFields" .}}
         {{if .IsOwner}}<label>{{icon "calendar"}} When <input type="datetime-local" name="time" value="{{.NowValue}}"></label>{{end}}
         <label>Note <input type="text" name="note" value="{{.Note}}" maxlength="500"></label>
-        <button type="submit" data-occurrence>Log</button>
+        <button type="submit" data-occurrence>{{if .Tracker.IsCumulative}}{{.Tracker.AddLabel}}{{else}}Log{{end}}</button>
       </form>
     </details>
 
@@ -56,10 +56,10 @@
     </details>
     {{end}}
     {{if .ChartScript}}
-    <p class="muted">{{if .Tracker.IsCount}}Count per day. A gap is a day with nothing logged.{{else if .Tracker.IsDuration}}Duration over the last 30 days. Each point is one entry.{{else}}Value over the last 30 days{{with .Tracker.Unit}}, in {{.}}{{end}}. Each point is one entry.{{end}}{{if and .Overlay (not .OverlayEmpty)}} Shaded bands mark {{.Overlay.Name}} events on those days.{{end}}</p>
+    <p class="muted">{{if .Tracker.IsCount}}Count per day. A gap is a day with nothing logged.{{else if .Tracker.IsDuration}}Duration over the last 30 days. Each point is one entry.{{else if .Tracker.IsCumulative}}Running total over the last 30 days. Each point is the total earned through that entry, including anything earlier.{{else}}Value over the last 30 days{{with .Tracker.Unit}}, in {{.}}{{end}}. Each point is one entry.{{end}}{{if and .Overlay (not .OverlayEmpty)}} Shaded bands mark {{.Overlay.Name}} events on those days.{{end}}</p>
     {{if .OverlayEmpty}}<p class="muted">No {{.Overlay.Name}} events in the last 30 days.</p>{{end}}
     <div class="chart-frame">
-      <canvas id="trend-canvas" role="img" aria-label="{{if .Tracker.IsCount}}Count per day for the last 30 days. A gap is a day with nothing logged. Zero is a recorded none.{{else if .Tracker.IsDuration}}Duration over the last 30 days. Each point is one entry.{{else}}Values over the last 30 days. Each point is one entry.{{end}}{{if .Overlay}} Shaded bands mark {{.Overlay.Name}} events.{{end}}"></canvas>
+      <canvas id="trend-canvas" role="img" aria-label="{{if .Tracker.IsCount}}Count per day for the last 30 days. A gap is a day with nothing logged. Zero is a recorded none.{{else if .Tracker.IsDuration}}Duration over the last 30 days. Each point is one entry.{{else if .Tracker.IsCumulative}}Running total over the last 30 days. Each point is the total earned through that entry, including anything earlier.{{else}}Values over the last 30 days. Each point is one entry.{{end}}{{if .Overlay}} Shaded bands mark {{.Overlay.Name}} events.{{end}}"></canvas>
       {{if .Overlay}}<p class="chart-tip" hidden></p>{{end}}
     </div>
     {{.ChartScript}}
@@ -71,6 +71,7 @@
   </section>
   <section class="tracker-history">
     <h2>History</h2>
+    {{with .PeriodNote}}<p class="muted">{{.}}</p>{{end}}
     {{range .History}}
     <div class="history-day{{if not .Logged}} unlogged{{end}}">
       <div class="day-head">

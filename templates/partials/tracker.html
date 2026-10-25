@@ -5,6 +5,12 @@
 {{define "logControl"}}
 <div class="log-control" id="log-{{.Tracker.ID}}" data-tracker>
   <p class="tracker-summary" data-summary data-count="{{.Count}}" data-summary-display="{{.Tracker.SummaryMode}}" data-time-zone="{{.Zone}}">{{.Summary}}</p>
+  {{with .Notice}}<p role="status" class="saved">{{.}}</p>{{end}}
+  {{if .GoalProgress}}
+  <progress class="goal-progress" value="{{.ProgressValue}}" max="{{.ProgressMax}}" aria-label="{{.Summary}}">{{.Summary}}</progress>
+  {{end}}
+  {{with .GoalsCompleted}}<p class="goal-meta">{{.}}</p>{{end}}
+  {{with .TotalEarned}}<p class="goal-meta">{{.}}</p>{{end}}
   {{with .Carry}}<p class="carry">{{.}}</p>{{end}}
   <div class="log-buttons">
     {{if and .Tracker.IsNumber (or .LogAgain .NumberField)}}
@@ -19,6 +25,19 @@
         {{with .Error}}<p role="alert" class="error">{{.}}</p>{{end}}
       </div>
       <button type="submit" data-occurrence>{{if .LogAgain}}Log again{{else}}{{.Tracker.Label}}{{end}}</button>
+    </form>
+    {{else if .Tracker.IsCumulative}}
+    <form class="log-again" method="post" action="{{.EntriesURL}}" hx-post="{{.EntriesURL}}">
+      {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
+      <input type="hidden" name="add_amount" value="1">
+      <div class="log-again-field">
+        <span class="with-unit">
+          <input type="number" name="number" min="0" step="any" inputmode="decimal" value="{{.CarryValue}}" aria-label="Amount{{with .Tracker.Unit}} in {{.}}{{end}}"{{if .Error}} aria-invalid="true"{{end}} required>
+          {{with .Tracker.Unit}}<span>{{.}}</span>{{end}}
+        </span>
+        {{with .Error}}<p role="alert" class="error">{{.}}</p>{{end}}
+      </div>
+      <button type="submit" data-occurrence>{{.Tracker.AddLabel}}</button>
     </form>
     {{else if .LogAgain}}
     <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick>
@@ -40,7 +59,7 @@
     </form>
     {{end}}
   </div>
-  {{if and .Error (not .Tracker.IsNumber)}}<p role="alert" class="error">{{.Error}}</p>{{end}}
+  {{if and .Error (not .Tracker.IsNumber) (not .Tracker.IsCumulative)}}<p role="alert" class="error">{{.Error}}</p>{{end}}
 </div>
 {{end}}
 
@@ -67,11 +86,11 @@
 {{end}}
 
 {{define "valueFields"}}
-{{if .Tracker.IsNumber}}
-<label>Value
+{{if or .Tracker.IsNumber .Tracker.IsCumulative}}
+<label>{{if .Tracker.IsCumulative}}Amount{{else}}Value{{end}}
   <span class="with-unit">
-    <input type="number" name="number" step="any" inputmode="decimal" value="{{.NumberValue}}" required>
-    <span>{{.Tracker.Unit}}</span>
+    <input type="number" name="number" step="any" inputmode="decimal" value="{{.NumberValue}}"{{if .Tracker.IsCumulative}} min="0"{{end}} required>
+    {{with .Tracker.Unit}}<span>{{.}}</span>{{end}}
   </span>
 </label>
 {{end}}
@@ -88,6 +107,7 @@
 <li class="entry">
   <span class="entry-time">{{.Time}}</span>
   {{with .Value}}<span class="entry-value">— {{.}}</span>{{end}}
+  {{with .Running}}<span class="entry-running">{{.}}</span>{{end}}
   {{with .Note}}<span class="entry-note">{{.}}</span>{{end}}
   {{if .By}}<small class="muted">{{if .ViaLink}}via share link{{else}}by {{.By}}{{end}}</small>{{end}}
   {{with .UndoURL}}
@@ -100,11 +120,11 @@
     <summary>Edit</summary>
     <form method="post" action="/entries/{{.ID}}" hx-post="/entries/{{.ID}}">
       <label>When <input type="datetime-local" name="time" value="{{.TimeValue}}" required></label>
-      {{if eq .Kind "number"}}
-      <label>Value
+      {{if or (eq .Kind "number") (eq .Kind "cumulative")}}
+      <label>{{if eq .Kind "cumulative"}}Amount{{else}}Value{{end}}
         <span class="with-unit">
-          <input type="number" name="number" step="any" inputmode="decimal" value="{{.NumberValue}}" required>
-          <span>{{.Unit}}</span>
+          <input type="number" name="number" step="any" inputmode="decimal" value="{{.NumberValue}}"{{if eq .Kind "cumulative"}} min="0"{{end}} required>
+          {{with .Unit}}<span>{{.}}</span>{{end}}
         </span>
       </label>
       {{end}}

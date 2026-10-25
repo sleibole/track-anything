@@ -118,16 +118,22 @@ func sameRequestPath(r *http.Request, to string) bool {
 	return cu.Path == dest.Path && cu.RawQuery == dest.RawQuery
 }
 
+// redirectTarget is the page a form post returns to: an explicit back path,
+// the tracker page with its overlay kept, or the fallback.
+func redirectTarget(r *http.Request, fallback string) string {
+	if back := r.PostFormValue("back"); back != "" {
+		return safeNext(back)
+	}
+	if kept := samePageOverlay(r, fallback); kept != "" {
+		return kept
+	}
+	return fallback
+}
+
 // redirectBack sends a form post back to the page it came from. HTMX follows the
 // redirect and swaps the page content in place.
 func redirectBack(w http.ResponseWriter, r *http.Request, fallback string) {
-	to := fallback
-	if back := r.PostFormValue("back"); back != "" {
-		to = safeNext(back)
-	} else if kept := samePageOverlay(r, fallback); kept != "" {
-		to = kept
-	}
-	http.Redirect(w, r, to, http.StatusSeeOther)
+	http.Redirect(w, r, redirectTarget(r, fallback), http.StatusSeeOther)
 }
 
 // samePageOverlay keeps ?overlay= when a post returns to the tracker page it came from.
@@ -151,6 +157,22 @@ func samePageOverlay(r *http.Request, fallback string) string {
 	return fallback + "?overlay=" + strconv.FormatUint(uint64(id), 10)
 }
 
+func stampGoalNotices(cards []trackerCard, r *http.Request) {
+	id := parseID(r.URL.Query().Get("tracker"))
+	if id == 0 {
+		return
+	}
+	msg := goalNoticeFrom(r.URL.Query(), id)
+	if msg == "" {
+		return
+	}
+	for i := range cards {
+		if cards[i].Tracker.ID == id {
+			cards[i].Notice = msg
+		}
+	}
+}
+
 func (a *app) handleHome(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	if u == nil {
@@ -162,6 +184,7 @@ func (a *app) handleHome(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	stampGoalNotices(cards, r)
 	a.render(w, r, http.StatusOK, "dashboard.html", dashboardPage{Cards: cards})
 }
 

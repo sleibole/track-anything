@@ -86,7 +86,7 @@ func (a *app) renderShareForm(w http.ResponseWriter, r *http.Request, status int
 		p.Minutes = r.PostFormValue("minutes")
 		p.Seconds = r.PostFormValue("seconds")
 		// Log again failed in its own field. Keep the message on that control.
-		if r.PostFormValue("log_again") == "1" {
+		if r.PostFormValue("log_again") == "1" || r.PostFormValue("add_amount") == "1" {
 			applyInlineLogError(&p.Card, r, t, msg)
 			p.Error = ""
 		}
@@ -95,6 +95,9 @@ func (a *app) renderShareForm(w http.ResponseWriter, r *http.Request, status int
 		p.Hours = card.CarryHours
 		p.Minutes = card.CarryMinutes
 		p.Seconds = card.CarrySeconds
+		if msg == "" {
+			p.Card.Notice = goalNoticeFrom(r.URL.Query(), t.ID)
+		}
 	}
 	a.render(w, r, status, "share.html", p)
 }
@@ -142,7 +145,7 @@ func (a *app) handleShareLogEntry(w http.ResponseWriter, r *http.Request) {
 	}
 	number, duration, msg := readEntryValue(r, t)
 	if msg != "" {
-		if r.PostFormValue("log_again") == "1" && r.Header.Get("HX-Request") == "true" {
+		if (r.PostFormValue("log_again") == "1" || r.PostFormValue("add_amount") == "1") && r.Header.Get("HX-Request") == "true" {
 			c, err := a.card(t, loc, a.now(), nil)
 			if err != nil {
 				a.serverError(w, r, err)
@@ -156,12 +159,21 @@ func (a *app) handleShareLogEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := a.now()
+	var before []float64
+	if t.IsCumulative() && t.Goal != nil {
+		var err error
+		before, err = a.entryNumbers(t.ID)
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+	}
 	e := Entry{TrackerID: t.ID, OccurredAt: now.UTC(), ViaLink: true, Number: number, DurationSec: duration, CreatedAt: now}
 	if err := a.logEntry(&e, loc); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, shareURL(t), http.StatusSeeOther)
+	a.redirectAfterEntry(w, r, t, shareURL(t), before)
 }
 
 func (a *app) handleShareZero(w http.ResponseWriter, r *http.Request) {

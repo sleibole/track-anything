@@ -16,15 +16,25 @@ document.querySelectorAll("form[data-autosubmit]").forEach((form) => {
   form.requestSubmit();
 });
 
-// The unit field belongs to number trackers. Hiding it is optional; the server still checks the kind.
+// The unit field belongs to number and cumulative trackers. The repeating goal
+// belongs to cumulative trackers. Hiding them is optional; the server still checks the kind.
 document.querySelectorAll("[data-kind-picker]").forEach((picker) => {
   const sync = () => {
     const unit = picker.querySelector("[data-unit-field]");
     const input = unit && unit.querySelector("input");
+    const goal = picker.querySelector("[data-goal-field]");
+    const goalInput = goal && goal.querySelector("input");
+    const form = picker.closest("form");
+    const summary = form && form.querySelector("[data-summary-field]");
     const selected = picker.querySelector('input[name="kind"]:checked');
-    const number = !!(selected && selected.value === "number");
-    if (unit) unit.hidden = !number;
-    if (input) input.disabled = !number;
+    const kind = selected ? selected.value : "count";
+    const number = kind === "number";
+    const cumulative = kind === "cumulative";
+    if (unit) unit.hidden = !(number || cumulative);
+    if (input) input.disabled = !(number || cumulative);
+    if (goal) goal.hidden = !cumulative;
+    if (goalInput) goalInput.disabled = !cumulative;
+    if (summary) summary.hidden = cumulative;
   };
   picker.addEventListener("change", sync);
   sync();

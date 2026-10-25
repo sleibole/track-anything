@@ -90,6 +90,9 @@ func (a *app) quickEntry(t Tracker, now time.Time, by *uint, viaLink bool) (Entr
 	if t.IsCount() {
 		return e, "", nil
 	}
+	if t.IsCumulative() {
+		return e, "Enter an amount to add.", nil
+	}
 	last, err := a.latestEntry(t.ID)
 	if err != nil {
 		return e, "", err
@@ -173,6 +176,15 @@ func readEntryValue(r *http.Request, t Tracker) (number *float64, duration *int,
 			return nil, nil, msg
 		}
 		return &v, nil, ""
+	case t.IsCumulative():
+		if hasDuration {
+			return nil, nil, "A cumulative tracker doesn't take a duration."
+		}
+		v, msg := parseAmount(rawNumber)
+		if msg != "" {
+			return nil, nil, msg
+		}
+		return &v, nil, ""
 	case t.IsDuration():
 		if rawNumber != "" {
 			return nil, nil, "A duration tracker doesn't take a number."
@@ -217,7 +229,7 @@ func (a *app) handleLogEntry(w http.ResponseWriter, r *http.Request) {
 		occurred, msg = parseEntryTime(v, loc, now)
 	}
 	if msg != "" {
-		if r.PostFormValue("log_again") == "1" {
+		if r.PostFormValue("log_again") == "1" || r.PostFormValue("add_amount") == "1" {
 			a.renderNumberLogError(w, r, t, role, msg)
 			return
 		}
@@ -225,6 +237,14 @@ func (a *app) handleLogEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var before []float64
+	if t.IsCumulative() && t.Goal != nil {
+		before, err = a.entryNumbers(t.ID)
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+	}
 	e := Entry{
 		TrackerID: t.ID, OccurredAt: occurred, RecordedByID: &u.ID, Note: note,
 		Number: number, DurationSec: duration, CreatedAt: now,
@@ -233,7 +253,24 @@ func (a *app) handleLogEntry(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	redirectBack(w, r, trackerURL(t))
+	a.redirectAfterEntry(w, r, t, trackerURL(t), before)
+}
+
+// redirectAfterEntry returns to the page the entry was logged from.
+// A cumulative goal that the new amount finished adds a one-time notice.
+func (a *app) redirectAfterEntry(w http.ResponseWriter, r *http.Request, t Tracker, fallback string, before []float64) {
+	to := redirectTarget(r, fallback)
+	if t.IsCumulative() && t.Goal != nil && *t.Goal > 0 {
+		after, err := a.entryNumbers(t.ID)
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		if n := completedDelta(before, after, *t.Goal); n != "" {
+			to = withNotice(to, t.ID, n)
+		}
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
 }
 
 // renderNumberLogError keeps a failed Log again inside the tracker that was submitted.
@@ -442,7 +479,7 @@ func (a *app) handleEditEntry(w http.ResponseWriter, r *http.Request) {
 	}
 	updates := map[string]any{"occurred_at": occurred, "note": note}
 	switch {
-	case t.IsNumber():
+	case t.IsNumber(), t.IsCumulative():
 		updates["number"] = *number
 		updates["duration_sec"] = nil
 	case t.IsDuration():
