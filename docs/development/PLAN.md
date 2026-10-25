@@ -17,6 +17,7 @@ Within `docs/development/`:
 - `DESIGN.md` defines visual design and UI/UX conventions.
 - `ARCHITECTURE.md` records technical and implementation decisions.
 - `SUMMARY-DISPLAY.md` records how the summary display setting was built. The behavior itself is in the three documents above.
+- `WORKTREES.md` describes Cursor worktrees and isolated agent development servers.
 
 These development documents contain settled project decisions and should be followed when implementing new features.
 

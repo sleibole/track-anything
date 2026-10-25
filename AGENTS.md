@@ -104,9 +104,21 @@ Stop only the server you started, and stop it when testing is done:
 make dev-stop NAME=<unique-name>
 ```
 
-Do not kill processes by port. Do not run `pkill`, `killall`, or any other broad match against `air`, `go`, or `main`. `make dev-stop-all` stops every named agent server and does not stop the personal server; use it only for names you started.
+Do not kill processes by port. Do not run `pkill`, `killall`, or any other broad match against `air`, `go`, or `main`. `make dev-stop-all` stops named agent servers recorded in this checkout and does not stop the personal server; use it only for names you started.
 
-These servers share the working tree. Each one has its own port (from 8100 upward), Air build directory, and SQLite file.
+In one checkout, named servers share that working tree. Each one has its own port (from 8100 upward), Air build directory, and SQLite file. Parallel agents use separate Git worktrees so they do not share those files. See Worktrees below and `docs/development/WORKTREES.md`.
+
+## Worktrees (policy)
+
+Cursor worktrees are separate checkouts. Do all work in the assigned worktree. Do not create, edit, or delete files in the main checkout or in another worktree.
+
+Do not run destructive Git operations unless the task explicitly allows that operation. This includes `git reset --hard`, `git clean`, force-push, and deleting branches.
+
+Do not merge, push, rebase, or delete a worktree unless the task asks. Cursor may delete old worktrees on its own, including checkouts it did not create. Preserve finished work before that happens. `docs/development/WORKTREES.md` describes that cleanup.
+
+Do not modify an existing failing test without explicit permission. That rule is in Existing tests above.
+
+Do not use `data/trackanything.db`, another checkout's `tmp/`, or another agent's server. `make dev-list` and `make dev-stop` apply to this checkout only. Do not start `make dev` in a worktree. Do not stop a server you did not start.
 
 ## Validation (practice)
 
@@ -127,5 +139,6 @@ When the task is finished, briefly summarize:
 - What changed and why.
 - Which checks ran and their results.
 - Any existing test failures, unresolved issues, or decisions requiring my input.
+- When the work happened in a worktree, its path. When a dev server was used, its URL.
 
 Do not claim the work is complete while a relevant failure is still unresolved.

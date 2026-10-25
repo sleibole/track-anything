@@ -107,6 +107,9 @@ track-anything/
 │   └── icons/             # teal tally PWA icons: standard, maskable, Apple sizes, favicon PNGs
 ├── scripts/
 │   └── dev-server.sh   # named Air servers for concurrent agents
+├── .cursor/
+│   ├── worktrees.json  # Cursor worktree setup
+│   └── setup-worktree-unix.sh
 ├── .air.toml           # Air config for local autoreload
 ├── Dockerfile          # multi-stage build, used by Dokku now and Fly.io later
 └── Makefile            # dev, dev-agent, dev-list, dev-stop, dev-stop-all, run, build, test
@@ -128,11 +131,13 @@ That starts [Air](https://github.com/air-verse/air), which builds the server and
 make dev-agent NAME=<unique-name>
 ```
 
-The name is the instance id. [scripts/dev-server.sh](../../scripts/dev-server.sh) reserves a free port from 8100 through 8199, gives the instance its own Air build directory and SQLite file under `tmp/dev-agents/<name>/`, and exports `ADDR`, `DB_PATH`, and `BASE_URL` before Air starts. The app and Air both leave variables that are already set alone, so a local `.env` cannot point the agent server at port 8080 or the personal database. The generated Air config is the committed `.air.toml` with that instance's `tmp_dir`, build `-o` path, and `entrypoint`. Watch extensions, exclude list, `send_interrupt`, and `kill_delay` stay as they are.
+The name is the server name. [scripts/dev-server.sh](../../scripts/dev-server.sh) reserves a free port from 8100 through 8199, gives the instance its own Air build directory and SQLite file under `tmp/dev-agents/<name>/`, and exports `ADDR`, `DB_PATH`, and `BASE_URL` before Air starts. The reservation is an atomic directory claim, held until that server exits, so another checkout cannot take the port while this one is starting. The app and Air both leave variables that are already set alone, so a local `.env` cannot point the agent server at port 8080 or the personal database. The generated Air config is the committed `.air.toml` with that instance's `tmp_dir`, build `-o` path, and `entrypoint`. Watch extensions, exclude list, `send_interrupt`, and `kill_delay` stay as they are.
 
-`make dev-list` prints the name, port, URL, and status of each recorded instance. `make dev-stop NAME=<name>` stops that instance. `make dev-stop-all` stops only instances recorded under `tmp/dev-agents/`; it does not look for the personal server. Ctrl-C, SIGHUP, and `dev-stop` signal the recorded process and the Go binary Air started, and only when the command line still matches that instance.
+`make dev-list` prints the name, port, URL, and status of each recorded instance. `make dev-stop NAME=<name>` stops that instance. `make dev-stop-all` stops only instances recorded under this checkout's `tmp/dev-agents/`; it does not look for the personal server or another worktree. Ctrl-C, SIGHUP, and `dev-stop` signal the recorded process and the Go binary Air started, and only when the command line still matches that instance.
 
-The servers share this working tree. They are not separate Git worktrees. Saving a watched file rebuilds every running Air. The script waits up to 60 seconds for `/healthz` (`DEV_SERVER_READY_TIMEOUT` changes that). If the process exits first, it prints the status and the log tail.
+Named servers started in the same checkout share that working tree. Saving a watched file there rebuilds every Air process that is running in that checkout. Parallel agents use separate Git worktrees. Cursor creates the checkout and runs `.cursor/worktrees.json` before the agent edits files. Each worktree has its own `tmp/dev-agents/` and its own `.env`. Port claims live outside the checkouts. [WORKTREES.md](WORKTREES.md) describes setup, server commands, review, and cleanup.
+
+The script waits up to 60 seconds for `/healthz` (`DEV_SERVER_READY_TIMEOUT` changes that). If the process exits first, it prints the status and the log tail.
 
 Saving a `.go` file, an HTML template, or CSS or JavaScript under `static/` makes Air rebuild and restart. Refresh the browser after the restart. Air does not reload the page. Templates, CSS, and JavaScript stay embedded with `go:embed`, so those edits are picked up by compiling a new binary. `make dev` writes `tmp/main`. An agent server writes `tmp/dev-agents/<name>/air/main`. Both directories are gitignored.
 
