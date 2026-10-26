@@ -397,11 +397,13 @@ func TestChartsFollowStoredZone(t *testing.T) {
 	ts := newTestServer(t)
 	owner := ts.browser(t)
 	owner.post("/signup", url.Values{"email": {"utc@example.com"}, "timezone": {"UTC"}})
+	owner.confirmEmail("utc@example.com")
 	h := ts.personalHousehold(t, "utc@example.com")
 	owner.post(fmt.Sprintf("/households/%d/invite", h.ID), nil)
 	h = ts.household(t, h.ID)
 	member := ts.browser(t)
 	member.signup("la@example.com", "")
+	member.confirmEmail("la@example.com")
 	member.post("/join/"+*h.InviteToken, nil)
 
 	now := ts.clock.now().UTC()

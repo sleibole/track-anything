@@ -50,11 +50,13 @@ func sharedHouse(t *testing.T) (ts *testServer, owner, member *browser, h Househ
 	ts = newTestServer(t)
 	owner = ts.browser(t)
 	owner.signup("owner@example.com", "")
+	owner.confirmEmail("owner@example.com")
 	h = ts.personalHousehold(t, "owner@example.com")
 	owner.post(fmt.Sprintf("/households/%d/invite", h.ID), nil)
 	h = ts.household(t, h.ID)
 	member = ts.browser(t)
 	member.signup("member@example.com", "")
+	member.confirmEmail("member@example.com")
 	member.post("/join/"+*h.InviteToken, nil)
 	if ts.role(t, h, "member@example.com") != roleMember {
 		t.Fatal("member did not join")
@@ -130,6 +132,7 @@ func TestInviteLinkJoinFlow(t *testing.T) {
 	ts := newTestServer(t)
 	owner := ts.browser(t)
 	owner.signup("owner@example.com", "")
+	owner.confirmEmail("owner@example.com")
 	h := ts.personalHousehold(t, "owner@example.com")
 
 	r := owner.post(fmt.Sprintf("/households/%d/invite", h.ID), nil)
@@ -147,11 +150,18 @@ func TestInviteLinkJoinFlow(t *testing.T) {
 		t.Fatalf("logged-out invite ended at %s", r.url)
 	}
 	r = b.post("/signup", url.Values{"email": {"member@example.com"}, "timezone": {"UTC"}, "next": {join}})
-	if r.url.Path != join || !strings.Contains(r.body, "Join household") {
+	if r.url.Path != join {
 		t.Fatalf("after signup ended at %s", r.url)
 	}
 	if ts.role(t, h, "member@example.com") != "" {
 		t.Fatal("opening the invite joined without a POST")
+	}
+	if strings.Contains(r.body, "Join household") {
+		t.Fatal("unverified signup was offered the join button")
+	}
+	b.confirmEmail("member@example.com")
+	if page := b.get(join); !strings.Contains(page.body, "Join household") {
+		t.Fatal("verified signup does not see the join action")
 	}
 	r = b.post(join, nil)
 	if ts.role(t, h, "member@example.com") != roleMember {
@@ -228,6 +238,7 @@ func TestOwnerRemovesAndPromotesMembers(t *testing.T) {
 	ts, owner, member, h := sharedHouse(t)
 	third := ts.browser(t)
 	third.signup("third@example.com", "")
+	third.confirmEmail("third@example.com")
 	third.post("/join/"+*h.InviteToken, nil)
 
 	owner.post(fmt.Sprintf("/households/%d/members/%d/owner", h.ID, ts.user(t, "member@example.com").ID), nil)
@@ -259,6 +270,7 @@ func TestRemovingAMemberRotatesTheInviteLink(t *testing.T) {
 	old := *h.InviteToken
 	gone := ts.browser(t)
 	gone.signup("gone@example.com", "")
+	gone.confirmEmail("gone@example.com")
 	gone.post("/join/"+old, nil)
 
 	owner.post(fmt.Sprintf("/households/%d/members/%d/delete", h.ID, ts.user(t, "gone@example.com").ID), nil)
@@ -268,6 +280,7 @@ func TestRemovingAMemberRotatesTheInviteLink(t *testing.T) {
 	}
 	again := ts.browser(t)
 	again.signup("again@example.com", "")
+	again.confirmEmail("again@example.com")
 	if r := again.post("/join/"+old, nil); r.status != http.StatusNotFound || ts.role(t, h, "again@example.com") != "" {
 		t.Fatalf("old invite still works: %d", r.status)
 	}
@@ -386,6 +399,7 @@ func TestOwnedHouseholdNamesStayDistinctForOnePerson(t *testing.T) {
 	ts := newTestServer(t)
 	owner := ts.browser(t)
 	owner.signup("owner@example.com", "")
+	owner.confirmEmail("owner@example.com")
 	owner.post("/households", url.Values{"name": {"Family"}})
 	h := ts.ownedNamed(t, "owner@example.com", "Family")
 
@@ -416,6 +430,7 @@ func TestOwnedHouseholdNamesStayDistinctForOnePerson(t *testing.T) {
 	h = ts.household(t, h.ID)
 	member := ts.browser(t)
 	member.signup("member@example.com", "")
+	member.confirmEmail("member@example.com")
 	member.post("/join/"+*h.InviteToken, nil)
 	if ts.role(t, h, "member@example.com") != roleMember {
 		t.Fatal("did not join")
@@ -432,6 +447,7 @@ func TestDashboardDisambiguatesDuplicateNames(t *testing.T) {
 	ts := newTestServer(t)
 	owner := ts.browser(t)
 	owner.signup("owner@example.com", "")
+	owner.confirmEmail("owner@example.com")
 	owner.post("/households", url.Values{"name": {"Family"}})
 	h := ts.ownedNamed(t, "owner@example.com", "Family")
 	owner.post(fmt.Sprintf("/households/%d/invite", h.ID), nil)
@@ -439,6 +455,7 @@ func TestDashboardDisambiguatesDuplicateNames(t *testing.T) {
 
 	member := ts.browser(t)
 	member.signup("member@example.com", "")
+	member.confirmEmail("member@example.com")
 	member.post("/join/"+*h.InviteToken, nil)
 	owner.createTracker(h, "Family meal", nil)
 
@@ -485,6 +502,7 @@ func TestMoveTrackerBetweenOwnedHouseholds(t *testing.T) {
 	family = ts.household(t, family.ID)
 	dest := ts.browser(t)
 	dest.signup("dest@example.com", "")
+	dest.confirmEmail("dest@example.com")
 	dest.post("/join/"+*family.InviteToken, nil)
 
 	if r := member.get(fmt.Sprintf("/trackers/%d", tr.ID)); r.status != http.StatusOK {

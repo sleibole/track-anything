@@ -338,6 +338,18 @@ func TestVerifiedEmailIsRequiredToInviteAndJoin(t *testing.T) {
 	if ts.role(t, own, "join@example.com") != "" {
 		t.Fatal("unverified user joined")
 	}
+	guestID := guestUserID(t, ts)
+	if r := guest.post("/join/"+*own.InviteToken, nil); r.status != http.StatusForbidden {
+		t.Fatalf("guest join %d", r.status)
+	}
+	var joined int64
+	if err := ts.app.db.Model(&HouseholdMember{}).Where("household_id = ? AND user_id = ?", own.ID, guestID).Count(&joined).Error; err != nil || joined != 0 {
+		t.Fatal("guest joined the household")
+	}
+	joiner.confirmEmail("join@example.com")
+	if r := joiner.post("/join/"+*own.InviteToken, nil); ts.role(t, own, "join@example.com") != roleMember {
+		t.Fatalf("verified join %d", r.status)
+	}
 }
 
 func TestTransferRequiresBothProofs(t *testing.T) {

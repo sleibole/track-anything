@@ -198,6 +198,37 @@ func (ts *testServer) lastVerifyLink(t *testing.T) string {
 	return ""
 }
 
+// verifyLinkFor returns the latest confirmation link mailed to this address.
+func (ts *testServer) verifyLinkFor(t *testing.T, email string) string {
+	t.Helper()
+	want := normalizeEmail(email)
+	msgs := ts.mailer.messages()
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if normalizeEmail(msgs[i].To) != want {
+			continue
+		}
+		if m := verifyRE.FindStringSubmatch(msgs[i].Body); m != nil {
+			return m[1]
+		}
+	}
+	t.Fatalf("no verification link for %s", email)
+	return ""
+}
+
+// confirmEmail opens that address's verification link in this browser.
+// The signup browser stays signed in: proving the mailbox deletes the old
+// session and the response sets a new one. A different browser would not.
+func (b *browser) confirmEmail(email string) {
+	b.t.Helper()
+	r := b.post(b.ts.verifyLinkFor(b.t, email), nil)
+	if r.url == nil || r.url.Path != "/verify/done" {
+		b.t.Fatalf("verify %s: %d at %v", email, r.status, r.url)
+	}
+	if !b.loggedInAs(email) {
+		b.t.Fatalf("confirming %s signed this browser out", email)
+	}
+}
+
 func (ts *testServer) user(t *testing.T, email string) User {
 	t.Helper()
 	var u User
