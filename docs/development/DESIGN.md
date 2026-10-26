@@ -209,7 +209,7 @@ When ads exist, they stay out of share, login, and settings pages, and out of th
 
 ## Responsive behavior
 
-Design the narrow screen first. There is still one web layout and no native app. The footer Install app control opens a short dialog. On a phone it explains Share or the browser menu. On a computer it explains the address bar or the browser menu, and it shows the browser's install button when one is available. The dialog does not open by itself. The manifest is specified in `ARCHITECTURE.md`. Offline logging, later, keeps this same log button.
+Design the narrow screen first. There is still one web layout and no native app. The footer Install app control opens a short dialog. On a phone it explains Share, the browser menu, or opening Safari when this browser cannot add the Home Screen icon. On a computer it explains the address bar or the browser menu, and it shows the browser's install button when one is available. The dialog does not open by itself. The manifest is specified in `ARCHITECTURE.md`. Offline logging, later, keeps this same log button.
 
 On a phone, tracker cards stack, and the logging control is the first content on a tracker page. The trend follows, then history, so reviewing is a scroll down the same page. On Charts, the selectors stack and the chart fills the width. A tap on a day shows the count and any overlay for that day.
 

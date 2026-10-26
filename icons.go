@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"embed"
 	"fmt"
 	"html/template"
@@ -20,7 +21,8 @@ func icon(name string) (template.HTML, error) {
 	if err != nil {
 		return "", fmt.Errorf("icon %q: %w", name, err)
 	}
-	return template.HTML(b), nil
+	// A trailing newline in the file would sit between an inline icon and the next word.
+	return template.HTML(bytes.TrimSpace(b)), nil
 }
 
 type choice struct {

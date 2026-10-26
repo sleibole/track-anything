@@ -312,6 +312,48 @@ func TestInstallDialog(t *testing.T) {
 	}
 }
 
+func TestInstallIosHandoff(t *testing.T) {
+	ts := newTestServer(t)
+	home := ts.browser(t).get("/")
+	for _, want := range []string{
+		`data-install-ios="safari"`,
+		`data-install-ios="handoff"`,
+		`data-install-brave`,
+		`data-install-ios-other`,
+		`Brave can’t add this site to the Home Screen. Safari can.`,
+		`This browser can’t add this site to the Home Screen. Safari can.`,
+		`Open Safari and paste the link.`,
+		`Having trouble? Open this page in Safari and follow these steps.`,
+	} {
+		if !strings.Contains(home.body, want) {
+			t.Errorf("home missing %q", want)
+		}
+	}
+
+	script := ts.browser(t).get("/static/app.js").body
+	for _, want := range []string{
+		"CriOS",
+		"FxiOS",
+		"EdgiOS",
+		"Brave",
+		`new URL("/", location.origin)`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("app.js missing %q", want)
+		}
+	}
+	for _, banned := range []string{
+		"location.href",
+		"safari://",
+		"googlechrome://",
+		"localStorage.setItem",
+	} {
+		if strings.Contains(script, banned) {
+			t.Errorf("app.js contains %q", banned)
+		}
+	}
+}
+
 func TestEveryIconRenders(t *testing.T) {
 	files, err := fs.Glob(iconFS, "icons/*.svg")
 	if err != nil || len(files) == 0 {

@@ -573,6 +573,18 @@ function inAppBrowser() {
   return /Instagram|FBAN|FBAV|FB_IAB|Line\/|Snapchat|TikTok|BytedanceWebview|LinkedInApp|Twitter|MicroMessenger|Pinterest|WhatsApp|GSA\//i.test(navigator.userAgent || "");
 }
 
+// Only Safari on iPhone and iPad can add the Home Screen web app. Brave is
+// named when the user agent says so. Other iOS browsers, and an in-app page,
+// get the same Safari handoff without naming a browser. A computer that
+// shows the iPhone steps keeps the Safari list.
+function iosHandoff() {
+  if (detectPlatform() !== "ios") return "";
+  const ua = navigator.userAgent || "";
+  if (/Brave/i.test(ua)) return "brave";
+  if (/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo/i.test(ua) || inAppBrowser()) return "other";
+  return "";
+}
+
 function safeInstallURL() {
   try {
     const url = new URL("/", location.origin);
@@ -587,6 +599,10 @@ function safeInstallURL() {
 function fillInstallURL(dialog) {
   const node = dialog.querySelector("[data-install-url]");
   if (node) node.textContent = safeInstallURL();
+}
+
+function installURLLine(dialog) {
+  return dialog.querySelector("[data-install-url-line]");
 }
 
 function announceInstall(message, kind) {
@@ -612,6 +628,15 @@ function renderInstallDialog(dialog) {
   dialog.querySelectorAll("[data-install-panel]").forEach((panel) => {
     panel.hidden = panel.dataset.installPanel !== kind;
   });
+  const handoff = kind === "ios" ? iosHandoff() : "";
+  const safariSteps = dialog.querySelector("[data-install-ios='safari']");
+  const handoffSteps = dialog.querySelector("[data-install-ios='handoff']");
+  const braveNote = dialog.querySelector("[data-install-brave]");
+  const otherNote = dialog.querySelector("[data-install-ios-other]");
+  if (safariSteps) safariSteps.hidden = handoff !== "";
+  if (handoffSteps) handoffSteps.hidden = handoff === "";
+  if (braveNote) braveNote.hidden = handoff !== "brave";
+  if (otherNote) otherNote.hidden = handoff !== "other";
   const known = kind === "ios" || kind === "android" || kind === "desktop";
   const unknown = dialog.querySelector("[data-install-unknown]");
   if (unknown) unknown.hidden = known;
@@ -705,6 +730,8 @@ function openInstallDialog(trigger) {
     status.textContent = "";
     status.classList.remove("error");
   }
+  const urlLine = installURLLine(dialog);
+  if (urlLine) urlLine.hidden = true;
   syncInstall();
   if (dialog.open) return;
   lockInstallScroll();
@@ -766,20 +793,30 @@ function startPrompt() {
   }
 }
 
+function showInstallURL(dialog) {
+  fillInstallURL(dialog);
+  const line = installURLLine(dialog);
+  if (line) line.hidden = false;
+  return dialog.querySelector("[data-install-url]");
+}
+
 function copyInstallLink() {
   const dialog = document.getElementById("install-dialog");
   if (!dialog) return;
   const url = safeInstallURL();
-  fillInstallURL(dialog);
   if (!url) {
     announceInstall("Could not copy the link. Select the address below and copy it.", "error");
+    const node = showInstallURL(dialog);
+    if (node) node.tabIndex = -1;
     return;
   }
   copyText(url).then(() => {
+    const line = installURLLine(dialog);
+    if (line) line.hidden = true;
     announceInstall("Link copied.");
   }).catch(() => {
     announceInstall("Could not copy the link. Select the address below and copy it.", "error");
-    const node = dialog.querySelector("[data-install-url]");
+    const node = showInstallURL(dialog);
     if (!node) return;
     node.tabIndex = -1;
     node.focus();
