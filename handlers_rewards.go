@@ -75,7 +75,7 @@ func (a *app) redemptionViews(rows []Redemption, loc *time.Location, now time.Ti
 			return nil, err
 		}
 		for _, u := range users {
-			emails[u.ID] = u.Email
+			emails[u.ID] = u.Label()
 		}
 	}
 	views := make([]redemptionView, 0, len(rows))

@@ -43,6 +43,7 @@
 {{if .IsOwner}}
 <section>
   <h2>{{icon "link"}} Invite link</h2>
+  {{if .InviteError}}<p role="alert" class="error">{{.InviteError}} {{if $.User.IsGuest}}<a href="/account/email">Add email</a>{{else}}<a {{nav "/settings"}}>Open settings</a>{{end}}</p>{{end}}
   {{with .InviteURL}}
   <p>Anyone with this link can join as a member after logging in or signing up. Send it yourself; Track Anything doesn't email it.</p>
   <input type="text" readonly value="{{.}}" aria-label="Invite link" data-select-on-focus>

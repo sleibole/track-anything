@@ -1,0 +1,11 @@
+{{define "title"}}Log out · Track Anything{{end}}
+{{define "content"}}
+<article class="auth-card">
+  <h1>Log out</h1>
+  <p>You’re using a guest account. If you clear your browser data or lose this session, you won’t be able to recover your trackers without adding an email.</p>
+  <p><a href="/account/email" role="button">Add email</a></p>
+  <form method="post" action="/logout" class="auth-form">
+    <button type="submit" class="secondary outline">Log out anyway</button>
+  </form>
+</article>
+{{end}}

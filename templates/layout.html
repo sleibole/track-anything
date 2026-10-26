@@ -77,11 +77,16 @@
       <ul>
         {{with .User}}
         <li><a {{nav "/charts"}}>Charts</a></li>
+        {{if .IsGuest}}<li><a href="/account/email">Add email</a></li>{{end}}
         <li><a aria-label="Settings" title="Settings" {{nav "/settings"}}>{{icon "settings"}}</a></li>
         <li>
+          {{if .IsGuest}}
+          <a href="/logout/confirm" class="outline secondary" aria-label="Log out" title="Log out">{{icon "logout"}}</a>
+          {{else}}
           <form method="post" action="/logout" class="inline">
             <button type="submit" class="outline secondary" aria-label="Log out" title="Log out">{{icon "logout"}}</button>
           </form>
+          {{end}}
         </li>
         {{else}}
         <li><a href="/login">Log in</a></li>

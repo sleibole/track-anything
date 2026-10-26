@@ -101,7 +101,7 @@ func (b *browser) get(path string) response {
 func turnstileProtected(path string) bool {
 	path, _, _ = strings.Cut(path, "?")
 	switch path {
-	case "/signup", "/login", "/login/link", "/settings/password":
+	case "/signup", "/login", "/login/link", "/settings/password", "/account/email":
 		return true
 	default:
 		return false

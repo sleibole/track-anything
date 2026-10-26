@@ -7,6 +7,8 @@
 <article class="form-card">
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
   <form method="post" action="{{with .Tracker}}/trackers/{{.ID}}{{else}}/trackers{{end}}" hx-post="{{with .Tracker}}/trackers/{{.ID}}{{else}}/trackers{{end}}">
+    {{if not .Tracker}}<input type="hidden" name="request" value="{{.Request}}">{{end}}
+    {{if .Minimal}}<input type="hidden" name="minimal" value="1">{{end}}
     {{if not .Tracker}}
       {{if gt (len .Households) 1}}
       <label>
@@ -44,6 +46,7 @@
         <small id="goal-help">Optional. The goal repeats, and any extra amount counts toward the next one. Changing or removing it recalculates progress from the full total. Entries stay as they are. Redeemed rewards are kept. If fewer goals are earned than have been redeemed, no new reward is available until the total catches up. Removing the goal keeps that history and turns new redemptions off.</small>
       </label>
     </div>
+    {{if .Minimal}}<details><summary>More options</summary>{{end}}
     <fieldset class="picker">
       <legend>Icon</legend>
       {{range .Icons}}
@@ -76,6 +79,7 @@
       </label>
       {{end}}
     </fieldset>
+    {{if .Minimal}}</details>{{end}}
     <button type="submit">{{if .Tracker}}Save{{else}}Create tracker{{end}}</button>
   </form>
 </article>

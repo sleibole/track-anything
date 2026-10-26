@@ -1,0 +1,23 @@
+{{define "title"}}Move trackers · Track Anything{{end}}
+{{define "content"}}
+{{with .Data}}
+<article class="auth-card">
+  <h1>Move trackers</h1>
+  {{if .Ready}}
+  <p>Move the guest trackers into <strong>{{.DestEmail}}</strong>. This happens only when you press the button.</p>
+  <form method="post" action="/account/transfer" class="auth-form">
+    <button type="submit" name="confirm" value="move">Move trackers</button>
+  </form>
+  <p class="auth-foot"><a href="/">Not now</a></p>
+  {{else if .NeedDest}}
+  <p>Open the email link for {{.DestEmail}} first. Logging in does not move the trackers by itself.</p>
+  {{else if .NeedSource}}
+  <p>This browser does not have the confirmation from the guest session. Go back to the browser where you started, then move the trackers.</p>
+  {{else if .WrongAccount}}
+  <p>This transfer is not for the account you are signed in as.</p>
+  {{else}}
+  <p>This transfer has expired or is no longer available. Your guest trackers stay where they are until a new request succeeds.</p>
+  {{end}}
+</article>
+{{end}}
+{{end}}

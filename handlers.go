@@ -179,7 +179,8 @@ func stampGoalNotices(cards []trackerCard, r *http.Request) {
 func (a *app) handleHome(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	if u == nil {
-		a.render(w, r, http.StatusOK, "home.html", nil)
+		a.ensureStartCookie(w, r)
+		a.render(w, r, http.StatusOK, "home.html", homeStartData("", ""))
 		return
 	}
 	cards, err := a.dashboard(u)
@@ -192,7 +193,7 @@ func (a *app) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stampGoalNotices(cards, r)
-	page := dashboardPage{Cards: cards}
+	page := dashboardPage{Cards: cards, Moved: r.URL.Query().Get("moved") == "1", Keep: keepPrompt{Show: a.showKeep(u)}}
 	fillMarkers(&page)
 	a.render(w, r, http.StatusOK, "dashboard.html", page)
 }
@@ -216,6 +217,8 @@ type dashboardPage struct {
 	SwapEmpty bool
 	ShowEmpty bool // no trackers; kept when Cards is narrowed to a refresh fragment
 	OOB       bool // marker elements carry hx-swap-oob
+	Moved     bool
+	Keep      keepPrompt
 }
 
 func (p dashboardPage) HasTrackers() bool { return len(p.Cards) > 0 }
@@ -358,6 +361,9 @@ func (a *app) createdByOther(householdID, viewerID uint) (string, error) {
 	creator, err := householdCreator(a.db, householdID)
 	if err != nil || creator.ID == viewerID {
 		return "", err
+	}
+	if creator.Email == "" {
+		return "Guest", nil
 	}
 	return creator.Email, nil
 }

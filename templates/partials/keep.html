@@ -1,0 +1,16 @@
+{{define "keepTrackers"}}
+<div id="keep-trackers"{{if .Data.Keep.OOB}} hx-swap-oob="outerHTML"{{end}}>
+{{if .Data.Keep.Show}}
+<article class="keep-prompt">
+  <h2>Keep your trackers</h2>
+  <p>Add an email so you can sign in again and use your trackers on other devices.</p>
+  <p class="row-actions">
+    <a href="/account/email">Add email</a>
+    <form method="post" action="/account/email-prompt/dismiss" hx-post="/account/email-prompt/dismiss" hx-target="#keep-trackers" hx-swap="outerHTML" class="inline">
+      <button type="submit" class="quiet">Later</button>
+    </form>
+  </p>
+</article>
+{{end}}
+</div>
+{{end}}

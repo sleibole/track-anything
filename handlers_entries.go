@@ -19,7 +19,20 @@ func trackerURL(t Tracker) string {
 // events can't also be "none". CreatedAt is set by the caller from the app clock,
 // since it drives the undo window.
 func (a *app) logEntry(e *Entry, loc *time.Location) error {
-	return a.db.Transaction(func(tx *gorm.DB) error {
+	return a.withImmediate(func(tx *gorm.DB) error {
+		if e.RecordedByID != nil {
+			var n int64
+			err := tx.Table("household_members").
+				Joins("JOIN trackers ON trackers.household_id = household_members.household_id").
+				Where("trackers.id = ? AND household_members.user_id = ?", e.TrackerID, *e.RecordedByID).
+				Count(&n).Error
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				return errRecorderGone
+			}
+		}
 		if err := tx.Create(e).Error; err != nil {
 			return err
 		}
@@ -36,7 +49,20 @@ func (a *app) recordZero(t Tracker, day string, loc *time.Location, z RecordedZe
 		return false, err
 	}
 	recorded := false
-	err = a.db.Transaction(func(tx *gorm.DB) error {
+	err = a.withImmediate(func(tx *gorm.DB) error {
+		if z.RecordedByID != nil {
+			var members int64
+			err := tx.Table("household_members").
+				Joins("JOIN trackers ON trackers.household_id = household_members.household_id").
+				Where("trackers.id = ? AND household_members.user_id = ?", t.ID, *z.RecordedByID).
+				Count(&members).Error
+			if err != nil {
+				return err
+			}
+			if members == 0 {
+				return errRecorderGone
+			}
+		}
 		countEntries := func() (int64, error) {
 			var n int64
 			err := tx.Model(&Entry{}).

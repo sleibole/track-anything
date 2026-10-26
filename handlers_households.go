@@ -13,6 +13,7 @@ import (
 // errNameTaken is returned from a create or rename transaction when the name
 // matches another household the same user already owns.
 var errNameTaken = errors.New("household name taken")
+var errGuestHousehold = errors.New("guest household limit")
 
 type memberView struct {
 	Email  string
@@ -24,14 +25,15 @@ type memberView struct {
 func (m memberView) IsOwner() bool { return m.Role == roleOwner }
 
 type householdPage struct {
-	Household Household
-	IsOwner   bool
-	Members   []memberView
-	Trackers  []Tracker
-	Archived  []Tracker // shown to owners only
-	InviteURL string
-	DraftName string // the name field, kept when a rename fails
-	NameError string
+	Household   Household
+	IsOwner     bool
+	Members     []memberView
+	Trackers    []Tracker
+	Archived    []Tracker // shown to owners only
+	InviteURL   string
+	InviteError string
+	DraftName   string // the name field, kept when a rename fails
+	NameError   string
 }
 
 func householdURL(id uint) string {
@@ -66,6 +68,9 @@ func (a *app) householdView(h Household, role string, u *User) (householdPage, e
 	}
 	for i := range p.Members {
 		p.Members[i].IsSelf = p.Members[i].UserID == u.ID
+		if p.Members[i].Email == "" {
+			p.Members[i].Email = "Guest"
+		}
 	}
 	if err := a.db.Where("household_id = ? AND archived_at IS NULL", h.ID).Order("position, id").Find(&p.Trackers).Error; err != nil {
 		return p, err
@@ -152,6 +157,9 @@ func (a *app) handleCreateHousehold(w http.ResponseWriter, r *http.Request) {
 		if ownedNameTaken(owned, 0, name) {
 			return errNameTaken
 		}
+		if u.IsGuest() && len(owned) >= maxGuestHouseholds {
+			return errGuestHousehold
+		}
 		if err := tx.Create(&h).Error; err != nil {
 			return err
 		}
@@ -165,6 +173,10 @@ func (a *app) handleCreateHousehold(w http.ResponseWriter, r *http.Request) {
 	})
 	if errors.Is(err, errNameTaken) {
 		a.renderDashboardError(w, r, u, name, "You already have a household with that name.")
+		return
+	}
+	if errors.Is(err, errGuestHousehold) {
+		a.renderDashboardError(w, r, u, name, guestHouseLimitMessage)
 		return
 	}
 	if err != nil {
@@ -243,6 +255,21 @@ func (a *app) handleLeaveHousehold(w http.ResponseWriter, r *http.Request) {
 func (a *app) handleInviteOn(w http.ResponseWriter, r *http.Request) {
 	h, ok := a.ownedHousehold(w, r)
 	if !ok {
+		return
+	}
+	u := currentUser(r)
+	if !u.HasVerifiedEmail() {
+		p, err := a.householdView(h, roleOwner, u)
+		if err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		if u.IsGuest() {
+			p.InviteError = "Add an email and confirm it before inviting someone."
+		} else {
+			p.InviteError = "Confirm your email before inviting someone. You can send the link again from Settings."
+		}
+		a.render(w, r, http.StatusForbidden, "household.html", p)
 		return
 	}
 	token, err := newToken()
@@ -336,10 +363,12 @@ func (a *app) handlePromoteMember(w http.ResponseWriter, r *http.Request) {
 // so opening a link can't add anyone to a household by itself.
 
 type joinPage struct {
-	Household     Household
-	CreatedBy     string
-	Token         string
-	AlreadyMember bool
+	Household         Household
+	CreatedBy         string
+	Token             string
+	AlreadyMember     bool
+	NeedsVerification bool
+	Guest             bool
 }
 
 func (a *app) invitedHousehold(w http.ResponseWriter, r *http.Request) (h Household, ok bool) {
@@ -377,6 +406,10 @@ func (a *app) handleJoinPage(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	if !u.HasVerifiedEmail() {
+		p.NeedsVerification = true
+		p.Guest = u.IsGuest()
+	}
 	a.render(w, r, http.StatusOK, "join.html", p)
 }
 
@@ -384,6 +417,16 @@ func (a *app) handleJoin(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	h, ok := a.invitedHousehold(w, r)
 	if !ok {
+		return
+	}
+	if !u.HasVerifiedEmail() {
+		p := joinPage{Household: h, Token: r.PathValue("token"), NeedsVerification: true, Guest: u.IsGuest()}
+		var err error
+		if p.CreatedBy, err = a.createdByOther(h.ID, u.ID); err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		a.render(w, r, http.StatusForbidden, "join.html", p)
 		return
 	}
 	pos, err := nextMemberPosition(a.db, u.ID)

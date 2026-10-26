@@ -20,10 +20,91 @@ document.addEventListener("htmx:historyRestore", syncPageMeta);
 
 const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-// Hidden fields on signup get the browser's IANA time zone.
-document.querySelectorAll("input[data-browser-timezone]").forEach((input) => {
-  input.value = browserTimeZone;
+function fillTimeZones(root) {
+  (root || document).querySelectorAll("input[data-browser-timezone]").forEach((input) => {
+    input.value = browserTimeZone;
+  });
+}
+fillTimeZones(document);
+
+const suggestionTimers = new WeakMap();
+
+function suggestionList(input) {
+  if (!input.dataset.suggestions) return [];
+  try {
+    const parsed = JSON.parse(input.dataset.suggestions);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function stopSuggestions(input) {
+  const timer = suggestionTimers.get(input);
+  if (timer) clearInterval(timer);
+  suggestionTimers.delete(input);
+}
+
+function canRotateSuggestions(input) {
+  return input.isConnected && input.value === "" && document.activeElement !== input && !document.hidden &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches && suggestionList(input).length > 1;
+}
+
+function startSuggestions(input) {
+  stopSuggestions(input);
+  if (!canRotateSuggestions(input)) return;
+  const list = suggestionList(input);
+  let index = Math.max(0, list.indexOf(input.placeholder));
+  const timer = setInterval(() => {
+    if (!canRotateSuggestions(input)) {
+      stopSuggestions(input);
+      return;
+    }
+    index = (index + 1) % list.length;
+    input.placeholder = list[index];
+  }, 4000);
+  suggestionTimers.set(input, timer);
+}
+
+function bindSuggestions(root) {
+  (root || document).querySelectorAll("[data-suggestions]").forEach((input) => {
+    if (!input.dataset.suggestionsBound) {
+      input.dataset.suggestionsBound = "1";
+      input.addEventListener("focus", () => stopSuggestions(input));
+      input.addEventListener("blur", () => startSuggestions(input));
+      input.addEventListener("input", () => {
+        if (input.value === "") startSuggestions(input);
+        else stopSuggestions(input);
+      });
+    }
+    startSuggestions(input);
+  });
+}
+
+document.addEventListener("visibilitychange", () => {
+  document.querySelectorAll("[data-suggestions]").forEach((input) => {
+    if (document.hidden) stopSuggestions(input);
+    else startSuggestions(input);
+  });
 });
+
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+if (typeof reduceMotion.addEventListener === "function") {
+  reduceMotion.addEventListener("change", () => {
+    document.querySelectorAll("[data-suggestions]").forEach((input) => {
+      if (reduceMotion.matches) stopSuggestions(input);
+      else startSuggestions(input);
+    });
+  });
+}
+
+document.addEventListener("htmx:beforeSwap", (event) => {
+  const target = event.detail?.target;
+  if (!target || !target.querySelectorAll) return;
+  target.querySelectorAll("[data-suggestions]").forEach(stopSuggestions);
+});
+
+bindSuggestions(document);
 
 // The magic-link confirm page posts itself. GET still does not use the token,
 // so a scanner that only opens the link cannot log in. The button remains for
@@ -36,7 +117,10 @@ document.querySelectorAll("form[data-autosubmit]").forEach((form) => {
 
 // The unit field belongs to number and cumulative trackers. The repeating goal
 // belongs to cumulative trackers. Hiding them is optional; the server still checks the kind.
-document.querySelectorAll("[data-kind-picker]").forEach((picker) => {
+function bindKindPickers(root) {
+  (root || document).querySelectorAll("[data-kind-picker]").forEach((picker) => {
+  if (picker.dataset.kindBound) return;
+  picker.dataset.kindBound = "1";
   const sync = () => {
     const unit = picker.querySelector("[data-unit-field]");
     const input = unit && unit.querySelector("input");
@@ -56,7 +140,9 @@ document.querySelectorAll("[data-kind-picker]").forEach((picker) => {
   };
   picker.addEventListener("change", sync);
   sync();
-});
+  });
+}
+bindKindPickers(document);
 
 // The log button updates the summary on tap. The server's page replaces it moments later.
 // If the request fails, the previous line is put back and an inline note says it was not saved.
@@ -522,11 +608,18 @@ document.addEventListener("htmx:afterSettle", (event) => {
   ensureTurnstile(root);
   renderTurnstile(root);
   syncInstall();
+  fillTimeZones(root);
+  bindKindPickers(root);
+  bindSuggestions(root);
 });
 
 document.addEventListener("htmx:historyRestore", () => {
-  restoreTurnstile(document.getElementById("content") || document);
+  const root = document.getElementById("content") || document;
+  restoreTurnstile(root);
   syncInstall();
+  fillTimeZones(root);
+  bindKindPickers(root);
+  bindSuggestions(root);
 });
 
 // Install help. The early listener in the layout stores beforeinstallprompt.

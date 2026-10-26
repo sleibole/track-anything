@@ -3,17 +3,32 @@ package main
 import "time"
 
 type User struct {
-	ID              uint
-	Email           string     `gorm:"uniqueIndex;not null"` // stored lowercased
-	PasswordHash    string     // empty if they only use magic links
-	EmailVerifiedAt *time.Time // nil until they confirm the address, or log in with a magic link
-	TimeZone        string     `gorm:"not null;default:UTC"` // IANA name, e.g. "America/Los_Angeles"
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                     uint
+	Email                  string     `gorm:"not null;uniqueIndex:idx_users_email,where:email <> ''"` // stored lowercased; empty means a guest
+	PasswordHash           string     // empty if they only use magic links
+	EmailVerifiedAt        *time.Time // nil until they confirm the address, or log in with a magic link
+	EmailPromptDismissedAt *time.Time // set when a guest dismisses the add-email prompt
+	TimeZone               string     `gorm:"not null;default:UTC"` // IANA name, e.g. "America/Los_Angeles"
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 func (u User) HasPassword() bool {
 	return u.PasswordHash != ""
+}
+
+// IsGuest is an account with no email. It is not a separate kind of login.
+func (u User) IsGuest() bool { return u.Email == "" }
+
+// HasVerifiedEmail is the check for invite, join, and a future paid checkout.
+func (u User) HasVerifiedEmail() bool { return u.EmailVerifiedAt != nil }
+
+// Label is the address, or "Guest" when there is no address.
+func (u User) Label() string {
+	if u.Email == "" {
+		return "Guest"
+	}
+	return u.Email
 }
 
 type Session struct {
@@ -26,12 +41,13 @@ type Session struct {
 // LoginToken is a one-time magic login link. Only the hash is stored,
 // so a database leak can't be used to log in.
 type LoginToken struct {
-	ID        uint
-	UserID    uint   `gorm:"index;not null"`
-	TokenHash string `gorm:"uniqueIndex;not null"` // sha256 hex of the token in the emailed link
-	ExpiresAt time.Time
-	UsedAt    *time.Time
-	CreatedAt time.Time
+	ID               uint
+	UserID           uint   `gorm:"index;not null"`
+	TokenHash        string `gorm:"uniqueIndex;not null"` // sha256 hex of the token in the emailed link
+	TransferIntentID *uint  `gorm:"index"`                // set only for a guest transfer; not permission to move data
+	ExpiresAt        time.Time
+	UsedAt           *time.Time
+	CreatedAt        time.Time
 }
 
 // VerificationToken is a one-time email confirmation link. It lives in its own
@@ -40,6 +56,8 @@ type VerificationToken struct {
 	ID        uint
 	UserID    uint   `gorm:"index;not null"`
 	TokenHash string `gorm:"uniqueIndex;not null"`
+	Email     string // proposed address for a guest claim; empty confirms the address already on the user
+	ClaimID   *uint  `gorm:"index"`
 	ExpiresAt time.Time
 	UsedAt    *time.Time
 	CreatedAt time.Time
@@ -163,5 +181,60 @@ type Redemption struct {
 type RewardRequest struct {
 	RequestKey string `gorm:"primaryKey"`
 	TrackerID  uint   `gorm:"not null;index"`
+	CreatedAt  time.Time
+}
+
+// StartAttempt dedupes the first POST /start for a few minutes.
+// It is not a session and cannot sign in a user who is no longer a guest.
+type StartAttempt struct {
+	TokenHash  string `gorm:"primaryKey"`
+	UserID     *uint  `gorm:"index"`
+	ExpiresAt  time.Time
+	ConsumedAt *time.Time
+	CreatedAt  time.Time
+}
+
+// GuestClaim is one guest's request to add an email.
+// A new address and a transfer into an existing account are its two outcomes.
+type GuestClaim struct {
+	ID          uint
+	GuestUserID uint `gorm:"index;not null"`
+	Email       string
+	Next        string
+	ExpiresAt   time.Time
+	CancelledAt *time.Time
+	ConsumedAt  *time.Time
+	CreatedAt   time.Time
+}
+
+// TransferIntent authorizes a move only together with the source-proof cookie,
+// a verified destination mailbox, and an explicit confirm post.
+type TransferIntent struct {
+	ID              uint
+	ClaimID         uint   `gorm:"uniqueIndex;not null"`
+	SourceProofHash string `gorm:"uniqueIndex;not null"`
+	SourceUserID    uint   `gorm:"index;not null"`
+	SourceSessionID string `gorm:"not null"`
+	DestUserID      uint   `gorm:"index;not null"`
+	DestVerifiedAt  *time.Time
+	ExpiresAt       time.Time
+	CancelledAt     *time.Time
+	ConsumedAt      *time.Time
+	CreatedAt       time.Time
+}
+
+// TransferReceipt survives the guest so a repeated confirm can succeed
+// after the source user row is gone.
+type TransferReceipt struct {
+	SourceProofHash string `gorm:"primaryKey"`
+	DestUserID      uint   `gorm:"not null;index"`
+	CompletedAt     time.Time
+}
+
+// TrackerCreate remembers one create submission so a retry does not insert again.
+type TrackerCreate struct {
+	RequestKey string `gorm:"primaryKey"`
+	UserID     uint   `gorm:"not null;index"`
+	TrackerID  uint   `gorm:"not null"`
 	CreatedAt  time.Time
 }

@@ -5,11 +5,16 @@
 <div class="form-stack">
 <hgroup>
   <h1>Settings</h1>
+  {{if $.User.IsGuest}}
+  <p>You’re using a guest account. If you clear your browser data or lose this session, you won’t be able to recover your trackers without adding an email.</p>
+  <p><a href="/account/email">Add email</a></p>
+  {{else}}
   <p>Logged in as {{$.User.Email}}.</p>
+  {{end}}
 </hgroup>
 
 {{if .VerifyNote}}<p role="status" class="saved">{{.VerifyNote}}</p>{{end}}
-{{if not .EmailVerified}}
+{{if and (not .EmailVerified) (not $.User.IsGuest)}}
 <article class="form-card">
   <h2>Email</h2>
   {{if eq .Saved "verification"}}<p role="status" class="saved">Verification email sent. The link works once and expires in 24 hours.</p>{{end}}
@@ -46,7 +51,7 @@
   {{if eq .Saved "password"}}<p role="status" class="saved">Password saved. Other devices have been logged out.</p>{{end}}
   {{if .PasswordError}}<p role="alert" class="error">{{.PasswordError}}</p>{{end}}
   {{if not .EmailVerified}}
-  <p>Confirm your email before setting a password.</p>
+  <p>{{if $.User.IsGuest}}Add an email before setting a password.{{else}}Confirm your email before setting a password.{{end}}</p>
   {{else}}
   <p>{{if .HasPassword}}Change your password. Other devices will be logged out.{{else}}You log in with email links. Set a password if you'd like to use one too.{{end}}</p>
   <form method="post" action="/settings/password">

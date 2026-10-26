@@ -189,7 +189,7 @@ Offline logging is a later enhancement (`PLAN.md`). The log button stays one tap
 
 ## Navigation
 
-Logged out: **Log in** and **Sign up** in the header. Logged in: **Charts**, settings, and log out. Charts is one text link. The brand mark links home, which stays the logging page. Icon-only controls in the header need an accessible name (settings, log out).
+Logged out: **Log in** and **Sign up** in the header. The page under them asks "What are you tracking?", with **Start tracking**, the sentence "No email needed. Start now and add an email later.", and a **Sign in** link. The placeholder examples rotate; the list lives in `startSuggestions` in `guest.go`. Logged in: **Charts**, settings, and log out. A guest also has **Add email**, and log out goes to a confirm page first. Charts is one text link. The brand mark links home, which stays the logging page. Icon-only controls in the header need an accessible name (settings, log out).
 
 ## Icons
 

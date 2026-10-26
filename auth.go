@@ -429,6 +429,9 @@ func (a *app) handleLoginLinkRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) sendLoginLink(u User, next string) error {
+	if u.Email == "" {
+		return errors.New("no email address")
+	}
 	if !a.mailAddrLimiter.allow(normalizeEmail(u.Email)) {
 		return errMailThrottled
 	}
@@ -526,8 +529,18 @@ func (a *app) handleLoginLinkUse(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	if lt.TransferIntentID != nil {
+		if err := a.markDestVerified(*lt.TransferIntentID, lt.UserID); err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+	}
 	if err := a.startSession(w, lt.UserID); err != nil {
 		a.serverError(w, r, err)
+		return
+	}
+	if lt.TransferIntentID != nil {
+		redirectDocument(w, r, "/account/transfer")
 		return
 	}
 	http.Redirect(w, r, safeNext(r.PostFormValue("next")), http.StatusSeeOther)
@@ -571,6 +584,9 @@ func (a *app) claimUnverifiedEmail(userID uint) (bool, error) {
 }
 
 func (a *app) sendVerificationEmail(u *User) error {
+	if u.Email == "" {
+		return errors.New("no email address")
+	}
 	if !a.mailAddrLimiter.allow(normalizeEmail(u.Email)) {
 		return errMailThrottled
 	}
@@ -596,8 +612,9 @@ func (a *app) findVerificationToken(token string) (VerificationToken, error) {
 }
 
 type verifyPage struct {
-	Valid bool
-	Email string
+	Valid      bool
+	Email      string
+	Autosubmit bool
 }
 
 // handleVerifyConfirm does not verify on GET. Mailbox scanners open links, and a
@@ -617,6 +634,10 @@ func (a *app) handleVerifyConfirm(w http.ResponseWriter, r *http.Request) {
 		}
 		page.Valid = true
 		page.Email = u.Email
+		if vt.Email != "" {
+			page.Email = vt.Email
+		}
+		page.Autosubmit = vt.Email == ""
 	}
 	status := http.StatusOK
 	if !page.Valid {
@@ -627,6 +648,11 @@ func (a *app) handleVerifyConfirm(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleVerifyUse(w http.ResponseWriter, r *http.Request) {
 	hash := hashToken(r.PathValue("token"))
+	var peek VerificationToken
+	if err := a.db.Take(&peek, "token_hash = ?", hash).Error; err == nil && peek.Email != "" {
+		a.finishGuestVerification(w, r, hash, peek)
+		return
+	}
 	now := a.now()
 	res := a.db.Model(&VerificationToken{}).
 		Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", hash, now).
@@ -662,6 +688,46 @@ func (a *app) handleVerifyUse(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/verify/done", http.StatusSeeOther)
 }
 
+func (a *app) finishGuestVerification(w http.ResponseWriter, r *http.Request, hash string, peek VerificationToken) {
+	if u := currentUser(r); u != nil && u.ID != peek.UserID {
+		a.message(w, r, http.StatusConflict, "Different account",
+			"This link will not change the account you are signed in as. Open it from the browser where you started, or log out first.")
+		return
+	}
+	result, userID, next, err := a.confirmGuestEmail(hash)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	switch result {
+	case guestClaimDone:
+		if currentUser(r) != nil && currentUser(r).ID == userID {
+			if err := a.startSession(w, userID); err != nil {
+				a.serverError(w, r, err)
+				return
+			}
+		}
+		if next != "" && next != "/" {
+			redirectDocument(w, r, next)
+			return
+		}
+		http.Redirect(w, r, "/verify/done", http.StatusSeeOther)
+	case guestClaimSuperseded:
+		a.messageTo(w, r, http.StatusGone, "This link is no longer valid",
+			"A newer email request replaced it. Send another link.",
+			"Add email", "/account/email")
+	case guestClaimTaken:
+		a.messageTo(w, r, http.StatusConflict, "Use the existing account",
+			"That address could not be added to this guest account. Your trackers are still here. Continue to send a new link and move them.",
+			"Continue", "/account/email")
+	case guestClaimStale:
+		a.message(w, r, http.StatusConflict, "Email already added",
+			"This account already has an email. The link did not change it.")
+	default:
+		a.render(w, r, http.StatusGone, "verify.html", verifyPage{})
+	}
+}
+
 func (a *app) handleVerifyDone(w http.ResponseWriter, r *http.Request) {
 	a.messageTo(w, r, http.StatusOK, "Email verified",
 		"This address is confirmed. Any session or password created before this confirmation has been removed.",
@@ -669,6 +735,19 @@ func (a *app) handleVerifyDone(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleLogout(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	if u != nil && u.IsGuest() {
+		now := a.now()
+		if err := a.withImmediate(func(tx *gorm.DB) error {
+			if err := a.consumeStartAttempts(tx, u.ID, now); err != nil {
+				return err
+			}
+			return a.supersedeGuestClaims(tx, u.ID, now)
+		}); err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+	}
 	if id := currentSessionID(r); id != "" {
 		if err := a.db.Delete(&Session{}, "id = ?", id).Error; err != nil {
 			a.serverError(w, r, err)
@@ -676,5 +755,7 @@ func (a *app) handleLogout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.clearSessionCookie(w)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	a.clearFlowCookie(w, startCookie)
+	a.clearFlowCookie(w, transferCookie)
+	redirectDocument(w, r, "/")
 }

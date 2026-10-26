@@ -1,6 +1,7 @@
 {{define "title"}}{{.Data.Tracker.Name}} · Track Anything{{end}}
 {{define "content"}}
 {{template "autoRefresh" .Data.PageURL}}
+{{template "keepTrackers" .}}
 <div class="tracker-page" data-tracker-id="{{.Data.Tracker.ID}}">
   {{template "trackerLogRegion" .}}
   <div class="tracker-side">
@@ -11,6 +12,7 @@
 {{end}}
 
 {{define "trackerRefresh"}}
+{{template "keepTrackers" .}}
 {{if .Data.OOBLog}}{{template "trackerLogRegion" .}}{{end}}
 {{if .Data.OOBTrend}}{{template "trackerTrendRegion" .}}{{end}}
 {{if .Data.OOBHistory}}{{template "trackerHistoryRegion" .}}{{end}}

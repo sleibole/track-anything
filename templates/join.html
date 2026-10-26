@@ -7,6 +7,13 @@
   {{if .AlreadyMember}}
   <p>You're already in this household.</p>
   <a role="button" {{nav "/"}}>Go to your trackers</a>
+  {{else if .NeedsVerification}}
+  <p>Confirm an email before joining a household. This invitation will still be here.</p>
+  {{if .Guest}}
+  <a role="button" href="/account/email?next={{printf "/join/%s" .Token | urlquery}}">Add email</a>
+  {{else}}
+  <a role="button" {{nav "/settings"}}>Confirm email</a>
+  {{end}}
   {{else}}
   <p>You'll see its trackers on your home screen and can log on them.</p>
   <form method="post" action="/join/{{.Token}}" hx-post="/join/{{.Token}}" class="auth-form">

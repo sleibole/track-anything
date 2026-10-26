@@ -1,6 +1,8 @@
 {{define "title"}}Your trackers · Track Anything{{end}}
 {{define "content"}}
 {{template "autoRefresh" "/"}}
+{{template "keepTrackers" .}}
+{{if .Data.Moved}}<p role="status" class="saved">Those trackers are on this account now.</p>{{end}}
 <div class="page-head">
   <h1>Your trackers</h1>
   <a role="button" class="secondary outline" {{nav "/trackers/new"}}>{{icon "plus"}} New tracker</a>
@@ -25,6 +27,7 @@
 {{end}}
 
 {{define "homeRefresh"}}
+{{template "keepTrackers" .}}
 {{range .Data.Cards}}{{template "card" .}}{{end}}
 {{range .Data.Removed}}<div hx-swap-oob="delete:#{{.}}"></div>{{end}}
 {{if .Data.SwapOrder}}{{template "trackerOrder" .Data}}{{end}}

@@ -408,11 +408,13 @@ func (a *app) writeHomeCard(w http.ResponseWriter, r *http.Request, trackerID ui
 		}
 		cards[i].OOB = "outerHTML"
 		page.Cards = []trackerCard{cards[i]}
+		page.Keep = keepPrompt{Show: a.showKeep(u), OOB: true}
 		w.Header().Set("HX-Reswap", "none")
 		a.renderBlock(w, r, http.StatusOK, "dashboard.html", "homeRefresh", page)
 		return nil
 	}
 	page.Removed = []string{trackerDOMID(trackerID)}
+	page.Keep = keepPrompt{Show: a.showKeep(u), OOB: true}
 	w.Header().Set("HX-Reswap", "none")
 	a.renderBlock(w, r, http.StatusOK, "dashboard.html", "homeRefresh", page)
 	return nil
@@ -444,6 +446,7 @@ func (a *app) writeTrackerUpdate(w http.ResponseWriter, r *http.Request, path, n
 	p.OOBLog = true
 	p.OOBTrend = true
 	p.OOBHistory = true
+	p.Keep = keepPrompt{Show: a.showKeep(u), OOB: true}
 	w.Header().Set("HX-Reswap", "none")
 	a.renderBlock(w, r, http.StatusOK, "tracker_show.html", "trackerRefresh", p)
 	return nil

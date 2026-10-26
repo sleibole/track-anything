@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -338,7 +339,7 @@ func (a *app) emailsFor(entries []Entry) (map[uint]string, error) {
 		return nil, err
 	}
 	for _, u := range users {
-		emails[u.ID] = u.Email
+		emails[u.ID] = u.Label()
 	}
 	return emails, nil
 }
@@ -377,6 +378,7 @@ type trackerPage struct {
 	PeriodNote       string // cumulative history subtotal, set only when older entries exist
 	Redemptions      []redemptionView
 	CanUndoRewards   bool
+	Keep             keepPrompt
 	RewardGap        string // redeemed ahead of goals earned; detail page only
 	RewardWindowNote string // history dates do not limit the redemption list
 	LogDataRev       string
@@ -706,6 +708,7 @@ func (a *app) handleShowTracker(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	p.Keep = keepPrompt{Show: a.showKeep(u)}
 	if isTrackerRefresh(r) {
 		a.writeTrackerRefresh(w, r, p)
 		return
@@ -786,19 +789,44 @@ type trackerForm struct {
 	MoveHouseholds []Household // other households the owner owns; empty hides the move control
 	MoveConfirm    string
 	MoveError      string
+	Request        string
+	Minimal        bool
 }
 
 func (a *app) newTrackerForm(u *User) (trackerForm, error) {
+	key, err := newRequestKey()
+	if err != nil {
+		return trackerForm{}, err
+	}
 	f := trackerForm{
 		Icons: trackerIcons, Accents: trackerAccents, Summaries: summaryDisplays, SummaryDisplay: summaryTimes,
-		Kinds: trackerKinds, Kind: kindCount,
+		Kinds: trackerKinds, Kind: kindCount, Request: key,
 	}
 	hs, err := ownedHouseholds(a.db, u.ID)
 	f.Households = hs
 	if len(f.Households) > 0 {
 		f.HouseholdID = f.Households[0].ID
 	}
-	return f, err
+	if err != nil {
+		return f, err
+	}
+	n, err := a.ownedTrackerCount(u.ID)
+	if err != nil {
+		return f, err
+	}
+	if n == 0 {
+		f.Minimal = true
+	}
+	return f, nil
+}
+
+func (a *app) ownedTrackerCount(userID uint) (int64, error) {
+	var n int64
+	err := a.db.Model(&Tracker{}).
+		Joins("JOIN household_members ON household_members.household_id = trackers.household_id").
+		Where("household_members.user_id = ? AND household_members.role = ?", userID, roleOwner).
+		Count(&n).Error
+	return n, err
 }
 
 // readTrackerForm fills the editable fields from the request and returns a message
@@ -867,6 +895,10 @@ func (a *app) handleNewTracker(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if name := strings.TrimSpace(r.URL.Query().Get("name")); trackerNameProblem(name) == "" {
+		f.Name = name
+		f.Minimal = true
+	}
 	a.render(w, r, http.StatusOK, "tracker_form.html", f)
 }
 
@@ -878,6 +910,10 @@ func (a *app) handleCreateTracker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.HouseholdID = parseID(r.PostFormValue("household"))
+	f.Request = r.PostFormValue("request")
+	if posted := r.PostFormValue("minimal"); posted == "1" {
+		f.Minimal = true
+	}
 	_, role, err := householdForUser(a.db, u.ID, f.HouseholdID)
 	if err != nil {
 		a.lookupError(w, r, err)
@@ -892,29 +928,82 @@ func (a *app) handleCreateTracker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var last int
-	if err := a.db.Model(&Tracker{}).Where("household_id = ?", f.HouseholdID).Select("COALESCE(MAX(position), 0)").Scan(&last).Error; err != nil {
-		a.serverError(w, r, err)
+	var t Tracker
+	err = a.withImmediate(func(tx *gorm.DB) error {
+		if _, role, err := householdForUser(tx, u.ID, f.HouseholdID); err != nil {
+			return err
+		} else if role != roleOwner {
+			return errNotOwner
+		}
+		if u.IsGuest() {
+			var n int64
+			err := tx.Model(&Tracker{}).
+				Joins("JOIN household_members ON household_members.household_id = trackers.household_id").
+				Where("household_members.user_id = ? AND household_members.role = ?", u.ID, roleOwner).
+				Count(&n).Error
+			if err != nil {
+				return err
+			}
+			if n >= maxGuestTrackers {
+				return errGuestTrackers
+			}
+		}
+		if validRequestKey(f.Request) {
+			var prev TrackerCreate
+			err := tx.Take(&prev, "request_key = ?", f.Request).Error
+			if err == nil {
+				if prev.UserID != u.ID {
+					return errRequestUsed
+				}
+				return tx.Take(&t, prev.TrackerID).Error
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
+		var last int
+		if err := tx.Model(&Tracker{}).Where("household_id = ?", f.HouseholdID).Select("COALESCE(MAX(position), 0)").Scan(&last).Error; err != nil {
+			return err
+		}
+		t = Tracker{
+			HouseholdID: f.HouseholdID, Name: f.Name, Icon: f.Icon, Accent: f.Accent,
+			LogLabel: f.LogLabel, SummaryDisplay: f.SummaryDisplay, Kind: f.Kind,
+			Unit: unitForKind(f.Kind, f.Unit), Goal: goalForKind(f.Kind, f.Goal), Position: last + 1,
+		}
+		if err := tx.Create(&t).Error; err != nil {
+			return err
+		}
+		if !validRequestKey(f.Request) {
+			return nil
+		}
+		return tx.Create(&TrackerCreate{RequestKey: f.Request, UserID: u.ID, TrackerID: t.ID, CreatedAt: a.now()}).Error
+	})
+	if errors.Is(err, errGuestTrackers) {
+		f.Error = guestTrackLimitMessage
+		a.render(w, r, http.StatusUnprocessableEntity, "tracker_form.html", f)
 		return
 	}
-	t := Tracker{
-		HouseholdID:    f.HouseholdID,
-		Name:           f.Name,
-		Icon:           f.Icon,
-		Accent:         f.Accent,
-		LogLabel:       f.LogLabel,
-		SummaryDisplay: f.SummaryDisplay,
-		Kind:           f.Kind,
-		Unit:           unitForKind(f.Kind, f.Unit),
-		Goal:           goalForKind(f.Kind, f.Goal),
-		Position:       last + 1,
+	if errors.Is(err, errRequestUsed) {
+		f.Error = "Reload the page and try again."
+		a.render(w, r, http.StatusConflict, "tracker_form.html", f)
+		return
 	}
-	if err := a.db.Create(&t).Error; err != nil {
-		a.serverError(w, r, err)
+	if errors.Is(err, errNotOwner) {
+		a.ownerOnly(w, r)
+		return
+	}
+	if err != nil {
+		a.lookupError(w, r, err)
 		return
 	}
 	redirectTo(w, r, fmt.Sprintf("/trackers/%d", t.ID))
 }
+
+var (
+	errNotOwner      = errors.New("not the owner")
+	errGuestTrackers = errors.New("guest tracker limit")
+	errRequestUsed   = errors.New("create request used")
+)
 
 // ownedTracker loads an active tracker for an owner-only action, writing the 404 or 403
 // itself. ok is false when the handler should stop.

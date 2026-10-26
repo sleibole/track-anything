@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -52,11 +53,95 @@ func openDB(path string) (*gorm.DB, error) {
 
 // migrate creates or updates tables for every model. Add models here as phases introduce them.
 func migrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&User{}, &Session{}, &LoginToken{}, &VerificationToken{},
 		&Household{}, &HouseholdMember{}, &Tracker{}, &Entry{}, &RecordedZero{}, &TrackerOrder{},
 		&Redemption{}, &RewardRequest{},
-	)
+		&StartAttempt{}, &GuestClaim{}, &TransferIntent{}, &TransferReceipt{}, &TrackerCreate{},
+	); err != nil {
+		return err
+	}
+	return ensurePartialEmailIndex(db)
+}
+
+type userEmailIndex struct {
+	Name string
+	SQL  string
+}
+
+func userEmailIndexes(tx *gorm.DB) ([]userEmailIndex, error) {
+	var rows []userEmailIndex
+	err := tx.Raw(`SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'users' AND sql IS NOT NULL`).Scan(&rows).Error
+	return rows, err
+}
+
+func indexCoversEmail(sql string) bool {
+	return strings.Contains(strings.ToLower(sql), "email")
+}
+
+func indexIsPartialEmail(sql string) bool {
+	low := strings.ToLower(sql)
+	return strings.Contains(low, "unique") && indexCoversEmail(low) && strings.Contains(low, "where") && strings.Contains(low, "email <>")
+}
+
+func quoteSQLiteIdent(name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("empty index name")
+	}
+	for _, r := range name {
+		if r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
+			return "", fmt.Errorf("unexpected index name %q", name)
+		}
+	}
+	return `"` + name + `"`, nil
+}
+
+// replaceEmailIndex creates the partial unique index before dropping a full one.
+// The caller must run it inside a transaction so a failure restores the old index.
+func replaceEmailIndex(tx *gorm.DB) error {
+	rows, err := userEmailIndexes(tx)
+	if err != nil {
+		return err
+	}
+	var full []string
+	partialOK := false
+	for _, row := range rows {
+		if !indexCoversEmail(row.SQL) || !strings.Contains(strings.ToLower(row.SQL), "unique") {
+			continue
+		}
+		if row.Name == "idx_users_email" && indexIsPartialEmail(row.SQL) {
+			partialOK = true
+			continue
+		}
+		full = append(full, row.Name)
+	}
+	if partialOK && len(full) == 0 {
+		return nil
+	}
+	if err := tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_partial ON users(email) WHERE email <> ''`).Error; err != nil {
+		return err
+	}
+	for _, name := range full {
+		quoted, err := quoteSQLiteIdent(name)
+		if err != nil {
+			return err
+		}
+		if err := tx.Exec("DROP INDEX " + quoted).Error; err != nil {
+			return err
+		}
+	}
+	if !partialOK {
+		if err := tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email <> ''`).Error; err != nil {
+			return err
+		}
+	}
+	return tx.Exec(`DROP INDEX IF EXISTS idx_users_email_partial`).Error
+}
+
+func ensurePartialEmailIndex(db *gorm.DB) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		return replaceEmailIndex(tx)
+	})
 }
 
 // backfillPersonalHouseholds gives accounts created before households existed their

@@ -138,6 +138,7 @@ type app struct {
 	linkLimiter     *rateLimiter
 	verifyLimiter   *rateLimiter
 	signupLimiter   *rateLimiter
+	guestLimiter    *rateLimiter
 	shareLimiter    *rateLimiter
 	mailAddrLimiter *rateLimiter
 	turnstile       *turnstileVerifier
@@ -151,6 +152,7 @@ func newApp(cfg config, db *gorm.DB, v *views, logger *slog.Logger, m mailer) *a
 	a.linkLimiter = newRateLimiter(5, 15*time.Minute, clock)
 	a.verifyLimiter = newRateLimiter(5, 15*time.Minute, clock)
 	a.signupLimiter = newRateLimiter(10, time.Hour, clock)
+	a.guestLimiter = newRateLimiter(10, time.Hour, clock)
 	a.shareLimiter = newRateLimiter(30, time.Minute, clock)
 	a.mailAddrLimiter = newRateLimiter(3, 15*time.Minute, clock)
 	return a
@@ -253,6 +255,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /robots.txt", a.handleRobots)
 	mux.HandleFunc("GET /sitemap.xml", a.handleSitemap)
 	mux.HandleFunc("GET /{$}", a.handleHome)
+	mux.HandleFunc("POST /start", a.handleStart)
 
 	mux.HandleFunc("GET /signup", a.handleSignupForm)
 	mux.HandleFunc("POST /signup", a.handleSignup)
@@ -265,6 +268,12 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /verify/{token}", a.handleVerifyConfirm)
 	mux.HandleFunc("POST /verify/{token}", a.handleVerifyUse)
 	mux.HandleFunc("POST /logout", a.handleLogout)
+	mux.HandleFunc("GET /logout/confirm", a.requireUser(a.handleLogoutConfirm))
+	mux.HandleFunc("GET /account/email", a.requireUser(a.handleAddEmailForm))
+	mux.HandleFunc("POST /account/email", a.requireUser(a.handleAddEmail))
+	mux.HandleFunc("POST /account/email-prompt/dismiss", a.requireUser(a.handleDismissEmailPrompt))
+	mux.HandleFunc("GET /account/transfer", a.requireUser(a.handleTransferForm))
+	mux.HandleFunc("POST /account/transfer", a.requireUser(a.handleTransfer))
 
 	mux.HandleFunc("GET /charts", a.requireUser(a.handleCharts))
 
@@ -351,5 +360,8 @@ func (a *app) deleteExpiredAuth() {
 	}
 	if err := a.db.Where("used_at IS NOT NULL OR expires_at <= ?", now).Delete(&VerificationToken{}).Error; err != nil {
 		a.logger.Error("cleanup verification tokens", "err", err)
+	}
+	if err := a.db.Where("expires_at <= ?", now).Delete(&StartAttempt{}).Error; err != nil {
+		a.logger.Error("cleanup start attempts", "err", err)
 	}
 }

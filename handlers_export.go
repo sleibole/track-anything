@@ -47,7 +47,7 @@ func (a *app) handleExportTracker(w http.ResponseWriter, r *http.Request) {
 			if _, ok := emails[*z.RecordedByID]; !ok {
 				var u User
 				if err := a.db.Select("id, email").Take(&u, *z.RecordedByID).Error; err == nil {
-					emails[u.ID] = u.Email
+					emails[u.ID] = u.Label()
 				}
 			}
 		}
@@ -61,7 +61,7 @@ func (a *app) handleExportTracker(w http.ResponseWriter, r *http.Request) {
 		}
 		var u User
 		if err := a.db.Select("id, email").Take(&u, *rd.UserID).Error; err == nil {
-			emails[u.ID] = u.Email
+			emails[u.ID] = u.Label()
 		}
 	}
 	rows, err := exportTrackerRows(t, entries, zeros, redemptions, emails, loc)

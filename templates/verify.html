@@ -4,7 +4,7 @@
 <article class="auth-card">
   {{if .Valid}}
   <h1>Verify your email</h1>
-  <form method="post" class="auth-form" data-autosubmit>
+  <form method="post" class="auth-form"{{if .Autosubmit}} data-autosubmit{{end}}>
     <button type="submit">Verify {{.Email}}</button>
   </form>
   {{else}}
