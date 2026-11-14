@@ -13,6 +13,7 @@
   <p>You’re using a guest account. If you clear your browser data or lose this session, you won’t be able to recover your trackers without adding an email.</p>
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
   <form method="post" action="/account/email" class="auth-form">
+    {{template "csrf-field" $}}
     <input type="hidden" name="next" value="{{.Next}}">
     <label>
       {{icon "mail"}} Email

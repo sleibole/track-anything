@@ -157,7 +157,7 @@ func (a *app) handleAddEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form.Sent = true
-	form.Dev = a.cfg.SMTPHost == ""
+	form.Dev = a.cfg.devConsoleMail()
 	a.render(w, r, http.StatusOK, "account_email.html", form)
 }
 

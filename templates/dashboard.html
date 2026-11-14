@@ -5,10 +5,24 @@
 {{if .Data.Moved}}<p role="status" class="saved">Those trackers are on this account now.</p>{{end}}
 <div class="page-head">
   <h1>Your trackers</h1>
-  <a role="button" class="secondary outline" {{nav "/trackers/new"}}>{{icon "plus"}} New tracker</a>
+  <div class="page-actions">
+    <details class="create-group"{{if .Data.GroupError}} open{{end}}>
+      <summary role="button" class="secondary outline">Create group</summary>
+      {{with .Data.GroupError}}<p role="alert" class="error">{{.}}</p>{{end}}
+      <form method="post" action="/groups" hx-post="/groups" hx-target="#content" hx-swap="innerHTML show:none">
+        {{template "csrf-field" $}}
+        <label>
+          Name
+          <input type="text" name="name" value="{{$.Data.GroupName}}" required maxlength="60"{{if $.Data.GroupError}} autofocus{{end}}>
+        </label>
+        <button type="submit">Create</button>
+      </form>
+    </details>
+    <a role="button" class="secondary outline" {{nav "/trackers/new"}}>{{icon "plus"}} New tracker</a>
+  </div>
 </div>
 <div class="tracker-list" id="tracker-list" data-reorder-list data-reorder-url="/trackers/order">
-{{range .Data.Cards}}{{template "card" .}}{{end}}
+{{range .Data.Slots}}{{if .Group}}{{template "trackerGroup" .Group}}{{else}}{{template "card" .Card}}{{end}}{{end}}
 </div>
 {{template "trackerOrder" .Data}}
 {{template "trackerEmpty" .Data}}
@@ -16,6 +30,7 @@
   <summary>New household</summary>
   {{with .Data.Error}}<p role="alert" class="error">{{.}}</p>{{end}}
   <form method="post" action="/households" hx-post="/households">
+    {{template "csrf-field" .}}
     <label>
       Name
       <input type="text" name="name" value="{{.Data.Name}}" required maxlength="60"{{if .Data.Error}} autofocus{{end}}>
@@ -24,6 +39,43 @@
   </form>
 </details>
 <script src="/static/reorder.js"></script>
+{{end}}
+
+{{define "trackerGroup"}}
+<section class="tracker-group" id="group-{{.ID}}" data-group data-group-id="{{.ID}}">
+  <div class="tracker-group-head">
+    <button type="button" class="drag-handle" data-drag-handle aria-label="Drag to reorder group {{.Name}}">{{icon "grip-vertical"}}</button>
+    <form class="tracker-group-toggle-form" method="post" action="/groups/{{.ID}}/collapse" hx-post="/groups/{{.ID}}/collapse" hx-target="this" hx-swap="none" data-group-collapse>
+      {{template "csrf-field" .}}
+      <input type="hidden" name="collapsed" value="{{if .Collapsed}}0{{else}}1{{end}}">
+      <button type="submit" class="tracker-group-toggle" data-group-toggle aria-expanded="{{if .Collapsed}}false{{else}}true{{end}}" aria-controls="group-body-{{.ID}}">
+        <span class="tracker-group-chevron" data-chevron aria-hidden="true">{{if .Collapsed}}›{{else}}⌄{{end}}</span>
+        <span class="tracker-group-name">{{.Name}}</span>
+        <span class="tracker-group-count muted" data-group-count>· {{.CountLabel}}</span>
+      </button>
+    </form>
+    <details class="tracker-group-menu">
+      <summary aria-label="Actions for {{.Name}}">⋯</summary>
+      <div class="tracker-group-menu-panel">
+        <form method="post" action="/groups/{{.ID}}" hx-post="/groups/{{.ID}}" hx-target="#content" hx-swap="innerHTML show:none">
+          {{template "csrf-field" .}}
+          <label>
+            Name
+            <input type="text" name="name" value="{{.Name}}" required maxlength="60">
+          </label>
+          <button type="submit">Rename</button>
+        </form>
+        <form method="post" action="/groups/{{.ID}}/delete" hx-post="/groups/{{.ID}}/delete" hx-target="#content" hx-swap="innerHTML show:none" hx-confirm="Delete this group? Its trackers stay on your list.">
+          {{template "csrf-field" .}}
+          <button type="submit" class="quiet">Delete group</button>
+        </form>
+      </div>
+    </details>
+  </div>
+  <div class="tracker-group-body" id="group-body-{{.ID}}" data-group-list data-reorder-url="/groups/{{.ID}}/order"{{if .Collapsed}} hidden inert{{end}}>
+    {{range .Cards}}{{template "card" .}}{{end}}
+  </div>
+</section>
 {{end}}
 
 {{define "homeRefresh"}}
@@ -35,7 +87,7 @@
 {{end}}
 
 {{define "trackerOrder"}}
-<div id="tracker-order" data-view-rev="{{.OrderRev}}" data-order="{{.Order}}" hidden{{if .OOB}} hx-swap-oob="outerHTML"{{end}}></div>
+<div id="tracker-order" data-view-rev="{{.OrderRev}}" data-order="{{.Order}}" data-layout="{{.Layout}}" hidden{{if .OOB}} hx-swap-oob="outerHTML"{{end}}></div>
 {{end}}
 
 {{define "trackerEmpty"}}

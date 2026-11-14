@@ -20,6 +20,8 @@ These settings are not copied from the main checkout:
 
 - `ENV` other than `dev`
 - `SMTP_USER`, `SMTP_PASS`, and any name that looks like a secret, password, token, or credential
+- `SMTP_ALLOW_REAL`
+- `MAIL_BACKEND` other than `console` or `local`
 - `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`
 - `TRUSTED_IP_HEADER`
 - `SMTP_HOST` other than `localhost`, `127.0.0.1`, or `::1`
@@ -27,7 +29,7 @@ These settings are not copied from the main checkout:
 - `DB_PATH` when it is absolute or contains `..`
 - any absolute path or non-local URL
 
-`make dev-agent` still sets `ADDR`, `PORT`, `DB_PATH`, and `BASE_URL` itself after the copy. A copied `.env` cannot point that server at port 8080 or at `data/trackanything.db`.
+`make dev-agent` still sets `ADDR`, `PORT`, `DB_PATH`, and `BASE_URL` itself after the copy. It also forces console mail for that process (`MAIL_BACKEND=console`, with `SMTP_ALLOW_REAL`, `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASS` cleared). A copied `.env`, or SMTP variables inherited from the shell, cannot point that server at port 8080, at `data/trackanything.db`, or at a real mail server. Console mail for that server is written to its own `tmp/dev-agents/<name>/air.log`.
 
 To see whether setup ran, open the Output panel and choose **Worktrees Setup**.
 

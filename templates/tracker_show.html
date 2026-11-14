@@ -9,6 +9,27 @@
     {{template "trackerHistoryRegion" .}}
   </div>
 </div>
+<section class="group-setting" aria-labelledby="your-list-heading">
+  <h2 id="your-list-heading">Your list</h2>
+  {{with .Data.GroupError}}<p role="alert" class="error">{{.}}</p>{{end}}
+  <form method="post" action="/trackers/{{.Data.Tracker.ID}}/group" hx-post="/trackers/{{.Data.Tracker.ID}}/group" hx-target="#content" hx-swap="innerHTML show:none">
+    {{template "csrf-field" $}}
+    <label>
+      Group
+      <select name="group">
+        <option value=""{{if and (not .Data.GroupID) (ne .Data.GroupChoice "new")}} selected{{end}}>None</option>
+        {{range .Data.Groups}}<option value="{{.ID}}"{{if and (eq .ID $.Data.GroupID) (ne $.Data.GroupChoice "new")}} selected{{end}}>{{.Name}}</option>{{end}}
+        <option value="new"{{if eq $.Data.GroupChoice "new"}} selected{{end}}>Create group…</option>
+      </select>
+    </label>
+    <label data-new-group>
+      New group name
+      <input type="text" name="group_name" value="{{.Data.GroupName}}" maxlength="60"{{if eq .Data.GroupChoice "new"}} autofocus{{end}}>
+    </label>
+    <p class="muted">This only organizes your list. Other people keep their own order and groups, including on a shared tracker you cannot edit.</p>
+    <button type="submit">Save group</button>
+  </form>
+</section>
 {{end}}
 
 {{define "trackerRefresh"}}
@@ -31,18 +52,19 @@
   {{if .Tracker.IsCount}}
   {{with .Today.Zero}}
     {{if $.Data.ZeroNew}}
-    <form method="post" action="/zeros/{{.ID}}/undo" hx-post="/zeros/{{.ID}}/undo" class="inline" {{inplace}}><button type="submit" class="quiet">Undo none</button></form>
+    <form method="post" action="/zeros/{{.ID}}/undo" hx-post="/zeros/{{.ID}}/undo" class="inline" {{inplace}}>{{template "csrf-field" $}}<button type="submit" class="quiet">Undo none</button></form>
     {{else if $.Data.IsOwner}}
-    <form method="post" action="/zeros/{{.ID}}/delete" hx-post="/zeros/{{.ID}}/delete" class="inline" {{inplace}}><button type="submit" class="quiet">Clear none</button></form>
+    <form method="post" action="/zeros/{{.ID}}/delete" hx-post="/zeros/{{.ID}}/delete" class="inline" {{inplace}}>{{template "csrf-field" $}}<button type="submit" class="quiet">Clear none</button></form>
     {{end}}
   {{else}}{{if eq .Today.Count 0}}
-    <form method="post" action="/trackers/{{.Tracker.ID}}/zero" hx-post="/trackers/{{.Tracker.ID}}/zero" class="inline" {{inplace}}><button type="submit" class="quiet">Record none for today</button></form>
+    <form method="post" action="/trackers/{{.Tracker.ID}}/zero" hx-post="/trackers/{{.Tracker.ID}}/zero" class="inline" {{inplace}}>{{template "csrf-field" $}}<button type="submit" class="quiet">Record none for today</button></form>
   {{end}}{{end}}
   {{end}}
 
   <details class="log-details"{{if or .Error .Note (and (not .Tracker.IsCount) (not .Tracker.IsCumulative) (not .Card.LogAgain))}} open{{end}}>
     <summary>{{if .Tracker.IsCumulative}}{{if .IsOwner}}Add an amount, note, or time{{else}}Add an amount or note{{end}}{{else if .Tracker.IsDuration}}{{if .IsOwner}}Log a duration, note, or time{{else}}Log a duration or note{{end}}{{else if .Tracker.IsNumber}}{{if .IsOwner}}Log with a note or specific time{{else}}Log a value or note{{end}}{{else}}{{if .IsOwner}}Log with a note or time{{else}}Log with a note{{end}}{{end}}</summary>
     <form method="post" action="/trackers/{{.Tracker.ID}}/entries" hx-post="/trackers/{{.Tracker.ID}}/entries" {{inplace}}>
+      {{template "csrf-field" $}}
       {{template "valueFields" .}}
       {{if .IsOwner}}<label>{{icon "calendar"}} When <input type="datetime-local" name="time" value="{{.NowValue}}"></label>{{end}}
       <label>Note <input type="text" name="note" value="{{.Note}}" maxlength="500"></label>
@@ -67,6 +89,7 @@
         {{with .By}}<small class="muted">by {{.}}</small>{{end}}
         {{if $.Data.CanUndoRewards}}
         <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/redemptions/{{.ID}}/undo" hx-post="/trackers/{{$.Data.Tracker.ID}}/redemptions/{{.ID}}/undo" class="inline" hx-confirm="Undo this redemption?" {{inplace}}>
+          {{template "csrf-field" $}}
           <button type="submit" class="quiet">Undo redemption</button>
         </form>
         {{end}}
@@ -123,14 +146,16 @@
     <div class="day-head">
       <h3>{{.Label}}</h3>
       {{with .Zero}}{{if and $.Data.IsOwner $.Data.Tracker.IsCount}}
-      <form method="post" action="/zeros/{{.ID}}/delete" hx-post="/zeros/{{.ID}}/delete" class="inline" {{inplace}}><button type="submit" class="quiet">Clear</button></form>
+      <form method="post" action="/zeros/{{.ID}}/delete" hx-post="/zeros/{{.ID}}/delete" class="inline" {{inplace}}>{{template "csrf-field" $}}<button type="submit" class="quiet">Clear</button></form>
       {{end}}{{end}}
       {{if and $.Data.IsOwner $.Data.Tracker.IsCount (not .Logged)}}
       <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/day" hx-post="/trackers/{{$.Data.Tracker.ID}}/day" class="inline" {{inplace}}>
+        {{template "csrf-field" $}}
         <input type="hidden" name="day" value="{{.Day}}">
         <button type="submit" class="quiet" data-occurrence>{{$.Data.Tracker.Label}}</button>
       </form>
       <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/zero" hx-post="/trackers/{{$.Data.Tracker.ID}}/zero" class="inline" {{inplace}}>
+        {{template "csrf-field" $}}
         <input type="hidden" name="day" value="{{.Day}}">
         <button type="submit" class="quiet">Record none</button>
       </form>

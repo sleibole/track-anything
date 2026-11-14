@@ -6,6 +6,7 @@
   <h1>Log in</h1>
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
   <form method="post" action="{{if .ShowPassword}}/login{{else}}/login/link{{end}}" class="auth-form">
+    {{template "csrf-field" $}}
     <input type="hidden" name="next" value="{{.Next}}">
     <label class="auth-email">
       {{icon "mail"}} Email

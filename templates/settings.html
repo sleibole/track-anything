@@ -21,6 +21,7 @@
   {{if .VerifyError}}<p role="alert" class="error">{{.VerifyError}}</p>{{end}}
   <p>Your email isn't verified yet.</p>
   <form method="post" action="/settings/verify" hx-post="/settings/verify">
+    {{template "csrf-field" $}}
     <button type="submit">Send verification email</button>
   </form>
 </article>
@@ -33,6 +34,7 @@
   <details class="timezone"{{if or .TimeZoneError (eq .Saved "timezone")}} open{{end}}>
     <summary>{{.TimeZoneLabel}}</summary>
     <form method="post" action="/settings/timezone" hx-post="/settings/timezone">
+      {{template "csrf-field" $}}
       <label>
         {{icon "timezone"}} Time zone
         <select name="timezone" required aria-describedby="timezone-help">
@@ -55,6 +57,7 @@
   {{else}}
   <p>{{if .HasPassword}}Change your password. Other devices will be logged out.{{else}}You log in with email links. Set a password if you'd like to use one too.{{end}}</p>
   <form method="post" action="/settings/password">
+    {{template "csrf-field" $}}
     <label>
       {{icon "lock"}} New password
       <input type="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password">

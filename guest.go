@@ -170,8 +170,12 @@ func (a *app) guestForStart(raw, tz, ip string) (string, time.Time, error) {
 		if err != nil {
 			return err
 		}
+		secret, err := newToken()
+		if err != nil {
+			return err
+		}
 		expires = now.Add(sessionLifetime)
-		return tx.Create(&Session{ID: hashToken(sessionRaw), UserID: userID, ExpiresAt: expires}).Error
+		return tx.Create(&Session{ID: hashToken(sessionRaw), UserID: userID, CSRFSecret: secret, ExpiresAt: expires}).Error
 	})
 	if err != nil {
 		return "", time.Time{}, err

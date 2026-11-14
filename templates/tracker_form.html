@@ -7,6 +7,7 @@
 <article class="form-card">
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
   <form method="post" action="{{with .Tracker}}/trackers/{{.ID}}{{else}}/trackers{{end}}" hx-post="{{with .Tracker}}/trackers/{{.ID}}{{else}}/trackers{{end}}">
+    {{template "csrf-field" $}}
     {{if not .Tracker}}<input type="hidden" name="request" value="{{.Request}}">{{end}}
     {{if .Minimal}}<input type="hidden" name="minimal" value="1">{{end}}
     {{if not .Tracker}}
@@ -91,14 +92,17 @@
   <p>Anyone with this link can log, record none for today, and undo recent entries, without an account.</p>
   <input type="text" readonly value="{{.}}" aria-label="Share link" data-select-on-focus>
   <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/share" hx-post="/trackers/{{$.Data.Tracker.ID}}/share" hx-confirm="Make a new link? The current one will stop working.">
+    {{template "csrf-field" $}}
     <button type="submit" class="secondary outline">Make a new link</button>
   </form>
   <form method="post" action="/trackers/{{$.Data.Tracker.ID}}/share/delete" hx-post="/trackers/{{$.Data.Tracker.ID}}/share/delete">
+    {{template "csrf-field" $}}
     <button type="submit" class="quiet">Turn off the share link</button>
   </form>
   {{else}}
   <p>Let someone log without an account, like a dog sitter or a kitchen tablet.</p>
   <form method="post" action="/trackers/{{.ID}}/share" hx-post="/trackers/{{.ID}}/share">
+    {{template "csrf-field" $}}
     <button type="submit" class="secondary outline">Turn on a share link</button>
   </form>
   {{end}}
@@ -106,6 +110,7 @@
 
 {{if $.Data.MoveHouseholds}}
 <form method="post" action="/trackers/{{.ID}}/move" hx-post="/trackers/{{.ID}}/move" hx-confirm="{{$.Data.MoveConfirm}}" class="move-form">
+  {{template "csrf-field" $}}
   <label>
     Move to household
     <select name="household">
@@ -117,6 +122,7 @@
 </form>
 {{end}}
 <form method="post" action="/trackers/{{.ID}}/archive" hx-post="/trackers/{{.ID}}/archive" class="archive-form">
+  {{template "csrf-field" $}}
   <button type="submit" class="quiet">{{icon "archive"}} Archive this tracker</button>
   <small>Hides it and turns off its share link. Entries are kept; restore it from the <a {{nav (printf "/households/%d" .HouseholdID)}}>household page</a>.</small>
 </form>

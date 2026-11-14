@@ -14,7 +14,9 @@ There is no `<meta http-equiv="Content-Security-Policy">` tag in the templates. 
 
 Pages load scripts from this origin (`/static/htmx.min.js`, `/static/app.js`, `/static/chart.js`, `/static/reorder.js`, `/static/chart.umd.min.js`) and, on signup, login, and change-password, from `https://challenges.cloudflare.com/turnstile/v0/api.js`. A tighter policy would have to allow that host. Chart data is inlined as `<script type="application/json">` built with `json.Marshal`, which escapes `<`, `>`, and `&`, so a tracker name cannot close the script element. That protection is in the JSON encoder, not in CSP.
 
-**CSRF tokens.** No. Forms do not carry a synchronizer token, a double-submit cookie, or a custom `X-CSRF-Token` header. Nothing in the templates or handlers looks up a per-session CSRF secret.
+**CSRF tokens.** As of 26 October 2026, yes. The notes below describe the tree on 23 October, before that change. Forms now carry the shared secret, and `X-CSRF-Token` is accepted as well. `docs/development/CSRF.md` is the current design. The origin check that follows is still in place.
+
+**CSRF tokens, 23 October.** No. Forms do not carry a synchronizer token, a double-submit cookie, or a custom `X-CSRF-Token` header. Nothing in the templates or handlers looks up a per-session CSRF secret.
 
 State-changing requests are rejected another way. `routes` wraps the mux with `http.NewCrossOriginProtection()` (`main.go`). Go 1.27's check (`net/http/csrf.go`) does this:
 
@@ -159,4 +161,4 @@ These are specified in `ARCHITECTURE.md`, `DESIGN.md`, or `PLAN.md`. They are re
 6. Neutralize formula characters in CSV fields.
 7. Decide whether share and invite tokens should stay recoverable from a backup. If not, store a hash and show the raw URL only when it is created or rotated.
 
-Synchronizer CSRF tokens are not required to match the model already implemented, as long as `Host` stays trustworthy, HSTS is present, and browsers keep sending `Sec-Fetch-Site`. Adding hidden tokens would be a third layer, not a replacement for the origin check.
+The 23 October conclusion was that synchronizer tokens were not required while `Host` stayed trustworthy, HSTS was present, and browsers kept sending `Sec-Fetch-Site`. Tokens were added later anyway, as a second check for requests that omit both `Origin` and `Sec-Fetch-Site`. They do not replace the origin check. See `docs/development/CSRF.md`.

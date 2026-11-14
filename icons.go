@@ -127,6 +127,7 @@ var templateFuncs = template.FuncMap{
 	"startupImageLinks": startupImageLinks,
 	"nav":               nav,
 	"inplace":           inplaceAttr,
+	"csrfField":         csrfField,
 	"publicTitle":       func() string { return publicTitle },
 	"publicDescription": func() string { return publicDescription },
 }

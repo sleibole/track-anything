@@ -6,6 +6,7 @@
   {{if .Ready}}
   <p>Move the guest trackers into <strong>{{.DestEmail}}</strong>. This happens only when you press the button.</p>
   <form method="post" action="/account/transfer" class="auth-form">
+    {{template "csrf-field" $}}
     <button type="submit" name="confirm" value="move">Move trackers</button>
   </form>
   <p class="auth-foot"><a href="/">Not now</a></p>

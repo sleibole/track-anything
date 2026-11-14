@@ -87,6 +87,15 @@ value_is_safe() {
       esac
       return 1
       ;;
+    SMTP_ALLOW_REAL)
+      return 1
+      ;;
+    MAIL_BACKEND)
+      case "$(printf '%s' "$val" | tr '[:upper:]' '[:lower:]')" in
+        console|local) return 0 ;;
+      esac
+      return 1
+      ;;
     SMTP_PORT|PORT)
       case "$val" in
         *[!0-9]*) return 1 ;;
@@ -222,7 +231,7 @@ copy_dev_env() {
   if copy_example "$example"; then
     return 0
   fi
-  echo "setup-worktree: no .env created. Copy .env.example to .env in this worktree for local MailHog settings (SMTP_HOST=127.0.0.1 and SMTP_PORT=1025). A missing .env is fine."
+  echo "setup-worktree: no .env created. Development mail stays on the console when SMTP_HOST is unset. Copy .env.example to .env in this worktree for that default, or set SMTP_HOST to 127.0.0.1 and SMTP_PORT to 1025 for local MailHog. Real SMTP also needs SMTP_ALLOW_REAL=1. A missing .env is fine."
 }
 
 copy_dev_env

@@ -788,6 +788,47 @@ func TestRejectsBadNamesAndMissingStop(t *testing.T) {
 	}
 }
 
+func TestAgentServerForcesConsoleMail(t *testing.T) {
+	dir := t.TempDir()
+	state := filepath.Join(dir, "state")
+	mailOut := filepath.Join(dir, "mail.txt")
+	py := httpServer(t, dir)
+	wrapper := shellCommand(t, dir, fmt.Sprintf(`
+out=$MAIL_ENV_OUT
+{
+  printf 'MAIL_BACKEND=%%s\n' "$MAIL_BACKEND"
+  printf 'SMTP_ALLOW_REAL=%%s\n' "$SMTP_ALLOW_REAL"
+  printf 'SMTP_HOST=%%s\n' "$SMTP_HOST"
+  printf 'SMTP_USER=%%s\n' "$SMTP_USER"
+  printf 'SMTP_PASS=%%s\n' "$SMTP_PASS"
+} > "$out"
+exec %q "$@"
+`, py))
+	extra := baseExtra(t, state, 38260, 38269, wrapper)
+	extra["MAIL_ENV_OUT"] = mailOut
+	extra["MAIL_BACKEND"] = "smtp"
+	extra["SMTP_ALLOW_REAL"] = "1"
+	extra["SMTP_HOST"] = "smtp.example.com"
+	extra["SMTP_USER"] = "live-user"
+	extra["SMTP_PASS"] = "live-password"
+	env := testEnv(t, extra)
+
+	a := startAgent(t, env, "mailsafe", false)
+	a.ready(t)
+	got, err := os.ReadFile(mailOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	if strings.Contains(text, "live-password") || strings.Contains(text, "live-user") || strings.Contains(text, "smtp.example.com") {
+		t.Fatalf("agent server kept SMTP settings\n%s", text)
+	}
+	want := "MAIL_BACKEND=console\nSMTP_ALLOW_REAL=\nSMTP_HOST=\nSMTP_USER=\nSMTP_PASS=\n"
+	if text != want {
+		t.Fatalf("mail env = %q", text)
+	}
+}
+
 func TestMakefileDevIsPersonalServer(t *testing.T) {
 	root := repoRoot(t)
 	body, err := os.ReadFile(filepath.Join(root, "Makefile"))

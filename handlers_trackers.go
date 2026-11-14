@@ -109,6 +109,7 @@ type trackerCard struct {
 	DataRev        string // displayed values, used to highlight a real change. Undo windows are not part of it
 	ViewRev        string // displayed values plus undo controls, used to decide whether a refresh swaps the card
 	OOB            string // out-of-band swap for a refresh fragment; empty on a full page
+	CSRFToken      string // set by render; the card is rendered apart from the page view
 }
 
 // card builds a tracker's card. viewerID is nil for a share-link visitor.
@@ -284,6 +285,7 @@ type entryView struct {
 	UndoURL     string // set while it can be undone
 	Owner       bool   // show the owner's edit and delete controls
 	Running     string // cumulative: lifetime total as of this entry, such as "40 points total"
+	CSRFToken   string // set by render; an entry is rendered apart from the page view
 }
 
 // entryViews labels entries for display. emails maps user IDs to addresses; a nil map
@@ -367,8 +369,13 @@ type trackerPage struct {
 	Overlay          *Tracker      // selected overlay; nil means none
 	OverlayID        uint          // 0 when none; safe to compare in the template
 	OverlayEmpty     bool          // selected overlay has no events in the chart window
-	PageURL          string        // this page, including ?overlay= when one is selected
-	NowValue         string        // default for the owner's time field
+	Groups           []TrackerGroup
+	GroupID          uint   // this viewer's group for the tracker; 0 is none
+	GroupChoice      string // posted select value, kept when saving fails
+	GroupName        string
+	GroupError       string
+	PageURL          string // this page, including ?overlay= when one is selected
+	NowValue         string // default for the owner's time field
 	Note             string
 	NumberValue      string // log form; the carried value unless this render is correcting a post
 	Hours            string
@@ -548,6 +555,12 @@ func (a *app) trackerPage(t Tracker, role string, u *User, overlay *Tracker) (tr
 		}
 		p.OverlayScript = embedded
 	}
+	groups, gid, err := a.trackerGroupState(u.ID, t.ID)
+	if err != nil {
+		return p, err
+	}
+	p.Groups = groups
+	p.GroupID = gid
 	stampTrackerRegions(&p)
 	return p, nil
 }

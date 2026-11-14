@@ -416,6 +416,7 @@ func TestTurnstileSendsDetectedClientIP(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	setAnonymousCSRF(t, req)
 	req.Header.Set("Fly-Client-IP", "203.0.113.9")
 	req.Header.Set("CF-Connecting-IP", "198.51.100.1")
 	resp, err := http.DefaultClient.Do(req)
@@ -582,6 +583,7 @@ func TestTurnstileHTMXErrorRendersAFreshWidget(t *testing.T) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
+	setAnonymousCSRF(t, req)
 	ts.app.turnstile.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return turnstileResponse(http.StatusOK, `{"success":false,"error-codes":["timeout-or-duplicate"]}`), nil
 	})

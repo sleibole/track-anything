@@ -6,6 +6,7 @@
   <h1>Sign up</h1>
   {{if .Error}}<p role="alert" class="error">{{.Error}}</p>{{end}}
   <form method="post" action="/signup" class="auth-form">
+    {{template "csrf-field" $}}
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="timezone" data-browser-timezone>
     <label class="auth-email">

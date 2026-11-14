@@ -18,6 +18,42 @@ document.addEventListener("htmx:afterSwap", (event) => {
 });
 document.addEventListener("htmx:historyRestore", syncPageMeta);
 
+// One registration. The meta tag lives in <head>, which HTMX does not swap,
+// so the token stays available after a partial update and after history restore.
+if (!window.trackCSRF) {
+  function trackCSRFToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta && meta.content ? meta.content : "";
+  }
+  function trackCSRFSameOrigin(url) {
+    try {
+      return new URL(url, location.origin).origin === location.origin;
+    } catch {
+      return false;
+    }
+  }
+  window.trackCSRF = {
+    token: trackCSRFToken,
+    sameOrigin: trackCSRFSameOrigin,
+    headers(url) {
+      if (!trackCSRFSameOrigin(url)) return {};
+      const token = trackCSRFToken();
+      if (!token) return {};
+      return { "X-CSRF-Token": token };
+    },
+  };
+  document.addEventListener("htmx:configRequest", (event) => {
+    const detail = event.detail;
+    if (!detail) return;
+    const method = String(detail.verb || "GET").toUpperCase();
+    if (method === "GET" || method === "HEAD" || method === "OPTIONS") return;
+    const headers = window.trackCSRF.headers(detail.path || "");
+    Object.keys(headers).forEach((name) => {
+      detail.headers[name] = headers[name];
+    });
+  });
+}
+
 const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
 function fillTimeZones(root) {
@@ -375,11 +411,15 @@ function snapshotTrackerRevs() {
   return map;
 }
 
+function anchorShown(el) {
+  return el && el.id && !el.closest("[hidden]");
+}
+
 function captureScrollAnchor() {
   const nodes = document.querySelectorAll("[data-scroll-anchor]");
   let above = null;
   for (const el of nodes) {
-    if (!el.id) continue;
+    if (!anchorShown(el)) continue;
     if (el.getBoundingClientRect().top <= 1) above = el;
     else return packAnchor(above || el);
   }
@@ -398,7 +438,7 @@ function packAnchor(el) {
 }
 
 function nextAnchor(el, dir) {
-  const nodes = [...document.querySelectorAll("[data-scroll-anchor]")].filter((node) => node.id);
+  const nodes = [...document.querySelectorAll("[data-scroll-anchor]")].filter(anchorShown);
   const i = nodes.indexOf(el);
   if (i < 0) return null;
   return nodes[i + dir] || null;
@@ -419,12 +459,100 @@ function restoreScrollAnchor(info) {
 function applyTrackerOrder() {
   const order = document.getElementById("tracker-order");
   const list = document.getElementById("tracker-list");
-  if (!order || !list || !order.dataset.order) return;
-  for (const id of order.dataset.order.split(",")) {
-    if (!id) continue;
-    const el = document.getElementById("tracker-" + id);
-    if (el && el.parentElement === list) list.appendChild(el);
+  if (!order || !list) return;
+  if (!order.dataset.layout) {
+    if (!order.dataset.order) return;
+    for (const id of order.dataset.order.split(",")) {
+      if (!id) continue;
+      const el = document.getElementById("tracker-" + id);
+      if (el && el.parentElement === list) list.appendChild(el);
+    }
+    return;
   }
+  const seenGroups = new Set();
+  for (const part of order.dataset.layout.split(",")) {
+    if (!part) continue;
+    if (part.startsWith("t:")) {
+      const el = document.getElementById("tracker-" + part.slice(2));
+      if (el) list.appendChild(el);
+      continue;
+    }
+    if (!part.startsWith("g:")) continue;
+    const bodySep = part.indexOf(":", 2);
+    const gid = bodySep === -1 ? part.slice(2) : part.slice(2, bodySep);
+    const group = document.getElementById("group-" + gid);
+    if (group) {
+      list.appendChild(group);
+      seenGroups.add(group.id);
+    }
+    const body = document.getElementById("group-body-" + gid);
+    if (!body || bodySep === -1) continue;
+    for (const id of part.slice(bodySep + 1).split(".")) {
+      if (!id) continue;
+      const el = document.getElementById("tracker-" + id);
+      if (el) body.appendChild(el);
+    }
+  }
+  for (const group of [...list.querySelectorAll(":scope > [data-group]")]) {
+    if (seenGroups.has(group.id)) continue;
+    const body = group.querySelector("[data-group-list]");
+    if (body) {
+      for (const card of [...body.querySelectorAll(":scope > .tracker-card")]) list.appendChild(card);
+    }
+    group.remove();
+  }
+  refreshGroupCounts(list);
+}
+
+function refreshGroupCounts(list) {
+  list.querySelectorAll("[data-group]").forEach((group) => {
+    const n = group.querySelectorAll("[data-group-list] > .tracker-card").length;
+    const el = group.querySelector("[data-group-count]");
+    if (!el) return;
+    el.textContent = "· " + n + " " + (n === 1 ? "tracker" : "trackers");
+  });
+}
+
+// Collapse is a normal form. HTMX posts it and gets 204, so the list is not
+// replaced. This only flips the header the person just used.
+document.addEventListener("submit", (event) => {
+  const form = event.target;
+  if (!form.matches || !form.matches("[data-group-collapse]") || !window.htmx) return;
+  if (form.dataset.pending) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  const button = form.querySelector("[data-group-toggle]");
+  const body = button && document.getElementById(button.getAttribute("aria-controls"));
+  if (!button || !body) return;
+  const collapse = form.querySelector("[name=collapsed]")?.value === "1";
+  applyGroupCollapsed(button, body, collapse);
+  form.dataset.pending = collapse ? "1" : "0";
+}, true);
+
+document.addEventListener("htmx:afterRequest", (event) => {
+  const form = event.detail?.elt;
+  if (!form || !form.matches || !form.matches("[data-group-collapse]") || form.dataset.pending == null) return;
+  const button = form.querySelector("[data-group-toggle]");
+  const body = button && document.getElementById(button.getAttribute("aria-controls"));
+  const collapse = form.dataset.pending === "1";
+  if (!event.detail.successful) {
+    if (button && body) applyGroupCollapsed(button, body, !collapse);
+    delete form.dataset.pending;
+    return;
+  }
+  const input = form.querySelector("[name=collapsed]");
+  if (input) input.value = collapse ? "0" : "1";
+  delete form.dataset.pending;
+});
+
+function applyGroupCollapsed(button, body, collapse) {
+  button.setAttribute("aria-expanded", collapse ? "false" : "true");
+  const chevron = button.querySelector("[data-chevron]");
+  if (chevron) chevron.textContent = collapse ? "›" : "⌄";
+  body.hidden = collapse;
+  body.inert = collapse;
 }
 
 const highlightTimers = new WeakMap();

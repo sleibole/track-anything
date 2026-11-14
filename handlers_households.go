@@ -131,13 +131,13 @@ func ownedNameTaken(owned []Household, exceptID uint, name string) bool {
 }
 
 func (a *app) renderDashboardError(w http.ResponseWriter, r *http.Request, u *User, name, msg string) {
-	cards, err := a.dashboard(u)
+	page, err := a.loadHome(u)
 	if err != nil {
 		a.serverError(w, r, err)
 		return
 	}
-	page := dashboardPage{Cards: cards, Name: name, Error: msg}
-	fillMarkers(&page)
+	page.Name = name
+	page.Error = msg
 	a.render(w, r, http.StatusUnprocessableEntity, "dashboard.html", page)
 }
 

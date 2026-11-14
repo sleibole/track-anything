@@ -66,7 +66,56 @@ func (ts *testServer) browser(t *testing.T) *browser {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &browser{t: t, ts: ts, c: &http.Client{Jar: jar}}
+	b := &browser{t: t, ts: ts, c: &http.Client{Jar: jar}}
+	// Same-origin posts from this client present the CSRF secret, as a browser
+	// that loaded the form would. A test that sets X-CSRF-Token keeps that value.
+	b.c.Transport = browserTransport{b: b}
+	return b
+}
+
+type browserTransport struct {
+	b    *browser
+	base http.RoundTripper
+}
+
+func (t browserTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !safeMethod(req.Method) && req.Header.Get(csrfHeader) == "" {
+		req = req.Clone(req.Context())
+		req.Header.Set(csrfHeader, t.b.csrfToken(req))
+	}
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(req)
+}
+
+// csrfToken is the secret the server will expect for this request.
+// A session uses the secret stored for that session. Otherwise the anonymous
+// cookie is used, and minted here when this client has not loaded a page yet.
+func (b *browser) csrfToken(req *http.Request) string {
+	b.t.Helper()
+	if c, err := req.Cookie(sessionCookie); err == nil && c.Value != "" {
+		var s Session
+		err := b.ts.app.db.Take(&s, "id = ?", hashToken(c.Value)).Error
+		if err == nil && validCSRFToken(s.CSRFSecret) {
+			return s.CSRFSecret
+		}
+	}
+	if c, err := req.Cookie(csrfCookie); err == nil && validCSRFToken(c.Value) {
+		return c.Value
+	}
+	token, err := newToken()
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	req.AddCookie(&http.Cookie{Name: csrfCookie, Value: token, Path: "/"})
+	u, err := url.Parse(b.ts.srv.URL)
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	b.c.Jar.SetCookies(u, []*http.Cookie{{Name: csrfCookie, Value: token, Path: "/"}})
+	return token
 }
 
 type response struct {
@@ -1036,6 +1085,7 @@ func TestSpoofedForwardingHeadersDoNotResetLoginLimits(t *testing.T) {
 			t.Fatal(err)
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		setAnonymousCSRF(t, req)
 		req.Header.Set("CF-Connecting-IP", "203.0.113."+string(rune('1'+i)))
 		req.Header.Set("X-Forwarded-For", "198.51.100."+string(rune('1'+i)))
 		resp, err := ts.srv.Client().Do(req)
@@ -1052,6 +1102,7 @@ func TestSpoofedForwardingHeadersDoNotResetLoginLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	setAnonymousCSRF(t, req)
 	req.Header.Set("CF-Connecting-IP", "203.0.113.200")
 	req.Header.Set("X-Forwarded-For", "198.51.100.200")
 	resp, err := ts.srv.Client().Do(req)

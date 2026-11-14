@@ -32,10 +32,11 @@ func (u User) Label() string {
 }
 
 type Session struct {
-	ID        string `gorm:"primaryKey"` // sha256 hex of the cookie value; the raw token is only in the cookie
-	UserID    uint   `gorm:"index;not null"`
-	ExpiresAt time.Time
-	CreatedAt time.Time
+	ID         string `gorm:"primaryKey"` // sha256 hex of the cookie value; the raw token is only in the cookie
+	UserID     uint   `gorm:"index;not null"`
+	CSRFSecret string // stable for this session; useless without the session cookie
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
 }
 
 // LoginToken is a one-time magic login link. Only the hash is stored,
@@ -109,6 +110,28 @@ type TrackerOrder struct {
 	UserID    uint `gorm:"primaryKey"`
 	TrackerID uint `gorm:"primaryKey;index"`
 	Position  int  `gorm:"not null"`
+}
+
+// TrackerGroup is one person's section on their home list. Not shared.
+// A new group is expanded. Collapsed is remembered for that person only.
+type TrackerGroup struct {
+	ID        uint
+	UserID    uint   `gorm:"not null;index"`
+	Name      string `gorm:"not null"`
+	Position  int    `gorm:"not null"` // place among that person's home slots; lower comes first
+	Collapsed bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// TrackerGroupItem puts one tracker in one of the user's groups.
+// A tracker with no row is ungrouped. The same tracker can sit in a different
+// group, or in none, for someone else who can see it.
+type TrackerGroupItem struct {
+	UserID    uint `gorm:"primaryKey"`
+	TrackerID uint `gorm:"primaryKey"`
+	GroupID   uint `gorm:"not null;index"`
+	Position  int  `gorm:"not null"` // order within the group; lower comes first
 }
 
 func (t Tracker) Label() string {

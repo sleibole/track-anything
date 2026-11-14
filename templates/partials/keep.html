@@ -7,6 +7,7 @@
   <p class="row-actions">
     <a href="/account/email">Add email</a>
     <form method="post" action="/account/email-prompt/dismiss" hx-post="/account/email-prompt/dismiss" hx-target="#keep-trackers" hx-swap="outerHTML" class="inline">
+      {{template "csrf-field" .}}
       <button type="submit" class="quiet">Later</button>
     </form>
   </p>

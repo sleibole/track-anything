@@ -43,10 +43,11 @@ func loadViews(fsys fs.FS) (*views, error) {
 }
 
 // view is what every template receives: the logged-in user (nil when logged out)
-// for the layout, and the page's own data.
+// for the layout, the CSRF secret for this request, and the page's own data.
 type view struct {
 	User             *User
 	Data             any
+	CSRFToken        string
 	TurnstileSiteKey string
 	SEO              seoTags
 }
@@ -81,10 +82,13 @@ func (a *app) renderBlock(w http.ResponseWriter, r *http.Request, status int, pa
 	}
 
 	// Render to a buffer first so a template error doesn't send a half-written page.
+	token := csrfFrom(r)
+	data = stampCSRF(data, token)
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, block, view{
 		User:             currentUser(r),
 		Data:             data,
+		CSRFToken:        token,
 		TurnstileSiteKey: a.cfg.TurnstileSiteKey,
 		SEO:              a.seoTags(r),
 	}); err != nil {

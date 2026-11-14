@@ -883,6 +883,15 @@ cmd_start() {
   export PORT="$APP_PORT"
   export DB_PATH="$INSTANCE_DIR/data/trackanything.db"
   export BASE_URL="$URL"
+  # Console mail for this process only. The values are set, including the
+  # empty ones, so a .env file or an inherited shell cannot replace them.
+  # Air and the app both leave variables that are already set alone.
+  # Console output goes to this instance's log, not a shared mail log.
+  export MAIL_BACKEND=console
+  export SMTP_ALLOW_REAL=
+  export SMTP_HOST=
+  export SMTP_USER=
+  export SMTP_PASS=
 
   # The config path is on the command line so stop can recognize the process.
   if [ -n "${DEV_SERVER_COMMAND:-}" ]; then

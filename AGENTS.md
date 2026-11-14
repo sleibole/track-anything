@@ -27,6 +27,17 @@ Work marked not built, and later ideas in `PLAN.md`, is not current work. Leave 
 - Tracker access goes through the helpers in `access.go`. A tracker the caller cannot see is a 404.
 - `openDB` uses one SQLite connection (`SetMaxOpenConns(1)`). Leave that in place.
 
+## CSRF (policy)
+
+State-changing browser requests use the shared CSRF check. `docs/development/CSRF.md` is the source of truth.
+
+- Put `{{template "csrf-field" .}}` in a new HTML form. Inside `{{with}}`, pass `$` when `$` is the page view, the tracker card, or the entry. Do not hand-write a `csrf_token` input.
+- HTMX sends the token from the layout. Do not add a per-control CSRF header.
+- A `fetch` that changes data on this origin uses `window.trackCSRF.headers(url)`. Do not send that header to another origin.
+- Do not skip or replace the middleware to make a route work. Do not add a second CSRF scheme.
+- An exemption has to be narrow, and it has to be written down in `docs/development/CSRF.md` with the reason. There are none today.
+- A one-time action key, such as redeem, is not a CSRF token and does not replace one.
+
 ## Working approach (practice)
 
 - Inspect relevant code and documentation before editing.
@@ -53,7 +64,7 @@ Work marked not built, and later ideas in `PLAN.md`, is not current work. Leave 
 
 In this repository:
 
-- Log with the `*slog.Logger` on `app`. Production writes JSON to stdout. Development writes text. `logPath` replaces bearer tokens in request paths with the route placeholder. Keep that. Do not log passwords, session cookies, magic-link or verification tokens, share or invite tokens, SMTP credentials, or the Turnstile secret.
+- Log with the `*slog.Logger` on `app`. Production writes JSON to stdout. Development writes text. `logPath` replaces bearer tokens in request paths with the route placeholder. Keep that. Do not log passwords, session cookies, CSRF tokens, magic-link or verification tokens, share or invite tokens, SMTP credentials, or the Turnstile secret.
 - Handlers take `http.ResponseWriter` and `*http.Request`. Pass `r.Context()` into outbound HTTP and other cancelable I/O. Shutdown already uses `context.Context`. Do not add a context parameter to every helper.
 - Wrap with `%w` when a caller uses `errors.Is` or `errors.As`, including `gorm.ErrRecordNotFound` and the existing sentinel errors.
 - Query through GORM with placeholders. Do not build SQL from request data.
@@ -97,6 +108,8 @@ make dev-agent NAME=<unique-name>
 Pick one name and keep using it. If that command says the name is already running, use the URL it prints.
 
 The command stays in the foreground. It prints `dev-agent: ready` with the URL when the server is accepting requests. Use that URL for browser checks.
+
+That server forces `MAIL_BACKEND=console` and clears SMTP delivery settings for its own process. A `.env` file or inherited SMTP credentials cannot make it send real email. Sign-in and verification links are written to that instance's log, `tmp/dev-agents/<name>/air.log`.
 
 Stop only the server you started, and stop it when testing is done:
 

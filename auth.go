@@ -109,6 +109,7 @@ type ctxKey int
 const (
 	userKey ctxKey = iota
 	sessionKey
+	csrfKey
 )
 
 func currentUser(r *http.Request) *User {
@@ -150,8 +151,12 @@ func (a *app) startSession(w http.ResponseWriter, userID uint) error {
 	if err != nil {
 		return err
 	}
+	secret, err := newToken()
+	if err != nil {
+		return err
+	}
 	expires := a.now().Add(sessionLifetime)
-	s := Session{ID: hashToken(raw), UserID: userID, ExpiresAt: expires}
+	s := Session{ID: hashToken(raw), UserID: userID, CSRFSecret: secret, ExpiresAt: expires}
 	if err := a.db.Create(&s).Error; err != nil {
 		return err
 	}
@@ -205,9 +210,30 @@ func (a *app) loadUser(next http.Handler) http.Handler {
 			}
 			a.setSessionCookie(w, c.Value, s.ExpiresAt)
 		}
+		if s.CSRFSecret == "" {
+			secret, err := newToken()
+			if err != nil {
+				a.serverError(w, r, err)
+				return
+			}
+			res := a.db.Model(&Session{}).Where("id = ? AND csrf_secret = ?", s.ID, "").Update("csrf_secret", secret)
+			if res.Error != nil {
+				a.serverError(w, r, res.Error)
+				return
+			}
+			if res.RowsAffected == 0 {
+				if err := a.db.Take(&s, "id = ?", s.ID).Error; err != nil {
+					a.serverError(w, r, err)
+					return
+				}
+			} else {
+				s.CSRFSecret = secret
+			}
+		}
 
 		ctx := context.WithValue(r.Context(), userKey, &u)
 		ctx = context.WithValue(ctx, sessionKey, s.ID)
+		ctx = context.WithValue(ctx, csrfKey, s.CSRFSecret)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -425,7 +451,7 @@ func (a *app) handleLoginLinkRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	a.render(w, r, http.StatusOK, "login_sent.html", linkSentPage{Email: form.Email, Dev: a.cfg.SMTPHost == ""})
+	a.render(w, r, http.StatusOK, "login_sent.html", linkSentPage{Email: form.Email, Dev: a.cfg.devConsoleMail()})
 }
 
 func (a *app) sendLoginLink(u User, next string) error {

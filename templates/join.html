@@ -17,6 +17,7 @@
   {{else}}
   <p>You'll see its trackers on your home screen and can log on them.</p>
   <form method="post" action="/join/{{.Token}}" hx-post="/join/{{.Token}}" class="auth-form">
+    {{template "csrf-field" $}}
     <button type="submit">Join household</button>
   </form>
   {{end}}

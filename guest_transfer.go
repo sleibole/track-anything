@@ -415,6 +415,9 @@ func moveGuestRecords(tx *gorm.DB, guestID, destID uint) error {
 	if err := reassignOrders(tx, guestID, destID); err != nil {
 		return err
 	}
+	if err := reassignGroups(tx, guestID, destID); err != nil {
+		return err
+	}
 	if err := tx.Model(&Entry{}).Where("recorded_by_id = ?", guestID).Update("recorded_by_id", destID).Error; err != nil {
 		return err
 	}
@@ -491,4 +494,29 @@ func reassignOrders(tx *gorm.DB, guestID, destID uint) error {
 		}
 	}
 	return nil
+}
+
+// reassignGroups moves the guest's personal groups onto the destination account.
+// A tracker the destination already grouped keeps the destination's choice.
+func reassignGroups(tx *gorm.DB, guestID, destID uint) error {
+	var items []TrackerGroupItem
+	if err := tx.Where("user_id = ?", guestID).Find(&items).Error; err != nil {
+		return err
+	}
+	for _, it := range items {
+		var n int64
+		if err := tx.Model(&TrackerGroupItem{}).Where("user_id = ? AND tracker_id = ?", destID, it.TrackerID).Count(&n).Error; err != nil {
+			return err
+		}
+		if n > 0 {
+			if err := tx.Where("user_id = ? AND tracker_id = ?", guestID, it.TrackerID).Delete(&TrackerGroupItem{}).Error; err != nil {
+				return err
+			}
+			continue
+		}
+		if err := tx.Exec(`UPDATE tracker_group_items SET user_id = ? WHERE user_id = ? AND tracker_id = ?`, destID, guestID, it.TrackerID).Error; err != nil {
+			return err
+		}
+	}
+	return tx.Model(&TrackerGroup{}).Where("user_id = ?", guestID).Update("user_id", destID).Error
 }

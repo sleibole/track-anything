@@ -209,7 +209,7 @@ Set `enctype="multipart/form-data"` on the form. htmx also honors `hx-encoding="
 
 `hx-disabled-elt="this"` on the submit button, or `hx-indicator`, covers the wait. htmx reads form values before it disables controls for the request, so disabling the button does not drop the payload. Controls that were already disabled are omitted, as in a normal form. `hx-sync="this:replace"` is a second lock if a double click would otherwise start two posts.
 
-CSRF is a server check. A token in a hidden field rides along with the form for both normal and htmx submits, which is the progressive-enhancement path. `hx-headers` on `<body>` adds a header to htmx requests only, and it goes stale if the token rotates and the body is not part of the swap. Prefer the hidden field. `SameSite` cookies are a complement, not a substitute.
+CSRF is a server check. Every form includes `{{template "csrf-field" .}}`, so a normal submit and an htmx submit of that form both carry the hidden field. `static/app.js` also listens once for `htmx:configRequest` and sets `X-CSRF-Token` from `<meta name="csrf-token">` in the document head. The head is not part of the `#content` swap, and the secret stays the same for the life of the session, so a partial update or a history restore does not drop it. Do not put `hx-headers` on individual controls. The header is added only for a same-origin URL. `SameSite` cookies are a complement, not a substitute. See `docs/development/CSRF.md`.
 
 ### Fragment or new page
 

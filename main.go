@@ -33,11 +33,13 @@ type config struct {
 	DBPath             string
 	Env                string // "dev" or "prod"
 	BaseURL            string // used to build links in emails, e.g. "https://trackanything.io"
-	SMTPHost           string // empty = log emails to the console instead of sending
+	SMTPHost           string // empty: console mailer. Development uses a non-local host only with SMTP_ALLOW_REAL=1
 	SMTPPort           string
 	SMTPUser           string
 	SMTPPass           string
 	MailFrom           string // e.g. "Track Anything <hello@trackanything.io>"
+	MailBackend        string // development: console, local, or smtp. Empty derives from SMTP_HOST. Production ignores this.
+	SMTPAllowReal      string // development: "1" allows non-local SMTP, and only together with SMTP_USER and SMTP_PASS
 	TrustedIPHeader    string // empty uses RemoteAddr; otherwise only this header, set by the trusted proxy
 	TurnstileSiteKey   string // public widget key; production requires TURNSTILE_SITE_KEY
 	TurnstileSecretKey string // Siteverify secret; never log this
@@ -56,11 +58,13 @@ func loadConfig() config {
 		Env:                getenv("ENV", "dev"),
 		BaseURL:            base,
 		baseURLSet:         rawBase != "",
-		SMTPHost:           os.Getenv("SMTP_HOST"),
+		SMTPHost:           strings.TrimSpace(os.Getenv("SMTP_HOST")),
 		SMTPPort:           getenv("SMTP_PORT", "587"),
 		SMTPUser:           os.Getenv("SMTP_USER"),
 		SMTPPass:           os.Getenv("SMTP_PASS"),
 		MailFrom:           getenv("MAIL_FROM", "Track Anything <hello@trackanything.io>"),
+		MailBackend:        strings.TrimSpace(os.Getenv("MAIL_BACKEND")),
+		SMTPAllowReal:      strings.TrimSpace(os.Getenv("SMTP_ALLOW_REAL")),
 		TrustedIPHeader:    strings.TrimSpace(os.Getenv("TRUSTED_IP_HEADER")),
 		TurnstileSiteKey:   strings.TrimSpace(os.Getenv("TURNSTILE_SITE_KEY")),
 		TurnstileSecretKey: strings.TrimSpace(os.Getenv("TURNSTILE_SECRET_KEY")),
@@ -89,6 +93,9 @@ func (c config) validate() error {
 	case "dev", "prod":
 	default:
 		return fmt.Errorf("ENV must be dev or prod, got %q", c.Env)
+	}
+	if err := c.validateMail(); err != nil {
+		return err
 	}
 	switch c.TrustedIPHeader {
 	case "", "CF-Connecting-IP", "Fly-Client-IP", "X-Forwarded-For":
@@ -187,12 +194,19 @@ func run(cfg config, logger *slog.Logger) error {
 		return err
 	}
 
+	backend, err := cfg.resolveMail()
+	if err != nil {
+		return err
+	}
+	// The backend name only. Host, username, and password stay out of the log.
+	logger.Info("mail backend", "backend", backend)
+
 	m, err := newMailer(cfg, logger)
 	if err != nil {
 		return err
 	}
-	if cfg.Env == "prod" && cfg.SMTPHost == "" {
-		logger.Warn("SMTP_HOST is not set; magic-link emails will only be logged")
+	if cfg.Env == "prod" && strings.TrimSpace(cfg.SMTPHost) == "" {
+		logger.Warn("SMTP_HOST is not set; magic-link emails will not be sent")
 	}
 
 	a := newApp(cfg, db, v, logger, m)
@@ -298,6 +312,12 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /trackers/new", a.requireUser(a.handleNewTracker))
 	mux.HandleFunc("POST /trackers", a.requireUser(a.handleCreateTracker))
 	mux.HandleFunc("POST /trackers/order", a.requireUser(a.handleReorderHome))
+	mux.HandleFunc("POST /trackers/{id}/group", a.requireUser(a.handleSetTrackerGroup))
+	mux.HandleFunc("POST /groups", a.requireUser(a.handleCreateGroup))
+	mux.HandleFunc("POST /groups/{id}", a.requireUser(a.handleRenameGroup))
+	mux.HandleFunc("POST /groups/{id}/delete", a.requireUser(a.handleDeleteGroup))
+	mux.HandleFunc("POST /groups/{id}/collapse", a.requireUser(a.handleCollapseGroup))
+	mux.HandleFunc("POST /groups/{id}/order", a.requireUser(a.handleReorderGroup))
 	mux.HandleFunc("GET /trackers/{id}", a.requireUser(a.handleShowTracker))
 	mux.HandleFunc("GET /trackers/{id}/edit", a.requireUser(a.handleEditTracker))
 	mux.HandleFunc("POST /trackers/{id}", a.requireUser(a.handleUpdateTracker))
@@ -328,8 +348,8 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /s/{token}/entries/{eid}/undo", a.handleShareUndoEntry)
 	mux.HandleFunc("POST /s/{token}/zeros/{zid}/undo", a.handleShareUndoZero)
 
-	csrf := http.NewCrossOriginProtection()
-	return a.recoverPanic(a.logRequests(a.securityHeaders(limitBody(csrf.Handler(a.loadUser(a.robotsHeader(a.dispatch(mux))))))))
+	origin := http.NewCrossOriginProtection()
+	return a.recoverPanic(a.logRequests(a.securityHeaders(limitBody(origin.Handler(a.loadUser(a.csrfProtect(a.robotsHeader(a.dispatch(mux)))))))))
 }
 
 const authCleanupInterval = time.Hour

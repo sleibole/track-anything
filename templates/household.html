@@ -10,6 +10,7 @@
   <summary>Rename</summary>
   {{with .NameError}}<p role="alert" class="error">{{.}}</p>{{end}}
   <form method="post" action="/households/{{$.Data.Household.ID}}" hx-post="/households/{{$.Data.Household.ID}}">
+    {{template "csrf-field" $}}
     <label>
       Name
       <input type="text" name="name" value="{{if .DraftName}}{{.DraftName}}{{else}}{{.Household.Name}}{{end}}" required maxlength="60">
@@ -28,9 +29,11 @@
       {{if and $.Data.IsOwner (not .IsOwner)}}
       <span class="row-actions">
         <form method="post" action="/households/{{$.Data.Household.ID}}/members/{{.UserID}}/owner" hx-post="/households/{{$.Data.Household.ID}}/members/{{.UserID}}/owner" hx-confirm="Make {{.Email}} an owner? Owners can't be removed." class="inline">
+          {{template "csrf-field" $}}
           <button type="submit" class="quiet">Make owner</button>
         </form>
         <form method="post" action="/households/{{$.Data.Household.ID}}/members/{{.UserID}}/delete" hx-post="/households/{{$.Data.Household.ID}}/members/{{.UserID}}/delete" hx-confirm="Remove {{.Email}} from this household?" class="inline">
+          {{template "csrf-field" $}}
           <button type="submit" class="quiet">Remove</button>
         </form>
       </span>
@@ -49,15 +52,18 @@
   <input type="text" readonly value="{{.}}" aria-label="Invite link" data-select-on-focus>
   <div class="row-actions">
     <form method="post" action="/households/{{$.Data.Household.ID}}/invite" hx-post="/households/{{$.Data.Household.ID}}/invite" hx-confirm="Make a new link? The current one will stop working." class="inline">
+      {{template "csrf-field" $}}
       <button type="submit" class="quiet">Make a new link</button>
     </form>
     <form method="post" action="/households/{{$.Data.Household.ID}}/invite/delete" hx-post="/households/{{$.Data.Household.ID}}/invite/delete" class="inline">
+      {{template "csrf-field" $}}
       <button type="submit" class="quiet">Turn off invites</button>
     </form>
   </div>
   {{else}}
   <p>Invite someone so they can see and log this household's trackers.</p>
   <form method="post" action="/households/{{.Household.ID}}/invite" hx-post="/households/{{.Household.ID}}/invite">
+    {{template "csrf-field" $}}
     <button type="submit" class="secondary outline">Create invite link</button>
   </form>
   {{end}}
@@ -84,6 +90,7 @@
       <li>
         <span><span class="tracker-icon">{{trackerIcon .Icon}}</span> {{.Name}}</span>
         <form method="post" action="/trackers/{{.ID}}/restore" hx-post="/trackers/{{.ID}}/restore" class="inline">
+          {{template "csrf-field" $}}
           <button type="submit" class="quiet">Restore</button>
         </form>
       </li>
@@ -94,6 +101,7 @@
 </section>
 {{if not .IsOwner}}
 <form method="post" action="/households/{{.Household.ID}}/leave" hx-post="/households/{{.Household.ID}}/leave" hx-confirm="Leave this household? You'll stop seeing its trackers." class="leave-household">
+  {{template "csrf-field" $}}
   <button type="submit" class="quiet">Leave household</button>
 </form>
 {{end}}

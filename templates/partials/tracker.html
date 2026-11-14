@@ -14,6 +14,7 @@
   {{with .RewardError}}<p role="alert" class="error">{{.}}</p>{{end}}
   {{if .CanRedeem}}
   <form class="redeem-form" method="post" action="/trackers/{{.Tracker.ID}}/redeem" hx-post="/trackers/{{.Tracker.ID}}/redeem" {{inplace}}>
+    {{template "csrf-field" .}}
     {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
     <input type="hidden" name="request" value="{{.RedeemToken}}">
     <details{{if .RewardNote}} open{{end}}>
@@ -27,6 +28,7 @@
   <div class="log-buttons">
     {{if and .Tracker.IsNumber (or .LogAgain .NumberField)}}
     <form class="log-again" method="post" action="{{.EntriesURL}}" hx-post="{{.EntriesURL}}" data-quick {{inplace}}>
+      {{template "csrf-field" .}}
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <input type="hidden" name="log_again" value="1">
       <div class="log-again-field">
@@ -40,6 +42,7 @@
     </form>
     {{else if .Tracker.IsCumulative}}
     <form class="log-again" method="post" action="{{.EntriesURL}}" hx-post="{{.EntriesURL}}" {{inplace}}>
+      {{template "csrf-field" .}}
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <input type="hidden" name="add_amount" value="1">
       <div class="log-again-field">
@@ -53,11 +56,13 @@
     </form>
     {{else if .LogAgain}}
     <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick {{inplace}}>
+      {{template "csrf-field" .}}
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <button type="submit" data-occurrence>Log again</button>
     </form>
     {{else if .Tracker.IsCount}}
     <form method="post" action="{{.QuickURL}}" hx-post="{{.QuickURL}}" data-quick {{inplace}}>
+      {{template "csrf-field" .}}
       {{with .Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <button type="submit" data-occurrence>{{.Tracker.Label}}</button>
     </form>
@@ -66,6 +71,7 @@
     {{end}}
     {{with .UndoURL}}
     <form method="post" action="{{.}}" hx-post="{{.}}" {{inplace}}>
+      {{template "csrf-field" $}}
       {{with $.Back}}<input type="hidden" name="back" value="{{.}}">{{end}}
       <button type="submit" class="secondary outline" data-occurrence>{{icon "arrow-back-up"}} Undo</button>
     </form>
@@ -125,6 +131,7 @@
   {{if .By}}<small class="muted">{{if .ViaLink}}via share link{{else}}by {{.By}}{{end}}</small>{{end}}
   {{with .UndoURL}}
   <form method="post" action="{{.}}" hx-post="{{.}}" class="inline" {{inplace}}>
+    {{template "csrf-field" $}}
     <button type="submit" class="quiet" data-occurrence>Undo</button>
   </form>
   {{end}}
@@ -132,6 +139,7 @@
   <details class="entry-edit">
     <summary>Edit</summary>
     <form method="post" action="/entries/{{.ID}}" hx-post="/entries/{{.ID}}" {{inplace}}>
+      {{template "csrf-field" .}}
       <label>When <input type="datetime-local" name="time" value="{{.TimeValue}}" required></label>
       {{if or (eq .Kind "number") (eq .Kind "cumulative")}}
       <label>{{if eq .Kind "cumulative"}}Amount{{else}}Value{{end}}
@@ -152,6 +160,7 @@
       <button type="submit">Save</button>
     </form>
     <form method="post" action="/entries/{{.ID}}/delete" hx-post="/entries/{{.ID}}/delete" hx-confirm="Delete this entry?" {{inplace}}>
+      {{template "csrf-field" .}}
       <button type="submit" class="quiet">{{icon "trash"}} Delete entry</button>
     </form>
   </details>

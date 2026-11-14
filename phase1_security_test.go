@@ -78,6 +78,7 @@ func TestRequestBodyLimit(t *testing.T) {
 		}
 		req := httptest.NewRequest(http.MethodPost, "/signup", strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		setAnonymousCSRF(t, req)
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
 		var n int64

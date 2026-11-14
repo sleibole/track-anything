@@ -7,6 +7,7 @@
 <article class="auth-card">
   {{with .Data.Error}}<p role="alert" class="error">{{.}}</p>{{end}}
   <form method="post" action="/start" hx-post="/start" class="auth-form">
+    {{template "csrf-field" .}}
     <input type="hidden" name="timezone" data-browser-timezone>
     <label for="tracker-name">What are you tracking?</label>
     <input id="tracker-name" type="text" name="name" value="{{.Data.Name}}" required maxlength="60" autocomplete="off" placeholder="{{.Data.Placeholder}}" data-suggestions="{{.Data.Suggestions}}">

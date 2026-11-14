@@ -176,6 +176,7 @@ func TestConcurrentStartsCreateOneGuest(t *testing.T) {
 	b := ts.browser(t)
 	b.get("/")
 	start := cookieValue(b, startCookie)
+	csrf := cookieValue(b, csrfCookie)
 	var wg sync.WaitGroup
 	var statuses [2]int
 	for i := 0; i < 2; i++ {
@@ -189,6 +190,8 @@ func TestConcurrentStartsCreateOneGuest(t *testing.T) {
 			}
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			req.AddCookie(&http.Cookie{Name: startCookie, Value: start})
+			req.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+			req.Header.Set(csrfHeader, csrf)
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				return

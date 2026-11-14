@@ -116,6 +116,21 @@ func (a *app) handleReorderHouseholds(w http.ResponseWriter, r *http.Request) {
 // household's shared order.
 func (a *app) handleReorderHome(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
+	if err := r.ParseForm(); err != nil {
+		a.badOrder(w, r)
+		return
+	}
+	// A list that contains groups posts slots. Tracker-only lists keep posting id,
+	// which is the order this handler has always stored.
+	if _, ok := r.PostForm["slot"]; ok {
+		refs, good := parseSlotRefs(r.PostForm["slot"])
+		if !good {
+			a.badOrder(w, r)
+			return
+		}
+		a.finishOrder(w, r, a.saveHomeSlots(u.ID, refs))
+		return
+	}
 	ids, ok := orderIDs(r)
 	if !ok {
 		a.badOrder(w, r)

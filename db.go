@@ -56,6 +56,7 @@ func migrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&User{}, &Session{}, &LoginToken{}, &VerificationToken{},
 		&Household{}, &HouseholdMember{}, &Tracker{}, &Entry{}, &RecordedZero{}, &TrackerOrder{},
+		&TrackerGroup{}, &TrackerGroupItem{},
 		&Redemption{}, &RewardRequest{},
 		&StartAttempt{}, &GuestClaim{}, &TransferIntent{}, &TransferReceipt{}, &TrackerCreate{},
 	); err != nil {

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="csrf-token" content="{{.CSRFToken}}">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{block "title" .}}Track Anything{{end}}</title>
   {{template "pageMeta" .}}
@@ -84,6 +85,7 @@
           <a href="/logout/confirm" class="outline secondary" aria-label="Log out" title="Log out">{{icon "logout"}}</a>
           {{else}}
           <form method="post" action="/logout" class="inline">
+            {{template "csrf-field" .}}
             <button type="submit" class="outline secondary" aria-label="Log out" title="Log out">{{icon "logout"}}</button>
           </form>
           {{end}}
@@ -129,3 +131,5 @@
 {{end}}
 
 {{define "partial"}}<title>{{template "title" .}}</title>{{template "content" .}}<template data-page-meta>{{template "pageMeta" .}}</template>{{end}}
+
+{{define "csrf-field"}}{{csrfField .}}{{end}}

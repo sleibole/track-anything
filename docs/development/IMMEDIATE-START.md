@@ -179,7 +179,7 @@ Time zone uses the hidden field. The guest's "today" is that zone, same as signu
 
 Guests pass `requireUser` and `trackerForUser` because they are users. A tracker in someone else's household is still a 404. Guest data is not public. User ids, tracker ids, and URLs are not credentials.
 
-CSRF stays `http.CrossOriginProtection`. The new posts are ordinary same-origin forms. Do not add a parallel token.
+CSRF uses the shared secret from `docs/development/CSRF.md`. `POST /start` is an ordinary form and includes `{{template "csrf-field" .}}`. Do not add a second token.
 
 Session renewal is unchanged. Logout deletes that session row and clears the cookie. Guest logout goes through the confirm page in section 6.
 

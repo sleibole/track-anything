@@ -170,3 +170,39 @@ func TestSetupSkipsSymlinkAndMalformedEnv(t *testing.T) {
 		t.Fatalf("output = %q", out)
 	}
 }
+
+func TestSetupRefusesRealMailOptIn(t *testing.T) {
+	main := t.TempDir()
+	worktree := t.TempDir()
+	const secret = "real-smtp-password"
+	unsafe := "" +
+		"ENV=dev\n" +
+		"SMTP_HOST=127.0.0.1\n" +
+		"SMTP_PORT=1025\n" +
+		"SMTP_PASS=" + secret + "\n" +
+		"SMTP_ALLOW_REAL=1\n" +
+		"MAIL_BACKEND=smtp\n"
+	example := "# console default\n"
+	writeFile(t, filepath.Join(main, ".env"), unsafe, 0o644)
+	writeFile(t, filepath.Join(main, ".env.example"), example, 0o644)
+
+	out := runSetup(t, main, worktree)
+	if strings.Contains(out, secret) || strings.Contains(out, "smtp.example.com") {
+		t.Fatalf("setup printed a secret or a mail host\n%s", out)
+	}
+	for _, name := range []string{"SMTP_PASS", "SMTP_ALLOW_REAL", "MAIL_BACKEND"} {
+		if !strings.Contains(out, name) {
+			t.Fatalf("output did not name %s\n%s", name, out)
+		}
+	}
+	if !strings.Contains(out, "copied .env.example to .env") {
+		t.Fatalf("output = %q", out)
+	}
+	got, err := os.ReadFile(filepath.Join(worktree, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != example {
+		t.Fatalf("worktree .env = %q", got)
+	}
+}

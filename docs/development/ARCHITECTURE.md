@@ -30,7 +30,7 @@ If `PLAN.md` or this document describes a current behavior, `make test` covers i
 | Database | SQLite, one shared app database | A database per user was considered and rejected: it complicates migrations, backups, and especially sharing |
 | SQLite driver | `github.com/glebarez/sqlite` | Pure-Go GORM driver, so no CGO and easy cross-compiling |
 | Password hashing | `golang.org/x/crypto/bcrypt` | |
-| Email (magic links) | `net/smtp` to a transactional email relay | In development, links are logged to the console instead of sent |
+| Email (magic links) | `net/smtp` to a transactional email relay | Development defaults to the console, or to local SMTP such as MailHog. Real SMTP in development also needs `SMTP_ALLOW_REAL=1`. |
 | Frontend | HTMX (vendored `htmx.min.js`) | Served from `/static`, no CDN |
 | Charts | Chart.js 4.5.1, vendored `chart.umd.min.js` | Count, number, and duration charts on the tracker page and on `GET /charts`. One overlay is vertical bands from a small plugin in `chart.js`. Loaded only when that chart is present. Logging does not depend on it. |
 | CSS | Pico.css (vendored `pico.min.css`) plus `theme.css` | The class build. `theme.css` loads after Pico and sets color variables only. Other custom CSS stays in `app.css`. Visual rules are in `DESIGN.md` |
@@ -61,10 +61,11 @@ track-anything/
 ├── turnstile.go        # Siteverify check for signup, login, and change password
 ├── mail.go             # net/smtp sender, console sender for development
 ├── env.go              # load .env at startup; existing environment variables win
-├── .env.example        # local MailHog settings; copy to .env (gitignored)
+├── .env.example        # console mail by default; copy to .env (gitignored)
 ├── settings.go         # time zone, password, resend verification
 ├── ratelimit.go        # in-memory fixed-window limiter and trusted client IP
 ├── handlers.go         # health check, dashboard, shared handler helpers
+├── groups.go           # personal home-list groups: membership, order, collapse
 ├── handlers_charts.go  # GET /charts: one tracker, optional overlay, a preset range
 ├── handlers_trackers.go # create, edit, archive, restore, share link, tracker page
 ├── handlers_entries.go  # log, undo, owner corrections, recorded zeros
@@ -95,7 +96,7 @@ track-anything/
 ├── static/
 │   ├── htmx.min.js
 │   ├── app.js             # optimistic log line, idle refresh, Turnstile remount, install dialog
-│   ├── reorder.js         # dashboard drag-and-drop across the whole home list; posts the new order
+│   ├── reorder.js         # dashboard drag-and-drop for the home list and within a personal group
 │   ├── chart.umd.min.js   # Chart.js 4.5.1 UMD, MIT. Loaded only by chart.js
 │   ├── chart.js           # draws the embedded series and overlay bands on the tracker page and /charts
 │   ├── pico.min.css
@@ -132,7 +133,7 @@ That starts [Air](https://github.com/air-verse/air), which builds the server and
 make dev-agent NAME=<unique-name>
 ```
 
-The name is the server name. [scripts/dev-server.sh](../../scripts/dev-server.sh) reserves a free port from 8100 through 8199, gives the instance its own Air build directory and SQLite file under `tmp/dev-agents/<name>/`, and exports `ADDR`, `DB_PATH`, and `BASE_URL` before Air starts. The reservation is an atomic directory claim, held until that server exits, so another checkout cannot take the port while this one is starting. The app and Air both leave variables that are already set alone, so a local `.env` cannot point the agent server at port 8080 or the personal database. The generated Air config is the committed `.air.toml` with that instance's `tmp_dir`, build `-o` path, and `entrypoint`. Watch extensions, exclude list, `send_interrupt`, and `kill_delay` stay as they are.
+The name is the server name. [scripts/dev-server.sh](../../scripts/dev-server.sh) reserves a free port from 8100 through 8199, gives the instance its own Air build directory and SQLite file under `tmp/dev-agents/<name>/`, and exports `ADDR`, `DB_PATH`, and `BASE_URL` before Air starts. It also sets `MAIL_BACKEND=console` and clears `SMTP_ALLOW_REAL`, `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASS` for that process. Those values are set, not left unset, so a `.env` file or an inherited shell cannot switch the instance to SMTP. Console mail is written to that instance's `tmp/dev-agents/<name>/air.log` with the rest of its log. The reservation is an atomic directory claim, held until that server exits, so another checkout cannot take the port while this one is starting. The app and Air both leave variables that are already set alone, so a local `.env` cannot point the agent server at port 8080 or the personal database. The generated Air config is the committed `.air.toml` with that instance's `tmp_dir`, build `-o` path, and `entrypoint`. Watch extensions, exclude list, `send_interrupt`, and `kill_delay` stay as they are.
 
 `make dev-list` prints the name, port, URL, and status of each recorded instance. `make dev-stop NAME=<name>` stops that instance. `make dev-stop-all` stops only instances recorded under this checkout's `tmp/dev-agents/`; it does not look for the personal server or another worktree. Ctrl-C, SIGHUP, and `dev-stop` signal the recorded process and the Go binary Air started, and only when the command line still matches that instance.
 
@@ -148,9 +149,9 @@ Saving a `.go` file, an HTML template, or CSS or JavaScript under `static/` make
 
 The process environment is the source of truth. On startup, `main` loads a gitignored `.env` if the file is present (copy `.env.example`). Variables already set are left alone, so a shell export or Dokku config wins over the file. A missing `.env` is fine. Tests do not load `.env`; they build a `config` directly. The Docker build ignores `.env`, so a local file is not copied into the image.
 
-Local MailHog, when used, is `SMTP_HOST=127.0.0.1` and `SMTP_PORT=1025` (web inbox on port 8025). With `SMTP_HOST` unset, the mailer logs the link to the console.
+Development mail is the console unless mail is configured. No `SMTP_HOST` means the console, and a missing mail setting does not fall back to SMTP. `SMTP_HOST` of `localhost`, `127.0.0.1`, or `::1` is local mail, such as MailHog on `SMTP_PORT=1025` (web inbox on port 8025). Any other host is real SMTP. Development sends through that host only when `SMTP_ALLOW_REAL=1` and both `SMTP_USER` and `SMTP_PASS` are set. Credentials alone do not send. `MAIL_BACKEND` may be `console`, `local`, or `smtp`; when it is unset, the host selects the backend. `MAIL_BACKEND=smtp` without `SMTP_ALLOW_REAL=1` refuses to start. Startup logs the backend name and does not log the host, username, or password. The console logger writes the message, including a verification or sign-in link, only while `ENV=dev`. Production does not write the body.
 
-Production sets the same names with `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`, `BASE_URL`, `ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and, behind the proxy described under Deployment, `TRUSTED_IP_HEADER`. The app does not read Paddle settings. Billing is not built.
+Production sets the same names with `dokku config:set`: `ADDR`/`PORT`, `DB_PATH`, `BASE_URL`, `ENV`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and, behind the proxy described under Deployment, `TRUSTED_IP_HEADER`. Production does not read `MAIL_BACKEND` or `SMTP_ALLOW_REAL`. A configured `SMTP_HOST` is the real backend. The app does not read Paddle settings. Billing is not built.
 
 `ENV` is `dev` or `prod`. Any other value refuses to start. `ENV=dev` turns off the `Secure` cookie flag so browsers work on `http://localhost`.
 
@@ -160,7 +161,7 @@ Production also requires `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`. The pr
 
 `TRUSTED_IP_HEADER` is empty unless this process sits behind a proxy that strips client-supplied forwarding headers and sets that one header itself. The only accepted values are empty, `Fly-Client-IP`, `CF-Connecting-IP`, and `X-Forwarded-For`. Empty means the client address is `RemoteAddr`. `Fly-Client-IP` and `CF-Connecting-IP` are a single address. `X-Forwarded-For` is a list, and only the first address is used. The app does not fall back from one header to another. Production sets `TRUSTED_IP_HEADER=Fly-Client-IP` because Fly Proxy is the trusted public ingress. See Deployment.
 
-In production, a configured SMTP server must negotiate TLS. The mailer uses implicit TLS on port 465 and STARTTLS otherwise, and it refuses to send if neither happens. Development can use MailHog without TLS.
+In production, a configured SMTP server must negotiate TLS. The mailer uses implicit TLS on port 465 and STARTTLS otherwise, and it refuses to send if neither happens. Development can use MailHog without TLS. Development does not use a remote SMTP server unless `SMTP_ALLOW_REAL=1` is set along with `SMTP_USER` and `SMTP_PASS`.
 
 ## Data model
 
@@ -240,6 +241,23 @@ type TrackerOrder struct { // one person's home list order, across households. N
     UserID    uint `gorm:"primaryKey"`
     TrackerID uint `gorm:"primaryKey;index"`
     Position  int  `gorm:"not null"`
+}
+
+type TrackerGroup struct { // one person's section on their home list. Not shared.
+    ID        uint
+    UserID    uint
+    Name      string
+    Position  int  // slot among that person's home list when the group is empty; a group with trackers sits at its earliest member
+    Collapsed bool // new groups start expanded
+    CreatedAt time.Time
+    UpdatedAt time.Time
+}
+
+type TrackerGroupItem struct { // one tracker in one of that person's groups. No row means ungrouped.
+    UserID    uint `gorm:"primaryKey"`
+    TrackerID uint `gorm:"primaryKey"`
+    GroupID   uint
+    Position  int // order within the group
 }
 
 type Entry struct {
@@ -410,7 +428,13 @@ POST   /settings/password         set or change, only after the email is verifie
 POST   /settings/verify           resend the confirmation email
 
 POST   /households                            create a household; the creator is its owner
-POST   /trackers/order                        save the signed-in user's home list order. Repeated `id`, exactly the active trackers they can see. Replaces their `TrackerOrder` rows. 204, or 409 when the set does not match
+POST   /trackers/order                        save the signed-in user's home list order. Repeated `id`, exactly the active trackers they can see, replaces their `TrackerOrder` rows. Or repeated `slot` of `t:{id}` and `g:{id}` when the list has personal groups: every visible ungrouped tracker and every one of their groups, once. 204, or 409 when the set does not match
+POST   /trackers/{id}/group                   set that tracker's personal group for the signed-in user. `group` empty is none, an id is one of their groups, `new` with `group_name` creates one. 404 when they cannot see the tracker or the group is not theirs
+POST   /groups                                 create an empty personal group at the end of the home list. It starts expanded
+POST   /groups/{id}                            rename that person's group
+POST   /groups/{id}/delete                     delete the group. Its trackers stay, in their group order, where the group was
+POST   /groups/{id}/collapse                   `collapsed=1` or `0`. An HTMX post is 204 so the list is not replaced
+POST   /groups/{id}/order                      reorder trackers inside that person's group. Repeated `id`, exactly the visible members. 204, or 409 when the set does not match
 POST   /households/order                      reorder the signed-in user's households. Repeated `id`, exactly their memberships. 204, or 409 when the set does not match
 GET    /households/{hid}                      members, invite link, trackers; owners also see a collapsed archived list
 POST   /households/{hid}/order                reorder that household's active trackers (owner). Repeated `id`, exactly those trackers. Does not move one to another household. 204, or 409 when the set does not match
@@ -541,7 +565,7 @@ The range is a `chartSpan`. Empty or `30d` is `chartDays` (30). `90d` is 90 loca
 ## Security
 
 - Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`. The database stores the sha256 of the cookie value, with an expiry. `ENV=dev` turns off `Secure`.
-- CSRF: `http.CrossOriginProtection` on all non-GET requests, including share-link posts.
+- CSRF: every method other than `GET`, `HEAD`, and `OPTIONS` must present the CSRF secret. A signed-in session, including a guest, uses the secret stored on that session. A signed-out browser uses the `csrf` cookie. Forms include it with `{{template "csrf-field" .}}`. HTMX and same-origin `fetch` send `X-CSRF-Token`. The secret is not consumed. `http.CrossOriginProtection` still rejects a cross-site browser and a foreign `Origin`, including share-link posts. See `docs/development/CSRF.md`.
 - Response headers on every page: `X-Content-Type-Options: nosniff`, `Content-Security-Policy: frame-ancestors 'none'`, and `Referrer-Policy: same-origin`. Share pages replace the referrer policy with `no-referrer` and set `X-Robots-Tag: noindex`. Which other responses send that robots header is under Public discovery. There is no broader content-security policy.
 - Production (`ENV=prod`) also sends `Strict-Transport-Security: max-age=15552000`. Dev does not. There is no `includeSubDomains` and no `preload`. The header does not redirect HTTP to HTTPS; the public edge does that. If the edge strips this header, set the same value there. Do not publish two different `max-age` values.
 - Request bodies other than `GET`, `HEAD`, and `OPTIONS` are limited to 256 KiB. A declared `Content-Length` above that, or a body that reads past it, is `413` and the handler does not run. The middleware does not parse the form.
@@ -715,7 +739,8 @@ What the suite has to pin down:
 
 - **Accounts.** Signup does not store a password. Password login works after the email is confirmed and a password is set in settings. A password or session created before that confirmation does not survive the verification link or the first magic link. Magic link (works once, fails when expired or reused, stored only as a hash), logout, session expiry, session IDs stored only as a hash, rate limits, email case-insensitivity. Turnstile: production config requires both keys and development can omit them; a successful Siteverify response allows signup, login, and password change; a missing token, `success: false`, a network error, a malformed response, and a non-200 response reject the action. CSRF and rate limits still apply. The suite does not call Cloudflare.
 - **Households.** A new user gets a "My trackers" household as owner. The phase 1 backfill gives each user without a household a "My trackers" household as owner, and running it twice creates nothing new. Invite link joins as member; a regenerated or disabled link fails. Owners can remove members and promote members to owner; members can't. Removing an owner, including yourself, is refused and nothing changes. When two households on the dashboard share a name, a tracker in the one someone else created shows that person's email on its household label. A name that matches nothing else shows no email. Trackers in the viewer's personal household show no household name.
-- **Order.** The dashboard lists trackers with a `TrackerOrder` row for the viewer first, by that position. The rest follow in the default order: households by `HouseholdMember.Position`, then household id, and the trackers in a household by `Tracker.Position`, then id. Any member can save a home order that mixes households. It does not change `HouseholdID`, `Tracker.Position`, the household page, or another person's home. A posted list that is not exactly their active visible trackers, including one with an archived tracker or a tracker they cannot see, changes nothing. A new tracker goes after the saved ones. A restored tracker returns to its saved place. Every card on home has a handle. The household page uses the household's shared tracker order. A startup backfill gives rows that were never ordered the sequence the dashboard already showed: membership `created_at`, then household id, and tracker `position`, then id. It does not rewrite a saved order, and running it twice changes nothing. A new household is appended to that person's list. Joining one appends it too. A new tracker is appended to its household. An owner can reorder the active trackers; a member is refused and nothing changes; someone who cannot see the household gets a 404. The posted ids have to be exactly the current active trackers, so a tracker cannot move to another household and a stale list changes nothing. Posting the same order again is safe. Archived trackers stay after the visible list. Each person can reorder their own households. That does not change anyone else's positions. A list that is not exactly their memberships changes nothing.
+- **Order.** The dashboard lists trackers with a `TrackerOrder` row for the viewer first, by that position. The rest follow in the default order: households by `HouseholdMember.Position`, then household id, and the trackers in a household by `Tracker.Position`, then id. Any member can save a home order that mixes households. It does not change `HouseholdID`, `Tracker.Position`, the household page, or another person's home. A posted list that is not exactly their active visible trackers, including one with an archived tracker or a tracker they cannot see, changes nothing. A new tracker goes after the saved ones. A restored tracker returns to its saved place. Every card on home has a handle. The household page uses the household's shared tracker order. A startup backfill gives rows that were never ordered the sequence the dashboard already showed: membership `created_at`, then household id, and tracker `position`, then id. It does not rewrite a saved order, and running it twice changes nothing.
+- **Personal groups.** `TrackerGroup` and `TrackerGroupItem` are per user. They do not change household membership or `Tracker`. With no groups, the home list is the order above. A group is drawn at the earliest saved place among its visible members, and an empty group uses `TrackerGroup.Position`. Ungrouped trackers stay in their saved places around those groups. Trackers the viewer cannot see, including archived ones, are left out of the header and kept on the membership row, so a restore puts the tracker back in that person's group. A missing tracker row is ignored. Creating, moving, deleting, and reordering rewrite the visible `TrackerOrder` rows to match the list on screen and leave another person's rows alone. Collapse is a column on the group. A background refresh swaps changed cards and the order marker. It does not replace the group header, so an open or closed group stays as it is. The order marker's `data-layout` tells the page where each card belongs. Collapsed cards sit in a `hidden` group body, so they are not keyboard-focusable, and scroll correction skips anchors inside `[hidden]`. A new household is appended to that person's list. Joining one appends it too. A new tracker is appended to its household. An owner can reorder the active trackers; a member is refused and nothing changes; someone who cannot see the household gets a 404. The posted ids have to be exactly the current active trackers, so a tracker cannot move to another household and a stale list changes nothing. Posting the same order again is safe. Archived trackers stay after the visible list. Each person can reorder their own households. That does not change anyone else's positions. A list that is not exactly their memberships changes nothing.
 - **Household organization.** Creating a household makes the creator its owner. Owners can rename one, including a personal "My trackers". Members can't, and an empty or too-long name is rejected with nothing changed. Creating or renaming so the trimmed, case-insensitive name matches another household that person owns is rejected and nothing changes. "Family" and " family " cannot both be owned by one person. Another user can own "Family". Belonging to someone else's "Family" does not block owning your own. Renaming a household to its own current name is allowed. When two households on the same dashboard share a name under that comparison, the one someone else created shows its creator's email. A name that matches nothing else shows no email. Moving a tracker between two households the user owns keeps the same tracker id, every entry, and every recorded zero, and it creates no copies. An active share link keeps its token and still opens the tracker after the move. The move does not turn the link off or replace it. Moving into a household where the user is only a member, or one they can't see, is refused and nothing changes. A member of the old household who isn't in the new one gets a 404 for the tracker and its entries afterward. A member of the destination can see and log it. A regular member can leave, and their row is gone. An owner posting to the leave route is refused and nothing changes. Leaving one household leaves the user's personal household and other memberships as they were.
 - **Archive and restore.** Archiving hides the tracker from the dashboard, makes its tracker page and entry routes 404, and clears its share link. The owner's household page lists it under archived trackers; a member's doesn't. Restore brings it back with its entries and with sharing off. Members can't archive or restore.
 - **Permissions.** For every owner-only route, a member gets refused and nothing changes. Non-members get 404 for trackers, entries, and households.
@@ -751,12 +776,13 @@ What the suite has to pin down:
 | Archive | `ArchivedAt` plus clearing `ShareToken` | Restore leaves sharing off. Permanent delete is phase 5 |
 | Phase 1 households | One-time idempotent backfill after `AutoMigrate` | No request-time fallback. Deleted once existing databases have run it |
 | Household organization | Existing `Household`, `HouseholdMember`, and `Tracker.HouseholdID` | Shipped after phase 2. No new tables or columns. One owner cannot have two names that match after trim and case folding. Move updates `HouseholdID` in one transaction, requires owner on both sides, and keeps `ShareToken`. Member-only leave. No household deletion, owner leave, demotion, or transfer |
-| Dashboard order | `TrackerOrder`, then `HouseholdMember.Position` and `Tracker.Position` | Home order is per person and crosses households. The household's tracker order is shared and owner-only, and is the fallback with group order. Drag handles post the whole home list. The database is the source of truth. New rows append |
+| Dashboard order | `TrackerOrder`, then `HouseholdMember.Position` and `Tracker.Position` | Home order is per person and crosses households. The household's tracker order is shared and owner-only, and is the fallback before a personal order is saved. Drag handles post the whole home list. The database is the source of truth. New rows append |
+| Personal groups | `TrackerGroup`, `TrackerGroupItem` | One level, per user, including on shared trackers. Not a household. Collapse is stored. Deleting a group keeps the trackers |
 | Persistence | SQLite, one shared database | Database per user rejected: migrations, backups, and sharing all get worse |
 | Dependencies | GORM, pure-Go SQLite, `x/crypto` | No Paddle SDK. No Prometheus client. No server-side queue |
 | Metrics | Not built | A Prometheus scrape is a later idea, not part of the running app |
 | Time zone | UTC timestamps, stored IANA zone | Detected once at signup. Not revised from the browser. Grouped in Go |
-| Email | `net/smtp`, console logger in dev | Optional `.env`. Relay vendor still open |
+| Email | `net/smtp`; console by default in dev; local SMTP optional; real SMTP needs `SMTP_ALLOW_REAL=1` | Optional `.env`. Relay vendor still open |
 | Bot protection | Cloudflare Turnstile, Managed mode | Signup, login, and change password. Server-side Siteverify. Does not replace CSRF or rate limits |
 | First public deploy | Dokku on the homelab, Fly.io as ingress only | App has no TLS and no host-specific code, so a later move to Fly.io is a redeploy |
 | Offline logging | Later, around the existing log POST | Browser cache and IndexedDB queue. Client id for idempotent retry. `OccurredAt` is the tap; `CreatedAt` is the sync. No server queue and no client framework |

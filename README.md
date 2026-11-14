@@ -33,7 +33,7 @@ That starts [Air](https://github.com/air-verse/air), which rebuilds the server w
 
 `make run` starts the server once, without reload.
 
-With `SMTP_HOST` unset, login and verification links are written to the server log. To send mail locally, copy `.env.example` to `.env` and run [MailHog](https://github.com/mailhog/MailHog) (SMTP on port 1025, inbox at http://localhost:8025). A missing `.env` is fine. Variables already set in the environment are left alone.
+With `SMTP_HOST` unset, login and verification links are written to the server log and nothing is sent. That is the development default. Copy `.env.example` to `.env` to keep it. To deliver mail only on this machine, uncomment the MailHog lines in `.env` and run [MailHog](https://github.com/mailhog/MailHog) (SMTP on port 1025, inbox at http://localhost:8025). Sending through any other SMTP host also requires `SMTP_ALLOW_REAL=1` plus `SMTP_USER` and `SMTP_PASS`. A missing `.env` is fine. Variables already set in the environment are left alone. Named agent servers force the console backend and ignore inherited SMTP settings.
 
 The SQLite file is created at `data/trackanything.db`.
 
@@ -45,10 +45,12 @@ The SQLite file is created at `data/trackanything.db`.
 | `DB_PATH` | `data/trackanything.db` | SQLite file. |
 | `ENV` | `dev` | `dev` or `prod`. `dev` turns off the `Secure` cookie flag so `http://localhost` works. Anything other than `prod` is kept out of search indexes. |
 | `BASE_URL` | `http://localhost:8080` | Public origin for emailed links, the canonical home URL, and the sitemap. Required in production, and it must be `https`. |
-| `SMTP_HOST` | empty | Empty logs links to the console. Set it to send mail. |
-| `SMTP_PORT` | `587` | Implicit TLS on `465`; STARTTLS otherwise. Production refuses to send without TLS. |
-| `SMTP_USER` | empty | SMTP username. |
-| `SMTP_PASS` | empty | SMTP password. |
+| `SMTP_HOST` | empty | Empty logs links to the console in development. `localhost`, `127.0.0.1`, or `::1` is local mail. Any other host is real SMTP. |
+| `SMTP_PORT` | `587` | Implicit TLS on `465`; STARTTLS otherwise. Production refuses to send without TLS. Local MailHog uses `1025`. |
+| `SMTP_USER` | empty | SMTP username. Required, with `SMTP_PASS`, before development will use a non-local host. |
+| `SMTP_PASS` | empty | SMTP password. Required, with `SMTP_USER`, before development will use a non-local host. |
+| `SMTP_ALLOW_REAL` | empty | Set to `1` to send real email from development. Credentials alone do not send. Production ignores this. |
+| `MAIL_BACKEND` | empty | Development only: `console`, `local`, or `smtp`. Empty derives the backend from `SMTP_HOST`. Production ignores this and uses `SMTP_HOST`. |
 | `MAIL_FROM` | `Track Anything <hello@trackanything.io>` | From address. |
 | `TRUSTED_IP_HEADER` | empty | Client IP header set by a trusted proxy: `Fly-Client-IP`, `CF-Connecting-IP`, or `X-Forwarded-For`. Empty uses the connection address. Production sets `Fly-Client-IP`. |
 | `TURNSTILE_SITE_KEY` | test key in development | Public Turnstile widget key. Required in production. |

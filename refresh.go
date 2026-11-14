@@ -171,13 +171,43 @@ func stampShare(p *sharePage) {
 }
 
 func fillMarkers(p *dashboardPage) {
-	ids := make([]string, len(p.Cards))
-	for i, c := range p.Cards {
-		ids[i] = strconv.FormatUint(uint64(c.Tracker.ID), 10)
+	var ids []string
+	var layout []string
+	if p.Slots != nil {
+		for _, s := range p.Slots {
+			if s.Group != nil {
+				gid := strconv.FormatUint(uint64(s.Group.ID), 10)
+				members := make([]string, len(s.Group.Cards))
+				for i, c := range s.Group.Cards {
+					id := strconv.FormatUint(uint64(c.Tracker.ID), 10)
+					members[i] = id
+					ids = append(ids, id)
+				}
+				if len(members) == 0 {
+					layout = append(layout, "g:"+gid)
+				} else {
+					layout = append(layout, "g:"+gid+":"+strings.Join(members, "."))
+				}
+				continue
+			}
+			if s.Card.Tracker.ID == 0 {
+				continue
+			}
+			id := strconv.FormatUint(uint64(s.Card.Tracker.ID), 10)
+			ids = append(ids, id)
+			layout = append(layout, "t:"+id)
+		}
+	} else {
+		ids = make([]string, len(p.Cards))
+		for i, c := range p.Cards {
+			ids[i] = strconv.FormatUint(uint64(c.Tracker.ID), 10)
+			layout = append(layout, "t:"+ids[i])
+		}
 	}
 	p.Order = strings.Join(ids, ",")
-	p.OrderRev = revHash("order", p.Order)
-	p.ShowEmpty = len(p.Cards) == 0
+	p.Layout = strings.Join(layout, ",")
+	p.OrderRev = revHash("order", p.Order, p.Layout)
+	p.ShowEmpty = len(ids) == 0
 	p.EmptyRev = revHash("empty", strconv.FormatBool(p.ShowEmpty))
 }
 
@@ -245,13 +275,13 @@ func writeNoChange(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *app) writeHomeRefresh(w http.ResponseWriter, r *http.Request, cards []trackerCard) {
+func (a *app) writeHomeRefresh(w http.ResponseWriter, r *http.Request, page dashboardPage) {
 	if _, ok := r.URL.Query()["present"]; !ok {
 		writeNoChange(w)
 		return
 	}
 	have := parsePresent(r)
-	page := dashboardPage{Cards: cards}
+	cards := page.Cards
 	fillMarkers(&page)
 	seen := make(map[string]bool, len(cards))
 	changed := make([]trackerCard, 0)

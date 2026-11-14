@@ -25,13 +25,20 @@ type mailer interface {
 	Send(to, subject, body string) error
 }
 
-// consoleMailer logs emails instead of sending them, for development.
+// consoleMailer logs emails instead of sending them.
+// The message body, which carries verification and sign-in links, is written
+// only in development. Production gets a static line with no message contents.
 type consoleMailer struct {
 	logger *slog.Logger
+	dev    bool
 }
 
 func (m consoleMailer) Send(to, subject, body string) error {
-	m.logger.Info("email not sent (no SMTP_HOST configured)", "to", to, "subject", subject, "body", body)
+	if m.dev {
+		m.logger.Info("email not sent (console mailer)", "to", to, "subject", subject, "body", body)
+		return nil
+	}
+	m.logger.Info("email not sent (console mailer)")
 	return nil
 }
 
@@ -169,22 +176,148 @@ func transientSMTPError(err error) bool {
 	return true
 }
 
+const (
+	mailConsole = "console"
+	mailLocal   = "local"
+	mailSMTP    = "smtp"
+)
+
+// errDevSMTPOptIn is returned when development is pointed at a real SMTP
+// server without the explicit opt-in. Credentials inherited from a shell or
+// from .env are not enough.
+var errDevSMTPOptIn = errors.New("development SMTP requires SMTP_ALLOW_REAL=1 in addition to SMTP credentials; credentials alone do not send real email")
+
 func newMailer(cfg config, logger *slog.Logger) (mailer, error) {
-	if cfg.SMTPHost == "" {
-		return consoleMailer{logger: logger}, nil
+	backend, err := cfg.resolveMail()
+	if err != nil {
+		return nil, err
+	}
+	if backend == mailConsole {
+		return consoleMailer{logger: logger, dev: cfg.Env != "prod"}, nil
 	}
 	from, err := mail.ParseAddress(cfg.MailFrom)
 	if err != nil {
 		return nil, fmt.Errorf("MAIL_FROM: %w", err)
 	}
+	host := strings.TrimSpace(cfg.SMTPHost)
+	port := cfg.SMTPPort
+	if port == "" {
+		port = "587"
+	}
 	return smtpMailer{
-		addr:        net.JoinHostPort(cfg.SMTPHost, cfg.SMTPPort),
+		addr:        net.JoinHostPort(host, port),
 		username:    cfg.SMTPUser,
 		password:    cfg.SMTPPass,
 		from:        from,
 		timeout:     smtpSendTimeout,
 		retryAfter:  smtpRetryAfter,
 		requireTLS:  cfg.Env == "prod",
-		implicitTLS: cfg.SMTPPort == "465",
+		implicitTLS: port == "465",
 	}, nil
+}
+
+// validateMail refuses development configurations that would deliver real
+// email without an explicit opt-in. Production keeps its existing rules:
+// a configured SMTP host is the real backend, and an empty host stays console.
+func (c config) validateMail() error {
+	_, err := c.resolveMail()
+	return err
+}
+
+// resolveMail chooses console, local, or smtp. It does not open a connection.
+// An empty environment, which is not dev or prod, keeps the historical
+// constructor behavior used by mailer tests that only set SMTP fields.
+func (c config) resolveMail() (string, error) {
+	host := strings.TrimSpace(c.SMTPHost)
+	if c.Env == "prod" {
+		if host == "" {
+			return mailConsole, nil
+		}
+		return mailSMTP, nil
+	}
+	if c.Env != "dev" {
+		if host == "" {
+			return mailConsole, nil
+		}
+		return mailSMTP, nil
+	}
+	if _, err := c.smtpRealAllowed(); err != nil {
+		return "", err
+	}
+	switch strings.ToLower(strings.TrimSpace(c.MailBackend)) {
+	case "":
+		return c.deriveDevMail(host)
+	case mailConsole:
+		return mailConsole, nil
+	case mailLocal:
+		if !loopbackSMTP(host) {
+			return "", errors.New("MAIL_BACKEND=local requires SMTP_HOST to be localhost, 127.0.0.1, or ::1")
+		}
+		return mailLocal, nil
+	case mailSMTP:
+		return c.devSMTP(host)
+	default:
+		return "", errors.New("MAIL_BACKEND must be console, local, or smtp")
+	}
+}
+
+// deriveDevMail is the development default. No host means the console.
+// A loopback host is local mail, such as MailHog. Anything else is real SMTP.
+func (c config) deriveDevMail(host string) (string, error) {
+	if host == "" {
+		return mailConsole, nil
+	}
+	if loopbackSMTP(host) {
+		return mailLocal, nil
+	}
+	return c.devSMTP(host)
+}
+
+// devSMTP is the real-delivery path in development. The opt-in flag and both
+// credentials are required. A missing host does not fall back to a server.
+func (c config) devSMTP(host string) (string, error) {
+	if host == "" {
+		return "", errors.New("development SMTP requires SMTP_HOST; missing mail settings stay on the console and do not fall back to a mail server")
+	}
+	allowed, err := c.smtpRealAllowed()
+	if err != nil {
+		return "", err
+	}
+	if !allowed {
+		return "", errDevSMTPOptIn
+	}
+	if strings.TrimSpace(c.SMTPUser) == "" || strings.TrimSpace(c.SMTPPass) == "" {
+		return "", errors.New("development SMTP requires SMTP_USER and SMTP_PASS in addition to SMTP_ALLOW_REAL=1")
+	}
+	return mailSMTP, nil
+}
+
+func (c config) smtpRealAllowed() (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(c.SMTPAllowReal)) {
+	case "", "0", "false", "no":
+		return false, nil
+	case "1", "true", "yes":
+		return true, nil
+	default:
+		return false, errors.New("SMTP_ALLOW_REAL must be 1 to send real email from development")
+	}
+}
+
+func loopbackSMTP(host string) bool {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
+}
+
+// devConsoleMail reports whether this process may show that a sign-in or
+// verification link was written to the development log. Production never does.
+func (c config) devConsoleMail() bool {
+	if c.Env == "prod" {
+		return false
+	}
+	backend, err := c.resolveMail()
+	return err == nil && backend == mailConsole
 }

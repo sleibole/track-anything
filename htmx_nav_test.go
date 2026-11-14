@@ -133,7 +133,7 @@ func TestRedirectToSwapsInsideTheApp(t *testing.T) {
 		t.Fatalf("same-page location %+v", renamed)
 	}
 
-	noFollow := &http.Client{Jar: owner.c.Jar, CheckRedirect: func(*http.Request, []*http.Request) error {
+	noFollow := &http.Client{Jar: owner.c.Jar, Transport: owner.c.Transport, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
 	form := url.Values{"name": {"Shed"}}
