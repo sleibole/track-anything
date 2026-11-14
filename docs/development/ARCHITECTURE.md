@@ -430,7 +430,9 @@ POST   /settings/verify           resend the confirmation email
 POST   /households                            create a household; the creator is its owner
 POST   /trackers/order                        save the signed-in user's home list order. Repeated `id`, exactly the active trackers they can see, replaces their `TrackerOrder` rows. Or repeated `slot` of `t:{id}` and `g:{id}` when the list has personal groups: every visible ungrouped tracker and every one of their groups, once. 204, or 409 when the set does not match
 POST   /trackers/{id}/group                   set that tracker's personal group for the signed-in user. `group` empty is none, an id is one of their groups, `new` with `group_name` creates one. 404 when they cannot see the tracker or the group is not theirs
-POST   /groups                                 create an empty personal group at the end of the home list. It starts expanded
+GET    /organize                              choose trackers and move them between this person's groups. No background refresh
+POST   /organize/move                         move the posted tracker ids to `group` (empty is none, an id, or `new` with `group_name`)
+POST   /groups                                 create an empty personal group at the end of the home list. It starts expanded. `next` may return to `/organize`
 POST   /groups/{id}                            rename that person's group
 POST   /groups/{id}/delete                     delete the group. Its trackers stay, in their group order, where the group was
 POST   /groups/{id}/collapse                   `collapsed=1` or `0`. An HTMX post is 204 so the list is not replaced

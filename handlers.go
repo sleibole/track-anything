@@ -207,10 +207,11 @@ func (a *app) handleHome(w http.ResponseWriter, r *http.Request) {
 		slots = []homeSlot{}
 	}
 	page := dashboardPage{
-		Cards: flattenSlots(slots),
-		Slots: slots,
-		Moved: r.URL.Query().Get("moved") == "1",
-		Keep:  keepPrompt{Show: a.showKeep(u)},
+		Cards:  flattenSlots(slots),
+		Slots:  slots,
+		Moved:  r.URL.Query().Get("moved") == "1",
+		Notice: noticeText(r.URL.Query().Get("notice")),
+		Keep:   keepPrompt{Show: a.showKeep(u)},
 	}
 	fillMarkers(&page)
 	a.render(w, r, http.StatusOK, "dashboard.html", page)
@@ -224,23 +225,27 @@ type householdGroup struct {
 }
 
 type dashboardPage struct {
-	Cards      []trackerCard
-	Slots      []homeSlot // full list, including groups; nil means Cards is already flat
-	Name       string     // the name field, kept when creating a household fails
-	Error      string
-	GroupName  string // kept when creating a group fails
-	GroupError string
-	Order      string // tracker ids in visual order, comma-separated
-	Layout     string // top-level slots, including which trackers sit in each group
-	OrderRev   string
-	EmptyRev   string
-	Removed    []string // element ids to delete on a refresh
-	SwapOrder  bool
-	SwapEmpty  bool
-	ShowEmpty  bool // no trackers; kept when Cards is narrowed to a refresh fragment
-	OOB        bool // marker elements carry hx-swap-oob
-	Moved      bool
-	Keep       keepPrompt
+	Cards       []trackerCard
+	Slots       []homeSlot // full list, including groups; nil means Cards is already flat
+	Name        string     // the name field, kept when creating a household fails
+	Error       string
+	GroupName   string // kept when creating a group fails
+	GroupError  string
+	Notice      string
+	RenameID    uint
+	RenameName  string
+	RenameError string
+	Order       string // tracker ids in visual order, comma-separated
+	Layout      string // top-level slots, including which trackers sit in each group
+	OrderRev    string
+	EmptyRev    string
+	Removed     []string // element ids to delete on a refresh
+	SwapOrder   bool
+	SwapEmpty   bool
+	ShowEmpty   bool // no trackers; kept when Cards is narrowed to a refresh fragment
+	OOB         bool // marker elements carry hx-swap-oob
+	Moved       bool
+	Keep        keepPrompt
 }
 
 func (p dashboardPage) HasTrackers() bool { return len(p.Cards) > 0 }

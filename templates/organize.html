@@ -1,0 +1,76 @@
+{{define "title"}}Organize · Track Anything{{end}}
+{{define "content"}}
+<div class="home-head">
+  <h1>Organize</h1>
+  <div class="page-actions">
+    <a role="button" class="secondary outline" {{nav "/"}}>Done</a>
+  </div>
+</div>
+{{with .Data.Notice}}<p role="status" class="saved">{{.}}</p>{{end}}
+{{with .Data.Error}}<p role="alert" class="error">{{.}}</p>{{end}}
+<p class="muted">This only changes your list. Other people keep their own groups.</p>
+
+<form id="organize-form" class="organize-form" method="post" action="/organize/move" hx-post="/organize/move" hx-target="#content" hx-swap="innerHTML show:none" data-organize>
+  {{template "csrf-field" $}}
+  {{if .Data.FocusGroup}}<input type="hidden" name="next" value="/organize?group={{.Data.FocusGroup}}">{{else}}<input type="hidden" name="next" value="/organize">{{end}}
+  <ul class="organize-list">
+    {{range .Data.Slots}}
+      {{if .Group}}
+      {{$gname := .Group.Name}}
+      <li class="organize-section"{{if eq .Group.ID $.Data.FocusGroup}} id="organize-group-{{.Group.ID}}"{{end}}>{{$gname}}</li>
+      {{range .Group.Cards}}
+      <li>
+        <label class="organize-row">
+          <input type="checkbox" name="id" value="{{.Tracker.ID}}"{{if $.Data.Checked .Tracker.ID}} checked{{end}}>
+          <span class="tracker-icon">{{trackerIcon .Tracker.Icon}}</span>
+          <span class="organize-name">{{.Tracker.Name}}</span>
+          <span class="organize-current muted">{{$gname}}</span>
+        </label>
+      </li>
+      {{else}}
+      <li class="organize-empty muted">No trackers in this group yet.</li>
+      {{end}}
+      {{else}}
+      <li>
+        <label class="organize-row">
+          <input type="checkbox" name="id" value="{{.Card.Tracker.ID}}"{{if $.Data.Checked .Card.Tracker.ID}} checked{{end}}>
+          <span class="tracker-icon">{{trackerIcon .Card.Tracker.Icon}}</span>
+          <span class="organize-name">{{.Card.Tracker.Name}}</span>
+          <span class="organize-current muted">None</span>
+        </label>
+      </li>
+      {{end}}
+    {{else}}
+    <li class="muted">No trackers yet. <a {{nav "/trackers/new"}}>Create one</a> to start logging.</li>
+    {{end}}
+  </ul>
+  <div class="organize-bar">
+    <p data-organize-count>0 selected</p>
+    <label>
+      Move to group
+      <select name="group" data-organize-choice>
+        <option value=""{{if and (not .Data.FocusGroup) (ne .Data.GroupChoice "new")}} selected{{end}}>None (ungrouped)</option>
+        {{range .Data.Groups}}
+        <option value="{{.ID}}"{{if or (and (eq $.Data.FocusGroup .ID) (eq $.Data.GroupChoice "")) (eq $.Data.GroupChoice (printf "%d" .ID))}} selected{{end}}>{{.Name}}</option>
+        {{end}}
+        <option value="new"{{if eq $.Data.GroupChoice "new"}} selected{{end}}>New group…</option>
+      </select>
+    </label>
+    <label data-organize-name>
+      New group name
+      <input type="text" name="group_name" value="{{.Data.GroupName}}" maxlength="60"{{if eq .Data.GroupChoice "new"}} autofocus{{end}}>
+    </label>
+    <button type="submit" data-organize-move disabled>Move to group</button>
+  </div>
+</form>
+
+<form class="organize-new" method="post" action="/groups" hx-post="/groups" hx-target="#content" hx-swap="innerHTML show:none">
+  {{template "csrf-field" $}}
+  <input type="hidden" name="next" value="{{if .Data.FocusGroup}}/organize?group={{.Data.FocusGroup}}{{else}}/organize{{end}}">
+  <label>
+    New group
+    <input type="text" name="name" value="{{if ne .Data.GroupChoice "new"}}{{.Data.GroupName}}{{end}}" maxlength="60" placeholder="Group name">
+  </label>
+  <button type="submit">New group</button>
+</form>
+{{end}}

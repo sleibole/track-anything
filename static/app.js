@@ -292,7 +292,7 @@ window.trackerIdle = function () {
   if (document.documentElement.dataset.reordering === "1") return false;
   if (document.visibilityState !== "visible") return false;
   const content = document.getElementById("content");
-  if (!content || content.querySelector("details[open], .htmx-request")) return false;
+	if (!content || content.querySelector("dialog[open], [data-group-menu]:not([hidden]), details[open], .htmx-request")) return false;
   const active = document.activeElement;
   return !(active && content.contains(active) && active.matches("input, textarea, select"));
 };
@@ -304,7 +304,7 @@ function refreshStillSafe() {
   if (document.documentElement.dataset.reordering === "1") return false;
   if (document.visibilityState !== "visible") return false;
   const content = document.getElementById("content");
-  if (!content || content.querySelector("details[open]")) return false;
+	if (!content || content.querySelector("dialog[open], [data-group-menu]:not([hidden]), details[open]")) return false;
   if (content.querySelector(".htmx-request:not([data-refresh])")) return false;
   const active = document.activeElement;
   return !(active && content.contains(active) && active.matches("input, textarea, select"));
@@ -553,6 +553,95 @@ function applyGroupCollapsed(button, body, collapse) {
   if (chevron) chevron.textContent = collapse ? "›" : "⌄";
   body.hidden = collapse;
   body.inert = collapse;
+}
+
+function closeGroupMenus(except) {
+  document.querySelectorAll("[data-group-menu]").forEach((menu) => {
+    if (menu === except) return;
+    menu.hidden = true;
+    const button = document.querySelector(`[aria-controls="${CSS.escape(menu.id)}"]`);
+    if (button) button.setAttribute("aria-expanded", "false");
+  });
+}
+
+function openGroupDialogs(root) {
+  (root || document).querySelectorAll("dialog[data-open]").forEach((dialog) => {
+    if (!dialog.open && dialog.showModal) dialog.showModal();
+  });
+}
+
+function bindOrganize(root) {
+  const form = (root || document).querySelector("[data-organize]");
+  if (!form) return;
+  const count = form.querySelector("[data-organize-count]");
+  const button = form.querySelector("[data-organize-move]");
+  const sync = () => {
+    const n = form.querySelectorAll('input[name="id"]:checked').length;
+    if (count) count.textContent = n === 1 ? "1 selected" : n + " selected";
+    if (button) button.disabled = n === 0;
+  };
+  if (form.dataset.bound !== "1") {
+    form.dataset.bound = "1";
+    form.addEventListener("change", sync);
+  }
+  sync();
+}
+
+if (!window.trackGroupMenus) {
+  window.trackGroupMenus = true;
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest?.("[data-group-menu-button]");
+    if (button) {
+      const menu = document.getElementById(button.getAttribute("aria-controls"));
+      const willOpen = !menu || menu.hidden;
+      closeGroupMenus();
+      if (menu && willOpen) {
+        menu.hidden = false;
+        button.setAttribute("aria-expanded", "true");
+        menu.querySelector("[role='menuitem']")?.focus();
+      }
+      return;
+    }
+    const opener = event.target.closest?.("[data-open-dialog]");
+    if (opener) {
+      const dialog = document.getElementById(opener.getAttribute("data-open-dialog"));
+      closeGroupMenus();
+      if (dialog?.showModal) {
+        dialog.showModal();
+        dialog.querySelector("input, button")?.focus();
+      }
+      return;
+    }
+    if (event.target.closest?.("[data-dialog-cancel]")) {
+      event.target.closest("dialog")?.close();
+      return;
+    }
+    if (!event.target.closest?.("[data-group-menu]")) closeGroupMenus();
+  });
+  document.addEventListener("keydown", (event) => {
+    const menu = event.target.closest?.("[data-group-menu]");
+    if (!menu || menu.hidden) return;
+    const items = [...menu.querySelectorAll("[role='menuitem']")];
+    const index = items.indexOf(document.activeElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      const button = document.querySelector(`[aria-controls="${CSS.escape(menu.id)}"]`);
+      closeGroupMenus();
+      button?.focus();
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    if (!items.length) return;
+    const next = event.key === "ArrowDown" ? index + 1 : index - 1;
+    items[(next + items.length) % items.length].focus();
+  });
+  document.addEventListener("htmx:afterSwap", (event) => {
+    bindOrganize(event.target);
+    openGroupDialogs(event.target);
+  });
+  bindOrganize(document);
+  openGroupDialogs(document);
 }
 
 const highlightTimers = new WeakMap();

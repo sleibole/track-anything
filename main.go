@@ -313,6 +313,8 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /trackers", a.requireUser(a.handleCreateTracker))
 	mux.HandleFunc("POST /trackers/order", a.requireUser(a.handleReorderHome))
 	mux.HandleFunc("POST /trackers/{id}/group", a.requireUser(a.handleSetTrackerGroup))
+	mux.HandleFunc("GET /organize", a.requireUser(a.handleOrganize))
+	mux.HandleFunc("POST /organize/move", a.requireUser(a.handleOrganizeMove))
 	mux.HandleFunc("POST /groups", a.requireUser(a.handleCreateGroup))
 	mux.HandleFunc("POST /groups/{id}", a.requireUser(a.handleRenameGroup))
 	mux.HandleFunc("POST /groups/{id}/delete", a.requireUser(a.handleDeleteGroup))

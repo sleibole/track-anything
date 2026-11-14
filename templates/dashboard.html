@@ -3,22 +3,13 @@
 {{template "autoRefresh" "/"}}
 {{template "keepTrackers" .}}
 {{if .Data.Moved}}<p role="status" class="saved">Those trackers are on this account now.</p>{{end}}
-<div class="page-head">
+{{with .Data.Notice}}<p role="status" class="saved">{{.}}</p>{{end}}
+{{with .Data.GroupError}}<p role="alert" class="error">{{.}}</p>{{end}}
+<div class="home-head">
   <h1>Your trackers</h1>
   <div class="page-actions">
-    <details class="create-group"{{if .Data.GroupError}} open{{end}}>
-      <summary role="button" class="secondary outline">Create group</summary>
-      {{with .Data.GroupError}}<p role="alert" class="error">{{.}}</p>{{end}}
-      <form method="post" action="/groups" hx-post="/groups" hx-target="#content" hx-swap="innerHTML show:none">
-        {{template "csrf-field" $}}
-        <label>
-          Name
-          <input type="text" name="name" value="{{$.Data.GroupName}}" required maxlength="60"{{if $.Data.GroupError}} autofocus{{end}}>
-        </label>
-        <button type="submit">Create</button>
-      </form>
-    </details>
     <a role="button" class="secondary outline" {{nav "/trackers/new"}}>{{icon "plus"}} New tracker</a>
+    <a role="button" class="secondary outline" {{nav "/organize"}}>Organize</a>
   </div>
 </div>
 <div class="tracker-list" id="tracker-list" data-reorder-list data-reorder-url="/trackers/order">
@@ -54,26 +45,44 @@
         <span class="tracker-group-count muted" data-group-count>· {{.CountLabel}}</span>
       </button>
     </form>
-    <details class="tracker-group-menu">
-      <summary aria-label="Actions for {{.Name}}">⋯</summary>
-      <div class="tracker-group-menu-panel">
-        <form method="post" action="/groups/{{.ID}}" hx-post="/groups/{{.ID}}" hx-target="#content" hx-swap="innerHTML show:none">
-          {{template "csrf-field" .}}
-          <label>
-            Name
-            <input type="text" name="name" value="{{.Name}}" required maxlength="60">
-          </label>
-          <button type="submit">Rename</button>
-        </form>
-        <form method="post" action="/groups/{{.ID}}/delete" hx-post="/groups/{{.ID}}/delete" hx-target="#content" hx-swap="innerHTML show:none" hx-confirm="Delete this group? Its trackers stay on your list.">
-          {{template "csrf-field" .}}
-          <button type="submit" class="quiet">Delete group</button>
-        </form>
-      </div>
-    </details>
+    <button type="button" class="group-overflow" aria-label="Actions for {{.Name}}" aria-haspopup="menu" aria-expanded="false" aria-controls="group-menu-{{.ID}}" data-group-menu-button>⋯</button>
   </div>
+  <div class="group-menu" id="group-menu-{{.ID}}" role="menu" aria-label="Actions for {{.Name}}" data-group-menu hidden>
+    <a role="menuitem" {{nav (printf "/organize?group=%d" .ID)}}>Add/remove trackers</a>
+    <button type="button" role="menuitem" data-open-dialog="group-rename-{{.ID}}">Rename</button>
+    <button type="button" role="menuitem" data-open-dialog="group-delete-{{.ID}}">Delete group</button>
+  </div>
+  <dialog class="group-dialog" id="group-rename-{{.ID}}" aria-labelledby="group-rename-title-{{.ID}}"{{if .RenameError}} data-open{{end}}>
+    <form method="post" action="/groups/{{.ID}}" hx-post="/groups/{{.ID}}" hx-target="#content" hx-swap="innerHTML show:none">
+      {{template "csrf-field" .}}
+      <input type="hidden" name="next" value="/">
+      <h2 id="group-rename-title-{{.ID}}">Rename {{.Name}}</h2>
+      {{with .RenameError}}<p role="alert" class="error">{{.}}</p>{{end}}
+      <label>
+        Name
+        <input type="text" name="name" value="{{if .RenameName}}{{.RenameName}}{{else}}{{.Name}}{{end}}" required maxlength="60"{{if .RenameError}} autofocus{{end}}>
+      </label>
+      <div class="dialog-actions">
+        <button type="submit">Save</button>
+        <button type="button" data-dialog-cancel>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog class="group-dialog" id="group-delete-{{.ID}}" aria-labelledby="group-delete-title-{{.ID}}">
+    <form method="post" action="/groups/{{.ID}}/delete" hx-post="/groups/{{.ID}}/delete" hx-target="#content" hx-swap="innerHTML show:none">
+      {{template "csrf-field" .}}
+      <input type="hidden" name="next" value="/">
+      <h2 id="group-delete-title-{{.ID}}">Delete {{.Name}}?</h2>
+      <p>Its trackers stay on your list.</p>
+      <div class="dialog-actions">
+        <button type="submit">Delete group</button>
+        <button type="button" data-dialog-cancel>Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <div class="tracker-group-body" id="group-body-{{.ID}}" data-group-list data-reorder-url="/groups/{{.ID}}/order"{{if .Collapsed}} hidden inert{{end}}>
     {{range .Cards}}{{template "card" .}}{{end}}
+    {{if not .Cards}}<p class="group-empty muted">No trackers yet. <a {{nav (printf "/organize?group=%d" .ID)}}>Add trackers</a></p>{{end}}
   </div>
 </section>
 {{end}}
